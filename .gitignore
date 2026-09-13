@@ -29,3 +29,11 @@ outputs/
 # Temporary files
 *.tmp
 *.log
+.next/
+*.tsbuildinfo
+node_modules/
+.env*
+!.env.example
+*.pdf
+.paper-cache/
+data/processed/
