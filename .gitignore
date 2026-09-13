@@ -1,0 +1,31 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Experiment artifacts
+wandb/
+runs/
+checkpoints/
+outputs/
+*.ckpt
+*.pt
+*.pth
+
+# Large/generated data
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Temporary files
+*.tmp
+*.log
