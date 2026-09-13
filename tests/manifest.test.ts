@@ -1,0 +1,5 @@
+import test from "node:test";import assert from "node:assert/strict";import { pdfManifest,isSafeBlobPath } from "../lib/papers/manifest";import { findPaper,papers } from "../lib/papers/catalog";
+test("catalog IDs are unique and resolvable",()=>{assert.equal(new Set(papers.map(p=>p.id)).size,papers.length);for(const p of papers)assert.equal(findPaper(p.id),p);});
+test("manifest contains the 14 snapshot-completed papers plus BERT",()=>{assert.equal(pdfManifest.length,15);assert(pdfManifest.some(e=>e.id==="Attention_2"));});
+test("all configured Blob paths are allow-listed and traversal-safe",()=>{for(const entry of pdfManifest)if(entry.blobPathname)assert(isSafeBlobPath(entry.blobPathname));assert.equal(isSafeBlobPath("papers/RL/../secret.pdf"),false);assert.equal(isSafeBlobPath("other/file.pdf"),false);});
+test("non-papers are explicitly excluded",()=>{assert.equal(pdfManifest.find(e=>e.id==="RL_1")?.uploadStatus,"excluded");assert.equal(pdfManifest.find(e=>e.id==="RL_3")?.uploadStatus,"excluded");});
