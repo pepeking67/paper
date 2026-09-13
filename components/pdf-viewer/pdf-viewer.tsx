@@ -10,15 +10,18 @@ type PdfViewerProps = {
   onPageChange: (page: number) => void;
   onSelectionChange: (text: string) => void;
   onPageTextChange: (text: string) => void;
+  onSaveHighlight: (text: string, page: number, memo: string) => void;
 };
 
-export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange }: PdfViewerProps) {
+export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange, onSaveHighlight }: PdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const [pageCount, setPageCount] = useState(0);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [error, setError] = useState("");
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [selectedText, setSelectedText] = useState("");
+  const [highlightMemo, setHighlightMemo] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +32,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
       try {
         setError("");
         onSelectionChange("");
+        setSelectedText("");
         const probe = await fetch(`/api/papers/${paper.id}`);
         const data = await probe.json();
         if (!probe.ok || !data.pdfAvailable) {
@@ -40,7 +44,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
 
         setAvailable(true);
         const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        pdfjs.GlobalWorkerOptions.workerSrc="/pdf.worker.min.mjs";
         task = pdfjs.getDocument(`/api/pdf/${paper.id}`);
         const pdf = await task.promise;
         if (cancelled) return;
@@ -78,13 +82,23 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
     const selection = window.getSelection();
     if (!selection || !textLayerRef.current?.contains(selection.anchorNode)) return;
     onSelectionChange(selection.toString().trim());
+    setSelectedText(selection.toString().trim());
   }
 
-  return <section className="flex min-h-[620px] flex-col bg-[#121614] lg:min-h-0" aria-label="PDF 뷰어">
+  function saveHighlight() {
+    if (!selectedText) return;
+    onSaveHighlight(selectedText, page, highlightMemo.trim());
+    setSelectedText(""); setHighlightMemo(""); onSelectionChange(""); window.getSelection()?.removeAllRanges();
+  }
+
+  return <section className="flex min-h-[620px] flex-col bg-[#111] lg:min-h-0" aria-label="PDF 뷰어">
     <header className="border-b border-[var(--line)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-xs text-[var(--accent)]">{paper.tag} / {paper.id}</p><h2 className="mt-1 font-medium">{paper.title}</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p></div><a href={paper.notionUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#1a211e]">Notion ↗</a></div></header>
-    <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2"><span className="text-xs text-[var(--muted)]">텍스트를 드래그하면 질문 문맥에 첨부됩니다</span><div className="flex items-center gap-2"><button aria-label="이전 페이지" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>←</button><span className="text-xs tabular-nums">{page} / {pageCount || "—"}</span><button aria-label="다음 페이지" disabled={!pageCount || page >= pageCount} onClick={() => onPageChange(page + 1)}>→</button></div></div>
-    <div className="scrollbar flex flex-1 items-start justify-center overflow-auto p-5" onMouseUp={captureSelection}>
+    <div className="flex items-center justify-center border-b border-[var(--line)] px-4 py-2"><span className="text-xs text-[var(--muted)]">텍스트를 드래그해 질문 문맥 또는 Highlight로 저장하세요 · {page} / {pageCount || "—"}</span></div>
+    {selectedText && <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-black p-3"><p className="min-w-48 flex-1 truncate text-xs">“{selectedText}”</p><input aria-label="Highlight 메모" value={highlightMemo} onChange={(event) => setHighlightMemo(event.target.value)} placeholder="메모 (선택)" className="rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-xs"/><button onClick={saveHighlight} className="rounded bg-white px-3 py-1 text-xs font-semibold text-black">Highlight 저장</button></div>}
+    <div className="relative scrollbar flex flex-1 items-start justify-center overflow-auto p-5" onMouseUp={captureSelection}>
+      <button aria-label="이전 페이지" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="sticky left-2 top-1/2 z-10 mr-auto h-16 w-12 shrink-0 -translate-y-1/2 rounded-full border border-white bg-black/80 text-2xl text-white disabled:opacity-20">‹</button>
       {available === false ? <EmptyPdf /> : error ? <p role="alert" className="m-auto text-sm text-red-300">{error}</p> : <div className="relative shrink-0 shadow-2xl" style={size}><canvas ref={canvasRef} className="block bg-white" /><div ref={textLayerRef} className="textLayer" /></div>}
+      <button aria-label="다음 페이지" disabled={!pageCount || page >= pageCount} onClick={() => onPageChange(page + 1)} className="sticky right-2 top-1/2 z-10 ml-auto h-16 w-12 shrink-0 -translate-y-1/2 rounded-full border border-white bg-black/80 text-2xl text-white disabled:opacity-20">›</button>
     </div>
   </section>;
 }
