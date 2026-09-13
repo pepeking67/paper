@@ -70,3 +70,10 @@ PDF.js runs its worker from the same deployment at `/pdf.worker.min.mjs`. The
 `predev` and `prebuild` scripts copy the version bundled with the installed
 `pdfjs-dist` package into `public/`; the generated worker is intentionally ignored by
 Git so its version cannot drift from the package installed during deployment.
+
+The PDF viewer renders both a canvas and PDF.js text layer, so selected text and
+the extracted current-page text can become question context. A ChatGPT Plus
+subscription cannot authenticate an embedded API client or pay for OpenAI API usage.
+The **ChatGPT Plus로 질문** action therefore copies the bounded page context and opens
+`chatgpt.com`; embedded answers remain behind the provider-neutral API boundary until
+the owner separately chooses and configures an API provider.
