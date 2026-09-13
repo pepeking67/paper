@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
 
 type UiStatus = "pending" | "checking" | "uploading" | "ready" | "skipped" | "failed" | "excluded";
-type StatusRow = { paperId: string; status: UiStatus; reason?: string; sizeBytes?: number; sha256?: string };
+type StatusRow = { paperId: string; status: UiStatus; reason?: string; code?: string; sizeBytes?: number; sha256?: string };
 
 export function PdfSyncPanel({ papers }: { papers: Paper[] }) {
   const [open, setOpen] = useState(false);
@@ -38,7 +38,7 @@ export function PdfSyncPanel({ papers }: { papers: Paper[] }) {
       setRows((current) => ({ ...current, [paperId]: { paperId, status: "uploading" } }));
       const response = await fetch("/api/admin/sync-pdfs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paperId }) });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.reason ?? "동기화 실패");
+      if (!response.ok) throw new Error(`${result.code ? `[${result.code}] ` : ""}${result.reason ?? "동기화 실패"}`);
       setRows((current) => ({ ...current, [paperId]: { ...result, status: result.status } }));
     } catch (caught) {
       setRows((current) => ({ ...current, [paperId]: { paperId, status: "failed", reason: caught instanceof Error ? caught.message : "동기화 실패" } }));

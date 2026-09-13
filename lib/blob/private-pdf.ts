@@ -16,7 +16,10 @@ export async function getPrivatePdf(pathname: string) {
 
 export async function privateBlobExists(pathname: string): Promise<boolean> {
   try {
-    const metadata = await head(pathname, { token: token() });
+    const metadata = await head(pathname, {
+      access: "private",
+      token: token(),
+    });
     return metadata !== null;
   } catch (error) {
     if (isBlobNotFound(error)) return false;

@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json(await syncPaper(paperId));
   } catch (error) {
     if (error instanceof BlobNotConfiguredError) return errorResponse("Blob is not configured", 503, paperId);
-    if (error instanceof PdfSyncError) return errorResponse(error.message, error.httpStatus, paperId);
+    if (error instanceof PdfSyncError) return errorResponse(error.message, error.httpStatus, paperId, error.code);
     return errorResponse("PDF synchronization failed", 500, paperId);
   }
 }
@@ -27,6 +27,6 @@ function isPaperRequest(value: unknown): value is { paperId: string } {
   return typeof value === "object" && value !== null && typeof (value as { paperId?: unknown }).paperId === "string";
 }
 
-function errorResponse(reason: string, status: number, paperId?: string) {
-  return NextResponse.json({ ...(paperId ? { paperId } : {}), status: "failed", reason }, { status });
+function errorResponse(reason: string, status: number, paperId?: string, code?: string) {
+  return NextResponse.json({ ...(paperId ? { paperId } : {}), status: "failed", reason, ...(code ? { code } : {}) }, { status });
 }

@@ -1,5 +1,5 @@
 import { manifestEntry, isSafeBlobPath } from "@/lib/papers/manifest";
-import { privateBlobExists, putPrivatePdf } from "@/lib/blob/private-pdf";
+import { BlobNotConfiguredError, privateBlobExists, putPrivatePdf } from "@/lib/blob/private-pdf";
 import { assertMatchingArxivId, readPdfResponse, sha256 } from "./validate-pdf";
 import { PdfSyncError, type SyncDependencies, type SyncResult } from "./types";
 
@@ -13,7 +13,12 @@ export async function syncPaper(paperId: string, dependencies: SyncDependencies 
   if (entry.uploadStatus === "excluded") throw new PdfSyncError("EXCLUDED_PAPER", entry.reason || "Paper is excluded", 422);
   if (!entry.pdfSourceUrl) throw new PdfSyncError("MISSING_PDF_URL", "Paper has no PDF source URL", 422);
   if (!entry.blobPathname || !isSafeBlobPath(entry.blobPathname)) throw new PdfSyncError("INVALID_BLOB_PATH", "Paper has no safe Blob pathname", 422);
-  if (await dependencies.blobExists(entry.blobPathname)) return { paperId, status: "skipped", reason: "Already uploaded", blobPathname: entry.blobPathname };
+  try {
+    if (await dependencies.blobExists(entry.blobPathname)) return { paperId, status: "skipped", reason: "Already uploaded", blobPathname: entry.blobPathname };
+  } catch (error) {
+    if (error instanceof BlobNotConfiguredError) throw error;
+    throw new PdfSyncError("BLOB_STATUS_FAILED", "Private Blob status check failed", 502);
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);

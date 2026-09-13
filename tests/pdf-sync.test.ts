@@ -40,6 +40,13 @@ test("existing Blob is skipped without downloading or uploading", async () => {
   assert.equal(result.status, "skipped"); assert.equal(called, false);
 });
 
+test("Blob status failures receive a safe, actionable error code", async () => {
+  await assert.rejects(
+    syncPaper("VLA_4", dependencies({ blobExists: async () => { throw new Error("private internal detail"); } })),
+    (error: PdfSyncError) => error.code === "BLOB_STATUS_FAILED" && error.message === "Private Blob status check failed",
+  );
+});
+
 test("non-PDF content and oversized responses are rejected", async () => {
   await assert.rejects(readPdfResponse(new Response("html", { headers: { "content-type": "text/html" } })), (error: PdfSyncError) => error.code === "NOT_A_PDF");
   await assert.rejects(readPdfResponse(new Response("%PDF-x", { headers: { "content-type": "application/pdf", "content-length": String(MAX_PDF_BYTES + 1) } })), (error: PdfSyncError) => error.code === "PDF_TOO_LARGE");
