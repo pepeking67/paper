@@ -31,6 +31,7 @@ outputs/
 *.log
 .next/
 *.tsbuildinfo
+public/pdf.worker.min.mjs
 node_modules/
 .env*
 !.env.example

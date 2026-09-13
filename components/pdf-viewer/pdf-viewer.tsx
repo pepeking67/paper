@@ -7,7 +7,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange }: { pa
   const canvas = useRef<HTMLCanvasElement>(null); const [pages,setPages]=useState(0); const [available,setAvailable]=useState<boolean|null>(null); const [error,setError]=useState("");
   useEffect(()=>{ let cancelled=false; let task: PDFDocumentLoadingTask|undefined;
     (async()=>{ try { const probe=await fetch(`/api/papers/${paper.id}`); const data=await probe.json(); if(!data.pdfAvailable){setAvailable(false);setPages(0);return;} setAvailable(true);
-      const pdfjs=await import("pdfjs-dist"); pdfjs.GlobalWorkerOptions.workerSrc=new URL("pdfjs-dist/build/pdf.worker.min.mjs",import.meta.url).toString();
+      const pdfjs=await import("pdfjs-dist"); pdfjs.GlobalWorkerOptions.workerSrc="/pdf.worker.min.mjs";
       task=pdfjs.getDocument(`/api/pdf/${paper.id}`); const pdf=await task.promise; if(cancelled)return; setPages(pdf.numPages); const safe=Math.min(page,pdf.numPages); if(safe!==page)onPageChange(safe); const pdfPage=await pdf.getPage(safe); const viewport=pdfPage.getViewport({scale:1.35}); const el=canvas.current;if(!el)return; el.width=viewport.width;el.height=viewport.height; await pdfPage.render({canvas:el,canvasContext:el.getContext("2d")!,viewport}).promise;
     } catch(e){if(!cancelled)setError(e instanceof Error?e.message:"PDF를 열 수 없습니다.");} })(); return()=>{cancelled=true;void task?.destroy();};
   },[paper.id,page,onPageChange]);

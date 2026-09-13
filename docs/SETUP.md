@@ -65,3 +65,8 @@ The application no longer implements a site password or HTTP Basic authenticatio
 For non-public administration, enable Vercel Deployment Protection or restrict access
 at the hosting layer. Same-origin validation mitigates browser CSRF, but is not a user
 authentication mechanism.
+
+PDF.js runs its worker from the same deployment at `/pdf.worker.min.mjs`. The
+`predev` and `prebuild` scripts copy the version bundled with the installed
+`pdfjs-dist` package into `public/`; the generated worker is intentionally ignored by
+Git so its version cannot drift from the package installed during deployment.
