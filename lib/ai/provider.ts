@@ -13,32 +13,33 @@ export interface AiProvider {
 }
 
 export function getAiProvider(): AiProvider | null {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-  return new OpenAiResponsesProvider(apiKey, process.env.OPENAI_MODEL || "gpt-5.5");
+  const apiKey = process.env.GEMINI_API_KEY;
+  const model = process.env.GEMINI_MODEL;
+  if (!apiKey || !model) return null;
+  return new GeminiProvider(apiKey, model);
 }
 
-class OpenAiResponsesProvider implements AiProvider {
+class GeminiProvider implements AiProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async answer(message: string, context: StudyContext, history: ChatTurn[] = []): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
     try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
         method: "POST",
         signal: controller.signal,
-        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: this.model,
-          instructions: "You are a careful paper-study assistant. Use only the supplied paper context for paper-specific claims. Clearly label uncertainty, do not invent quotations, and answer naturally in the user's language.",
-          input: buildStudyPrompt(message, context, history),
+          systemInstruction: { parts: [{ text: "You are a careful paper-study assistant. Use only the supplied paper context for paper-specific claims. Clearly label uncertainty, do not invent quotations, and answer naturally in the user's language." }] },
+          contents: [{ role: "user", parts: [{ text: buildStudyPrompt(message, context, history) }] }],
+          generationConfig: { temperature: 0.2 },
         }),
       });
-      if (!response.ok) throw new Error(`OPENAI_HTTP_${response.status}`);
+      if (!response.ok) throw new Error(`GEMINI_HTTP_${response.status}`);
       const data: unknown = await response.json();
       const text = extractOutputText(data);
-      if (!text) throw new Error("OPENAI_EMPTY_RESPONSE");
+      if (!text) throw new Error("GEMINI_EMPTY_RESPONSE");
       return text;
     } finally {
       clearTimeout(timeout);
@@ -64,7 +65,6 @@ export function buildStudyPrompt(message: string, context: StudyContext, history
 
 function extractOutputText(value: unknown): string {
   if (!value || typeof value !== "object") return "";
-  const response = value as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: unknown }> }> };
-  if (typeof response.output_text === "string") return response.output_text.trim();
-  return (response.output ?? []).flatMap((item) => item.content ?? []).filter((item) => item.type === "output_text" && typeof item.text === "string").map((item) => item.text as string).join("\n").trim();
+  const response = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }> };
+  return (response.candidates ?? []).flatMap((candidate) => candidate.content?.parts ?? []).filter((part) => typeof part.text === "string").map((part) => part.text as string).join("\n").trim();
 }

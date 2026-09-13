@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
   if (!isChatRequest(body) || !findPaper(body.context.paperId)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const provider = getAiProvider();
-  if (!provider) return NextResponse.json({ error: "OpenAI API is not configured", code: "AI_NOT_CONFIGURED" }, { status: 503 });
+  if (!provider) return NextResponse.json({ error: "Gemini API is not configured", code: "AI_NOT_CONFIGURED" }, { status: 503 });
   try {
     const message = await provider.answer(body.message, sanitizeContext(body.context), sanitizeHistory(body.history));
     return NextResponse.json({ message });

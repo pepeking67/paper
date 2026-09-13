@@ -72,9 +72,10 @@ PDF.js runs its worker from the same deployment at `/pdf.worker.min.mjs`. The
 Git so its version cannot drift from the package installed during deployment.
 
 The PDF viewer renders both a canvas and PDF.js text layer, so selected text and
-the extracted current-page text can become question context. Chat uses OpenAI's
-Responses API from the server and never exposes `OPENAI_API_KEY` to the browser.
-Set `OPENAI_API_KEY` and, optionally, `OPENAI_MODEL` in Vercel; the default model is
-`gpt-5.5`. The request bounds page text, selected text, retrieved chunks, question,
-and recent history instead of sending an entire PDF. ChatGPT Plus and API billing are
-separate, so a Plus subscription does not provide free API usage or an API credential.
+the extracted current-page text can become question context. Chat uses Google's
+Gemini `generateContent` API from the server and never exposes `GEMINI_API_KEY` to the
+browser. Set both `GEMINI_API_KEY` and `GEMINI_MODEL` in Vercel. The model name is
+required rather than hard-coded because `Gemini 3.8 Flash` could not be verified as a
+published API model identifier in this environment. The request bounds page text,
+selected text, retrieved chunks, question, and recent history instead of sending an
+entire PDF.
