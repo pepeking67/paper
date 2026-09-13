@@ -1,4 +1,4 @@
-import { get, head, put } from "@vercel/blob";
+import { get, list, put } from "@vercel/blob";
 import { Buffer } from "node:buffer";
 
 export class BlobNotConfiguredError extends Error {
@@ -15,13 +15,12 @@ export async function getPrivatePdf(pathname: string) {
 }
 
 export async function privateBlobExists(pathname: string): Promise<boolean> {
-  try {
-    const metadata = await head(pathname, { token: token() });
-    return metadata !== null;
-  } catch (error) {
-    if (isBlobNotFound(error)) return false;
-    throw error;
-  }
+  const result = await list({
+    limit: 2,
+    prefix: pathname,
+    token: token(),
+  });
+  return result.blobs.some((blob) => blob.pathname === pathname);
 }
 
 export async function putPrivatePdf(pathname: string, bytes: Uint8Array) {
@@ -32,10 +31,4 @@ export async function putPrivatePdf(pathname: string, bytes: Uint8Array) {
     contentType: "application/pdf",
     token: token(),
   });
-}
-
-function isBlobNotFound(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const candidate = error as Error & { status?: number; statusCode?: number };
-  return candidate.name === "BlobNotFoundError" || candidate.status === 404 || candidate.statusCode === 404;
 }

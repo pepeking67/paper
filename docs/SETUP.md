@@ -54,7 +54,8 @@ only one `paperId`; it obtains both source URL and destination pathname from the
 checked-in manifest, enforces same-origin mutation requests, download timeout,
 PDF content/signature and size checks, arXiv identity, and private no-overwrite upload.
 
-The manifest remains an immutable allowlist at runtime. Blob `head()` results are the
+The manifest remains an immutable allowlist at runtime. An exact-path match from a
+server-only, prefix-limited Blob `list()` query is the
 source of truth for availability. The MVP returns SHA-256 and size to the administrator
 screen but does not persist them: they are not needed for serving, and adding a database
 or a second metadata Blob would add consistency and lifecycle complexity. A persistence
