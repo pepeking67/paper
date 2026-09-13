@@ -1,6 +1,6 @@
 # paper
 
-Personal research workspace for robotics and AI paper study.
+Personal research workspace and runnable Next.js reader for robotics and AI paper study.
 
 ## Purpose
 
@@ -32,8 +32,22 @@ paper/
 │   └── experiments/
 ├── prompts/
 │   └── research_agent.md
+├── app/                  # App Router pages and server APIs
+├── components/           # paper list, PDF.js viewer, and study chat
+├── lib/                  # paper, private Blob, PDF, and AI boundaries
+├── data/                 # secret-free PDF manifest
+├── scripts/              # resumable upload and extraction tools
 └── .gitignore
 ```
+
+## Local site
+
+```bash
+npm install
+npm run dev
+```
+
+The reader intentionally shows a PDF empty state until a private Vercel Blob is connected and an entry is marked ready by the uploader. AI chat is also a provider-neutral placeholder. See [`docs/SETUP.md`](docs/SETUP.md) for the safe Vercel hand-off, upload gate, processing output, and access protection.
 
 ## Paper naming convention
 
