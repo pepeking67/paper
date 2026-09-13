@@ -72,8 +72,9 @@ PDF.js runs its worker from the same deployment at `/pdf.worker.min.mjs`. The
 Git so its version cannot drift from the package installed during deployment.
 
 The PDF viewer renders both a canvas and PDF.js text layer, so selected text and
-the extracted current-page text can become question context. A ChatGPT Plus
-subscription cannot authenticate an embedded API client or pay for OpenAI API usage.
-The **ChatGPT Plus로 질문** action therefore copies the bounded page context and opens
-`chatgpt.com`; embedded answers remain behind the provider-neutral API boundary until
-the owner separately chooses and configures an API provider.
+the extracted current-page text can become question context. Chat uses OpenAI's
+Responses API from the server and never exposes `OPENAI_API_KEY` to the browser.
+Set `OPENAI_API_KEY` and, optionally, `OPENAI_MODEL` in Vercel; the default model is
+`gpt-5.5`. The request bounds page text, selected text, retrieved chunks, question,
+and recent history instead of sending an entire PDF. ChatGPT Plus and API billing are
+separate, so a Plus subscription does not provide free API usage or an API credential.
