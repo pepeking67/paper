@@ -116,29 +116,19 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
   }
 
   return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[720px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }} onPointerMove={previewSelection} onPointerUp={captureSelection}>
-    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div className="pointer-events-none absolute inset-0 z-[1]">{selectionRects.map((rect, index) => <span key={index} className="absolute rounded-[2px] bg-[#777]/45" style={{ left: rect.left, top: rect.top + rect.height * 0.15, width: rect.width, height: rect.height * 0.72 }}/>)}</div><div ref={textLayerRef} className="textLayer z-[2]"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
+    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div className="pointer-events-none absolute inset-0 z-[1]">{selectionRects.map((rect, index) => <span key={index} className="absolute rounded-[2px] bg-[#777]/45" style={{ left: rect.left, top: rect.top + rect.height * 0.2, width: rect.width, height: rect.height * 0.6 }}/>)}</div><div ref={textLayerRef} className="textLayer z-[2]"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
 }
 
 function getSelectedGlyphRects(range: Range, layer: HTMLElement, surface: HTMLElement): GlyphRect[] {
   const surfaceRect = surface.getBoundingClientRect();
-  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
-  const rects: GlyphRect[] = [];
-  let node = walker.nextNode();
-  while (node) {
-    if (range.intersectsNode(node)) {
-      const value = node.textContent ?? "";
-      const start = node === range.startContainer ? range.startOffset : 0;
-      const end = node === range.endContainer ? range.endOffset : value.length;
-      for (let index = start; index < end; index += 1) {
-        if (/\s/.test(value[index] ?? "")) continue;
-        const glyphRange = document.createRange();
-        glyphRange.setStart(node, index); glyphRange.setEnd(node, index + 1);
-        for (const rect of glyphRange.getClientRects()) if (rect.width > 0 && rect.height > 0) rects.push({ left: rect.left - surfaceRect.left, top: rect.top - surfaceRect.top, width: rect.width, height: rect.height });
-        if (rects.length >= 4000) return rects;
-      }
-    }
-    node = walker.nextNode();
-  }
-  return rects;
+  const layerRect = layer.getBoundingClientRect();
+  return Array.from(range.getClientRects())
+    .filter((rect) => rect.width > 0 && rect.height > 0 && rect.right > layerRect.left && rect.left < layerRect.right && rect.bottom > layerRect.top && rect.top < layerRect.bottom)
+    .map((rect) => ({
+      left: Math.max(rect.left, layerRect.left) - surfaceRect.left,
+      top: Math.max(rect.top, layerRect.top) - surfaceRect.top,
+      width: Math.min(rect.right, layerRect.right) - Math.max(rect.left, layerRect.left),
+      height: Math.min(rect.bottom, layerRect.bottom) - Math.max(rect.top, layerRect.top),
+    }));
 }

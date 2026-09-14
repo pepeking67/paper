@@ -1,23 +1,30 @@
 export type GlyphRect = { left: number; top: number; width: number; height: number };
 
-/** Join neighboring glyph boxes into short, line-local marker strokes. */
+/** Join neighboring selection fragments without expanding a line's vertical bounds. */
 export function mergeGlyphRects(rects: GlyphRect[]): GlyphRect[] {
-  const sorted = [...rects].sort((a, b) => Math.abs(a.top - b.top) > 2 ? a.top - b.top : a.left - b.left);
-  const lines: GlyphRect[] = [];
+  const sorted = [...rects].sort((a, b) => (a.top + a.height / 2) - (b.top + b.height / 2) || a.left - b.left);
+  const groups: GlyphRect[][] = [];
   for (const rect of sorted) {
-    const previous = lines.at(-1);
-    if (!previous) { lines.push({ ...rect }); continue; }
-    const previousMiddle = previous.top + previous.height / 2;
+    const group = groups.at(-1);
+    const previous = group?.at(-1);
+    if (!group || !previous) { groups.push([{ ...rect }]); continue; }
+    const representative = group[Math.floor(group.length / 2)];
+    const previousMiddle = representative.top + representative.height / 2;
     const currentMiddle = rect.top + rect.height / 2;
-    const sameLine = Math.abs(previousMiddle - currentMiddle) <= Math.min(previous.height, rect.height) * 0.45;
-    const closeEnough = rect.left <= previous.left + previous.width + Math.max(4, previous.height * 0.8);
-    if (!sameLine || !closeEnough) { lines.push({ ...rect }); continue; }
-    const right = Math.max(previous.left + previous.width, rect.left + rect.width);
-    const bottom = Math.max(previous.top + previous.height, rect.top + rect.height);
-    previous.left = Math.min(previous.left, rect.left);
-    previous.top = Math.min(previous.top, rect.top);
-    previous.width = right - previous.left;
-    previous.height = bottom - previous.top;
+    const sameLine = Math.abs(previousMiddle - currentMiddle) <= Math.min(representative.height, rect.height) * 0.35;
+    const closeEnough = rect.left <= previous.left + previous.width + Math.max(4, representative.height * 0.6);
+    if (!sameLine || !closeEnough) { groups.push([{ ...rect }]); continue; }
+    group.push({ ...rect });
   }
-  return lines;
+  return groups.map((group) => {
+    const left = Math.min(...group.map((rect) => rect.left));
+    const right = Math.max(...group.map((rect) => rect.left + rect.width));
+    const weight = group.reduce((sum, rect) => sum + rect.width, 0) || group.length;
+    return {
+      left,
+      top: group.reduce((sum, rect) => sum + rect.top * (rect.width || 1), 0) / weight,
+      width: right - left,
+      height: group.reduce((sum, rect) => sum + rect.height * (rect.width || 1), 0) / weight,
+    };
+  });
 }

@@ -34,7 +34,8 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /<div ref=\{textLayerRef\}/);
   assert.match(page, /getSelectedGlyphRects/);
   assert.match(page, /mergeGlyphRects/);
-  assert.match(page, /glyphRange\.getClientRects\(\)/);
+  assert.match(page, /range\.getClientRects\(\)/);
+  assert.doesNotMatch(page, /document\.createTreeWalker/);
   assert.match(page, /setProperty\("--scale-factor", String\(viewport\.scale\)\)/);
   assert.match(page, /capturedTexts/);
   assert.match(viewer, /setZoom/);
