@@ -23,6 +23,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
   const [error, setError] = useState("");
   const [selected, setSelected] = useState({ text: "", page: 1 });
   const [highlightMemo, setHighlightMemo] = useState("");
+  const [zoom, setZoom] = useState(100);
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const pageTexts = useRef(new Map<number, string>());
   const currentPage = useRef(page);
@@ -97,16 +98,20 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
     setSelected({ text: "", page: selected.page }); setHighlightMemo(""); onSelectionChange(""); window.getSelection()?.removeAllRanges();
   }
 
+  function scrollToPage(pageNumber: number) {
+    scrollRoot?.querySelector<HTMLElement>(`[data-page="${pageNumber}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return <section className="flex min-h-[620px] flex-col bg-[#111] lg:min-h-0" aria-label="PDF 뷰어">
     <header className="border-b border-[var(--line)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-xs text-[var(--accent)]">{paper.tag} / {paper.id}</p><h2 className="mt-1 font-medium">{paper.title}</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p></div><a href={paper.notionUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Notion ↗</a></div></header>
-    <div className="flex items-center justify-center border-b border-[var(--line)] px-4 py-2"><span className="text-xs text-[var(--muted)]">{pdf ? `현재 ${page} / ${pdf.numPages} 페이지` : "텍스트를 드래그해 질문 문맥 또는 Highlight로 저장하세요"}</span></div>
+    <div className="border-b border-[var(--line)] bg-black px-4 py-2"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-[var(--muted)]">{pdf ? `현재 ${page} / ${pdf.numPages} 페이지` : "텍스트를 드래그해 질문 문맥 또는 Highlight로 저장하세요"}</span>{pdf && <div className="flex items-center gap-2 text-xs"><label htmlFor="page-jump" className="sr-only">페이지 이동</label><input id="page-jump" type="number" min={1} max={pdf.numPages} value={page} onChange={(event) => { const target = Math.max(1, Math.min(pdf.numPages, Number(event.target.value))); onPageChange(target); scrollToPage(target); }} className="w-14 rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-center"/><button onClick={() => setZoom((value) => Math.max(75, value - 25))} disabled={zoom <= 75} aria-label="축소" className="rounded border border-[var(--line)] px-2 py-1">−</button><span className="w-10 text-center tabular-nums">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(150, value + 25))} disabled={zoom >= 150} aria-label="확대" className="rounded border border-[var(--line)] px-2 py-1">+</button></div>}</div>{pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}</div>
     {selected.text && <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-black p-3"><p className="min-w-48 flex-1 truncate text-xs">p.{selected.page} · “{selected.text}”</p><input aria-label="Highlight 메모" value={highlightMemo} onChange={(event) => setHighlightMemo(event.target.value)} placeholder="메모 (선택)" className="rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-xs"/><button onClick={saveHighlight} className="rounded bg-white px-3 py-1 text-xs font-semibold text-black">Highlight 저장</button></div>}
-    <div ref={setScrollRoot} className="scrollbar flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-3 touch-pan-y sm:p-5">
+    <div ref={setScrollRoot} className="scrollbar flex-1 overflow-auto overscroll-contain p-3 touch-pan-y sm:p-5">
       {loadState === "loading" && <DocumentLoading />}
       {loadState === "missing" && <EmptyPdf />}
       {loadState === "blob-error" && <LoadError title="Blob에서 PDF를 가져오지 못했습니다" detail={error} />}
       {loadState === "parse-error" && <LoadError title="PDF 파일을 해석하지 못했습니다" detail={error} />}
-      {pdf && <div className="mx-auto flex w-full max-w-[960px] flex-col items-center gap-6">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} scrollRoot={scrollRoot} onText={handlePageText} onSelection={captureSelection}/>)}</div>}
+      {pdf && <div className="mx-auto flex w-full max-w-[960px] flex-col items-center gap-6">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} zoom={zoom} scrollRoot={scrollRoot} onText={handlePageText} onSelection={captureSelection}/>)}</div>}
     </div>
   </section>;
 }

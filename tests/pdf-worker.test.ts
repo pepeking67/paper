@@ -26,6 +26,8 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /renderTask\?\.cancel\(\)/);
   assert.match(page, /page\.render\(\{ canvas, canvasContext, viewport \}\)/);
   assert.match(page, /renderError/);
+  assert.match(viewer, /setZoom/);
+  assert.match(viewer, /현재.*pdf\.numPages.*페이지/);
   assert.doesNotMatch(route, /privateBlobExists/);
   assert.match(route, /"Accept-Ranges":"none"/);
 });

@@ -3,9 +3,9 @@
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
 
-type Props = { pdf: PDFDocumentProxy; pageNumber: number; scrollRoot: HTMLDivElement | null; onText: (page: number, text: string) => void; onSelection: (text: string, page: number) => void };
+type Props = { pdf: PDFDocumentProxy; pageNumber: number; zoom: number; scrollRoot: HTMLDivElement | null; onText: (page: number, text: string) => void; onSelection: (text: string, page: number) => void };
 
-export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Props) {
+export function PdfPage({ pdf, pageNumber, zoom, scrollRoot, onText, onSelection }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
@@ -14,6 +14,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
   const [ratio, setRatio] = useState(1.414);
   const [rendering, setRendering] = useState(false);
   const [renderedWidth, setRenderedWidth] = useState(0);
+  const [renderedZoom, setRenderedZoom] = useState(0);
   const [renderError, setRenderError] = useState("");
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
   }, []);
 
   useEffect(() => {
-    if (!nearViewport || width < 1 || renderedWidth === width) return;
+    if (!nearViewport || width < 1 || (renderedWidth === width && renderedZoom === zoom)) return;
     let cancelled = false;
     let renderTask: RenderTask | undefined;
     let textLayer: { cancel: () => void } | undefined;
@@ -44,7 +45,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
         if (cancelled) return;
         const base = page.getViewport({ scale: 1 });
         setRatio(base.height / base.width);
-        const cssWidth = Math.min(width, base.width * 1.5);
+        const cssWidth = Math.min(width, base.width * 1.5) * zoom / 100;
         const viewport = page.getViewport({ scale: cssWidth / base.width });
         const canvas = canvasRef.current; const textContainer = textLayerRef.current;
         if (!canvas || !textContainer) return;
@@ -62,7 +63,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
         const pdfjs = await import("pdfjs-dist");
         const layer = new pdfjs.TextLayer({ textContentSource: textContent, container: textContainer, viewport });
         textLayer = layer; await layer.render();
-        if (!cancelled) setRenderedWidth(width);
+        if (!cancelled) { setRenderedWidth(width); setRenderedZoom(zoom); }
       } catch (caught) {
         if (!cancelled && !(caught instanceof Error && caught.name === "RenderingCancelledException")) {
           setRenderedWidth(0);
@@ -71,12 +72,12 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
       } finally { if (!cancelled) setRendering(false); }
     })();
     return () => { cancelled = true; renderTask?.cancel(); textLayer?.cancel(); };
-  }, [nearViewport, width, renderedWidth, pdf, pageNumber, onText]);
+  }, [nearViewport, width, renderedWidth, renderedZoom, pdf, pageNumber, zoom, onText]);
 
   useEffect(() => {
     if (nearViewport) return;
     const canvas = canvasRef.current; if (canvas) { canvas.width = 0; canvas.height = 0; }
-    textLayerRef.current?.replaceChildren(); setRenderedWidth(0);
+    textLayerRef.current?.replaceChildren(); setRenderedWidth(0); setRenderedZoom(0);
   }, [nearViewport]);
 
   function captureSelection() {
@@ -85,7 +86,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
     const text = selection.toString().trim(); if (text) onSelection(text, pageNumber);
   }
 
-  return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[900px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio}` }} onPointerUp={captureSelection}>
+  return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[900px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }} onPointerUp={captureSelection}>
     {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<canvas ref={canvasRef} className={`absolute left-1/2 top-0 -translate-x-1/2 bg-white ${renderedWidth ? "opacity-100" : "opacity-0"}`}/><div ref={textLayerRef} className="textLayer left-1/2 -translate-x-1/2"/>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
 }
