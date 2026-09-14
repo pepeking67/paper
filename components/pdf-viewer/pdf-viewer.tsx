@@ -127,7 +127,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
       {loadState === "missing" && <EmptyPdf />}
       {loadState === "blob-error" && <LoadError title="Blob에서 PDF를 가져오지 못했습니다" detail={error} />}
       {loadState === "parse-error" && <LoadError title="PDF 파일을 해석하지 못했습니다" detail={error} />}
-      {pdf && <div className="mx-auto flex w-full max-w-[960px] flex-col items-center gap-6">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} zoom={zoom} scrollRoot={scrollRoot} onText={handlePageText} onSelection={captureSelection}/>)}</div>}
+      {pdf && <div className="mx-auto flex w-full max-w-[960px] flex-col items-center gap-6">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} zoom={zoom} capturedTexts={selections.filter((selection) => selection.page === index + 1).map((selection) => selection.text)} scrollRoot={scrollRoot} onText={handlePageText} onSelection={captureSelection}/>)}</div>}
     </div>
   </section>;
 }

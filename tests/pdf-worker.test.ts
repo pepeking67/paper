@@ -26,10 +26,15 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /IntersectionObserver/);
   assert.match(page, /rootMargin: "120% 0px"/);
   assert.match(page, /renderTask\?\.cancel\(\)/);
-  assert.match(page, /page\.render\(\{ canvas, canvasContext, viewport \}\)/);
+  assert.match(page, /page\.render\(\{ canvas, canvasContext, viewport, transform:/);
   assert.match(page, /renderError/);
   assert.match(page, /surfaceSize/);
-  assert.match(page, /<canvas ref=\{canvasRef\}[^>]*\/><div ref=\{textLayerRef\}/);
+  assert.match(page, /ref=\{surfaceRef\}/);
+  assert.match(page, /<canvas ref=\{canvasRef\}/);
+  assert.match(page, /<div ref=\{textLayerRef\}/);
+  assert.match(page, /getSelectedGlyphRects/);
+  assert.match(page, /glyphRange\.getClientRects\(\)/);
+  assert.match(page, /capturedTexts/);
   assert.match(viewer, /setZoom/);
   assert.match(viewer, /현재.*pdf\.numPages.*페이지/);
   assert.match(viewer, /paper-header-actions/);
