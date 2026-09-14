@@ -21,7 +21,7 @@ export function StudyTray({ paper, tray, onAddMemo, onRemove }: { paper: Paper; 
   }
 
   return <>
-    <button onClick={() => setOpen(true)} className="fixed bottom-4 right-4 z-20 rounded-full border border-white bg-black px-4 py-2 text-sm text-white shadow-xl">Study Tray · {total}</button>
+    <button onClick={() => setOpen(true)} className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-20 rounded-full border border-white bg-black px-4 py-2 text-sm text-white shadow-xl">Study Tray · {total}</button>
     {open && <div className="fixed inset-0 z-40 flex justify-end bg-black/70" role="dialog" aria-modal="true" aria-labelledby="study-tray-title">
       <section className="scrollbar h-full w-full max-w-xl overflow-y-auto border-l border-[var(--line)] bg-black p-5 text-white">
         <header className="flex items-start justify-between"><div><p className="text-xs tracking-widest text-[var(--muted)]">CURRENT PAPER</p><h2 id="study-tray-title" className="mt-1 text-xl font-semibold">Study Tray</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.title}</p></div><button onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl">×</button></header>

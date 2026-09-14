@@ -61,7 +61,7 @@ export function PdfSyncPanel({ papers }: { papers: Paper[] }) {
   const failures = visible.filter((row) => row.status === "failed").map((row) => row.paperId);
 
   return <>
-    <button onClick={() => setOpen(true)} className="fixed bottom-4 left-4 z-20 rounded-full border border-[#42614e] bg-[#17231c] px-4 py-2 text-sm text-[var(--accent)] shadow-xl">PDF 관리</button>
+    <button onClick={() => setOpen(true)} className="fixed bottom-[calc(env(safe-area-inset-bottom)+4rem)] right-4 z-20 rounded-full border border-[var(--line)] bg-black px-4 py-2 text-sm text-white shadow-xl">PDF 관리</button>
     {open && <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="pdf-sync-title">
       <section className="scrollbar max-h-[88dvh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--line)] bg-[#101512] p-5 shadow-2xl">
         <header className="flex items-start justify-between"><div><p className="text-xs text-[var(--accent)]">ADMIN</p><h2 id="pdf-sync-title" className="text-xl font-semibold">PDF 동기화</h2></div><button onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl">×</button></header>
