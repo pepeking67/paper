@@ -2,8 +2,8 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
+import { mergeGlyphRects, type GlyphRect } from "@/lib/pdf/merge-glyph-rects";
 
-type GlyphRect = { left: number; top: number; width: number; height: number };
 type Props = { pdf: PDFDocumentProxy; pageNumber: number; zoom: number; capturedTexts: string[]; scrollRoot: HTMLDivElement | null; onText: (page: number, text: string) => void; onSelection: (text: string, page: number) => void };
 
 export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onText, onSelection }: Props) {
@@ -98,7 +98,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
     const selection = window.getSelection();
     const layer = textLayerRef.current; const surface = surfaceRef.current;
     if (!selection || !layer || !surface || !layer.contains(selection.anchorNode) || selection.rangeCount === 0) return null;
-    setSelectionRects(getSelectedGlyphRects(selection.getRangeAt(0), layer, surface));
+    setSelectionRects(mergeGlyphRects(getSelectedGlyphRects(selection.getRangeAt(0), layer, surface)));
     return selection.toString().trim();
   }
 
@@ -114,8 +114,8 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
     window.getSelection()?.removeAllRanges();
   }
 
-  return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[900px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }} onPointerMove={previewSelection} onPointerUp={captureSelection}>
-    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div className="pointer-events-none absolute inset-0 z-[1]">{selectionRects.map((rect, index) => <span key={index} className="absolute bg-[#777]/45" style={rect}/>)}</div><div ref={textLayerRef} className="textLayer z-[2]"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
+  return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[720px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }} onPointerMove={previewSelection} onPointerUp={captureSelection}>
+    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div className="pointer-events-none absolute inset-0 z-[1]">{selectionRects.map((rect, index) => <span key={index} className="absolute rounded-[2px] bg-[#777]/45" style={{ left: rect.left, top: rect.top + rect.height * 0.15, width: rect.width, height: rect.height * 0.72 }}/>)}</div><div ref={textLayerRef} className="textLayer z-[2]"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
 }
 

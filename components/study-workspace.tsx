@@ -22,7 +22,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setTray((current) => { const next = updater(current); localStorage.setItem(storageKey, JSON.stringify(next)); return next; });
   }
   const context = useMemo(() => ({ paperId: initialPaper.id, page, selectedText: selection, pageText }), [initialPaper.id, page, selection, pageText]);
-  return <main className="grid min-h-dvh grid-cols-1 bg-black lg:h-dvh lg:grid-cols-[280px_minmax(420px,1fr)_360px] lg:overflow-hidden">
+  return <main className="grid min-h-dvh grid-cols-1 bg-black lg:h-dvh lg:grid-cols-[220px_minmax(360px,760px)_minmax(380px,1fr)] lg:overflow-hidden">
     <PaperList papers={papers} activeId={initialPaper.id} />
     <PdfViewer paper={initialPaper} page={page} onPageChange={setPage} onSelectionChange={setSelection} onPageTextChange={setPageText} onSaveHighlight={(text, highlightPage, memo) => updateTray((current) => ({ ...current, highlights: [...current.highlights, { id: crypto.randomUUID(), text, page: highlightPage, memo, createdAt: new Date().toISOString() }] }))} />
     <StudyChat paper={initialPaper} context={context} onSaveInsight={(question, answer) => updateTray((current) => ({ ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selection || undefined, createdAt: new Date().toISOString() }] }))} />

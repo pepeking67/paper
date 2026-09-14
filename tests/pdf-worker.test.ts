@@ -33,6 +33,7 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /<canvas ref=\{canvasRef\}/);
   assert.match(page, /<div ref=\{textLayerRef\}/);
   assert.match(page, /getSelectedGlyphRects/);
+  assert.match(page, /mergeGlyphRects/);
   assert.match(page, /glyphRange\.getClientRects\(\)/);
   assert.match(page, /capturedTexts/);
   assert.match(viewer, /setZoom/);
