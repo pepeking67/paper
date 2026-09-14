@@ -3,6 +3,8 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
+import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import type { StudyHighlight } from "@/lib/study-tray/types";
 import { installPdfJsCompatibility } from "@/lib/pdf/uint8array-to-hex";
 import { PdfPage } from "./pdf-page";
 
@@ -12,13 +14,14 @@ type PdfViewerProps = {
   onPageChange: (page: number) => void;
   onSelectionChange: (text: string) => void;
   onPageTextChange: (text: string) => void;
-  onSaveHighlight: (text: string, page: number, memo: string) => void;
+  onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string) => void;
+  savedHighlights: StudyHighlight[];
 };
 
 type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
-type CapturedSelection = { text: string; page: number };
+type CapturedSelection = { text: string; page: number; rects: NormalizedHighlightRect[] };
 
-export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange, onSaveHighlight }: PdfViewerProps) {
+export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange, onSaveHighlight, savedHighlights }: PdfViewerProps) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
@@ -87,9 +90,9 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
     if (pageNumber === currentPage.current) onPageTextChange(text);
   }, [onPageTextChange]);
 
-  function captureSelection(text: string, selectedPage: number) {
+  function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
     setSelections((current) => {
-      const next = current.some((item) => item.page === selectedPage && item.text === text) ? current : [...current, { text, page: selectedPage }].slice(-8);
+      const next = current.some((item) => item.page === selectedPage && item.text === text) ? current : [...current, { text, page: selectedPage, rects }].slice(-8);
       onSelectionChange(next.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"));
       return next;
     });
@@ -98,7 +101,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
 
   function saveHighlight() {
     if (!selections.length) return;
-    for (const selection of selections) onSaveHighlight(selection.text, selection.page, highlightMemo.trim());
+    for (const selection of selections) onSaveHighlight(selection.text, selection.page, selection.rects, highlightMemo.trim());
     clearSelections(); setHighlightMemo("");
   }
 
@@ -127,7 +130,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
       {loadState === "missing" && <EmptyPdf />}
       {loadState === "blob-error" && <LoadError title="Blob에서 PDF를 가져오지 못했습니다" detail={error} />}
       {loadState === "parse-error" && <LoadError title="PDF 파일을 해석하지 못했습니다" detail={error} />}
-      {pdf && <div className="mx-auto flex w-full max-w-[760px] flex-col items-center gap-6">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} zoom={zoom} capturedTexts={selections.filter((selection) => selection.page === index + 1).map((selection) => selection.text)} scrollRoot={scrollRoot} onText={handlePageText} onSelection={captureSelection}/>)}</div>}
+      {pdf && <div className="mx-auto flex w-full max-w-[760px] flex-col items-center gap-6">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} zoom={zoom} capturedSelections={[...savedHighlights.filter((selection) => selection.page === index + 1).map((selection) => ({ text: selection.text, rects: selection.rects ?? [] })), ...selections.filter((selection) => selection.page === index + 1)]} scrollRoot={scrollRoot} onText={handlePageText} onSelection={captureSelection}/>)}</div>}
     </div>
   </section>;
 }

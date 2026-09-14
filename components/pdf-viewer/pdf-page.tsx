@@ -2,11 +2,12 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
-import { mergeGlyphRects, type GlyphRect } from "@/lib/pdf/merge-glyph-rects";
+import { getTextFragmentRect, mergeGlyphRects, normalizeHighlightRects, projectHighlightRect, type GlyphRect, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 
-type Props = { pdf: PDFDocumentProxy; pageNumber: number; zoom: number; capturedTexts: string[]; scrollRoot: HTMLDivElement | null; onText: (page: number, text: string) => void; onSelection: (text: string, page: number) => void };
+type CapturedSelection = { text: string; rects: NormalizedHighlightRect[] };
+type Props = { pdf: PDFDocumentProxy; pageNumber: number; zoom: number; capturedSelections: CapturedSelection[]; scrollRoot: HTMLDivElement | null; onText: (page: number, text: string) => void; onSelection: (text: string, page: number, rects: NormalizedHighlightRect[]) => void };
 
-export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onText, onSelection }: Props) {
+export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot, onText, onSelection }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,7 +20,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
   const [renderedZoom, setRenderedZoom] = useState(0);
   const [renderError, setRenderError] = useState("");
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
-  const [selectionRects, setSelectionRects] = useState<GlyphRect[]>([]);
+  const [selectionRects, setSelectionRects] = useState<NormalizedHighlightRect[]>([]);
   const [overlayText, setOverlayText] = useState("");
   const selectionFrame = useRef<number | null>(null);
 
@@ -72,6 +73,13 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
         const pdfjs = await import("pdfjs-dist");
         const layer = new pdfjs.TextLayer({ textContentSource: textContent, container: textContainer, viewport });
         textLayer = layer; await layer.render();
+        const textItems = textContent.items.filter((item): item is typeof item & { str: string } => "str" in item && Boolean(item.str));
+        const spans = textContainer.querySelectorAll<HTMLElement>("span");
+        let itemIndex = 0;
+        spans.forEach((span) => {
+          while (itemIndex < textItems.length && textItems[itemIndex].str !== span.textContent) itemIndex += 1;
+          if (itemIndex < textItems.length) { span.dataset.textItemIndex = String(itemIndex); itemIndex += 1; }
+        });
         if (!cancelled) { setRenderedWidth(width); setRenderedZoom(zoom); }
       } catch (caught) {
         if (!cancelled && !(caught instanceof Error && caught.name === "RenderingCancelledException")) {
@@ -90,8 +98,8 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
   }, [nearViewport]);
 
   useEffect(() => {
-    if (overlayText && !capturedTexts.includes(overlayText)) { setSelectionRects([]); setOverlayText(""); }
-  }, [capturedTexts, overlayText]);
+    if (overlayText && !capturedSelections.some((selection) => selection.text === overlayText)) { setSelectionRects([]); setOverlayText(""); }
+  }, [capturedSelections, overlayText]);
 
   useEffect(() => () => { if (selectionFrame.current !== null) cancelAnimationFrame(selectionFrame.current); }, []);
 
@@ -99,8 +107,9 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
     const selection = window.getSelection();
     const layer = textLayerRef.current; const surface = surfaceRef.current;
     if (!selection || !layer || !surface || !layer.contains(selection.anchorNode) || selection.rangeCount === 0) return null;
-    setSelectionRects(mergeGlyphRects(getSelectedGlyphRects(selection.getRangeAt(0), layer, surface)));
-    return selection.toString().trim();
+    const rects = getSelectedFragmentRects(selection.getRangeAt(0), layer, surface);
+    setSelectionRects(rects);
+    return { text: selection.toString().trim(), rects };
   }
 
   function previewSelection(event: React.PointerEvent) {
@@ -109,26 +118,31 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
   }
 
   function captureSelection() {
-    const text = updateSelectionPreview();
-    if (!text) return;
-    setOverlayText(text); onSelection(text, pageNumber);
+    const selected = updateSelectionPreview();
+    if (!selected?.text || !selected.rects.length) return;
+    setOverlayText(selected.text); onSelection(selected.text, pageNumber, selected.rects);
     window.getSelection()?.removeAllRanges();
   }
 
   return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[720px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }} onPointerMove={previewSelection} onPointerUp={captureSelection}>
-    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div className="pointer-events-none absolute inset-0 z-[1]">{selectionRects.map((rect, index) => <span key={index} className="absolute rounded-[2px] bg-[#777]/45" style={{ left: rect.left, top: rect.top + rect.height * 0.2, width: rect.width, height: rect.height * 0.6 }}/>)}</div><div ref={textLayerRef} className="textLayer z-[2]"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
+    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div className="pointer-events-none absolute inset-0 z-[1]">{[...capturedSelections.flatMap((selection) => selection.rects), ...(overlayText && !capturedSelections.some((selection) => selection.text === overlayText) ? selectionRects : [])].map((normalized, index) => { const rect = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height); return <span key={index} className="absolute rounded-[2px] bg-[#777]/45" style={{ left: rect.left, top: rect.top + rect.height * 0.2, width: rect.width, height: rect.height * 0.6 }}/>; })}</div><div ref={textLayerRef} className="textLayer z-[2]"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
 }
 
-function getSelectedGlyphRects(range: Range, layer: HTMLElement, surface: HTMLElement): GlyphRect[] {
+function getSelectedFragmentRects(range: Range, layer: HTMLElement, surface: HTMLElement): NormalizedHighlightRect[] {
   const surfaceRect = surface.getBoundingClientRect();
-  const layerRect = layer.getBoundingClientRect();
-  return Array.from(range.getClientRects())
-    .filter((rect) => rect.width > 0 && rect.height > 0 && rect.right > layerRect.left && rect.left < layerRect.right && rect.bottom > layerRect.top && rect.top < layerRect.bottom)
-    .map((rect) => ({
-      left: Math.max(rect.left, layerRect.left) - surfaceRect.left,
-      top: Math.max(rect.top, layerRect.top) - surfaceRect.top,
-      width: Math.min(rect.right, layerRect.right) - Math.max(rect.left, layerRect.left),
-      height: Math.min(rect.bottom, layerRect.bottom) - Math.max(rect.top, layerRect.top),
-    }));
+  const fragments: GlyphRect[] = [];
+  const context = document.createElement("canvas").getContext("2d");
+  for (const span of layer.querySelectorAll<HTMLElement>("span[data-text-item-index]")) {
+    const node = span.firstChild;
+    if (!node || !range.intersectsNode(node)) continue;
+    const text = node.textContent ?? "";
+    const start = node === range.startContainer ? range.startOffset : 0;
+    const end = node === range.endContainer ? range.endOffset : text.length;
+    const box = span.getBoundingClientRect();
+    if (context) { const style = getComputedStyle(span); context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`; }
+    const fragment = getTextFragmentRect({ left: box.left - surfaceRect.left, top: box.top - surfaceRect.top, width: box.width, height: box.height }, text, start, end, context ? (value) => context.measureText(value).width : undefined);
+    if (fragment) fragments.push(fragment);
+  }
+  return normalizeHighlightRects(mergeGlyphRects(fragments), surfaceRect.width, surfaceRect.height);
 }

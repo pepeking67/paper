@@ -4,7 +4,7 @@ import { buildStudyPacket } from "../lib/study-tray/build-packet";
 
 test("buildStudyPacket includes saved material, page sources, and final instructions", () => {
   const packet = buildStudyPacket({ id: "P_1", title: "Test Paper", authors: "A", year: 2024, tag: "Test", done: true, keys: [], sourceUrl: "", notionUrl: "" }, {
-    highlights: [{ id: "h", text: "original passage", page: 3, memo: "remember this", createdAt: "now" }],
+    highlights: [{ id: "h", text: "original passage", page: 3, rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }], memo: "remember this", createdAt: "now" }],
     insights: [{ id: "i", question: "Why?", answer: "Because.", page: 4, sourceText: "source", createdAt: "now" }],
     memos: [{ id: "m", text: "my free note", createdAt: "now" }],
   });

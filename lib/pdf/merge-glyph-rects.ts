@@ -1,4 +1,18 @@
 export type GlyphRect = { left: number; top: number; width: number; height: number };
+export type NormalizedHighlightRect = { x: number; y: number; width: number; height: number };
+
+/** Resolve a selected substring inside a horizontal PDF.js text fragment. */
+export function getTextFragmentRect(rect: GlyphRect, text: string, start: number, end: number, measure = (value: string) => value.length): GlyphRect | null {
+  if (!text.length) return null;
+  const safeStart = Math.max(0, Math.min(text.length, start));
+  const safeEnd = Math.max(safeStart, Math.min(text.length, end));
+  if (safeStart === safeEnd) return null;
+  const fullWidth = measure(text);
+  if (fullWidth <= 0) return null;
+  const startRatio = measure(text.slice(0, safeStart)) / fullWidth;
+  const endRatio = measure(text.slice(0, safeEnd)) / fullWidth;
+  return { left: rect.left + rect.width * startRatio, top: rect.top, width: rect.width * (endRatio - startRatio), height: rect.height };
+}
 
 /** Join neighboring selection fragments without expanding a line's vertical bounds. */
 export function mergeGlyphRects(rects: GlyphRect[]): GlyphRect[] {
@@ -27,4 +41,13 @@ export function mergeGlyphRects(rects: GlyphRect[]): GlyphRect[] {
       height: group.reduce((sum, rect) => sum + rect.height * (rect.width || 1), 0) / weight,
     };
   });
+}
+
+export function normalizeHighlightRects(rects: GlyphRect[], pageWidth: number, pageHeight: number): NormalizedHighlightRect[] {
+  if (pageWidth <= 0 || pageHeight <= 0) return [];
+  return rects.map((rect) => ({ x: rect.left / pageWidth, y: rect.top / pageHeight, width: rect.width / pageWidth, height: rect.height / pageHeight }));
+}
+
+export function projectHighlightRect(rect: NormalizedHighlightRect, pageWidth: number, pageHeight: number): GlyphRect {
+  return { left: rect.x * pageWidth, top: rect.y * pageHeight, width: rect.width * pageWidth, height: rect.height * pageHeight };
 }
