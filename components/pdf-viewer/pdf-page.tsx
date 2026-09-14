@@ -14,6 +14,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
   const [ratio, setRatio] = useState(1.414);
   const [rendering, setRendering] = useState(false);
   const [renderedWidth, setRenderedWidth] = useState(0);
+  const [renderError, setRenderError] = useState("");
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -36,7 +37,7 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
     let cancelled = false;
     let renderTask: RenderTask | undefined;
     let textLayer: { cancel: () => void } | undefined;
-    setRendering(true);
+    setRendering(true); setRenderError("");
     void (async () => {
       try {
         const page = await pdf.getPage(pageNumber);
@@ -45,12 +46,13 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
         setRatio(base.height / base.width);
         const cssWidth = Math.min(width, base.width * 1.5);
         const viewport = page.getViewport({ scale: cssWidth / base.width });
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = canvasRef.current; const textContainer = textLayerRef.current;
         if (!canvas || !textContainer) return;
-        canvas.width = Math.floor(viewport.width * outputScale); canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.width = Math.floor(viewport.width); canvas.height = Math.floor(viewport.height);
         canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
-        renderTask = page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport, transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0] });
+        const canvasContext = canvas.getContext("2d", { alpha: false });
+        if (!canvasContext) throw new Error("Canvas context is unavailable");
+        renderTask = page.render({ canvas, canvasContext, viewport });
         await renderTask.promise;
         if (cancelled) return;
         const textContent = await page.getTextContent();
@@ -62,7 +64,10 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
         textLayer = layer; await layer.render();
         if (!cancelled) setRenderedWidth(width);
       } catch (caught) {
-        if (!cancelled && !(caught instanceof Error && caught.name === "RenderingCancelledException")) setRenderedWidth(0);
+        if (!cancelled && !(caught instanceof Error && caught.name === "RenderingCancelledException")) {
+          setRenderedWidth(0);
+          setRenderError(caught instanceof Error ? caught.message : "페이지 렌더링 실패");
+        }
       } finally { if (!cancelled) setRendering(false); }
     })();
     return () => { cancelled = true; renderTask?.cancel(); textLayer?.cancel(); };
@@ -81,6 +86,6 @@ export function PdfPage({ pdf, pageNumber, scrollRoot, onText, onSelection }: Pr
   }
 
   return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[900px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio}` }} onPointerUp={captureSelection}>
-    {(rendering || !renderedWidth) && <div className="absolute inset-0 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<canvas ref={canvasRef} className="absolute left-1/2 top-0 -translate-x-1/2 bg-white"/><div ref={textLayerRef} className="textLayer left-1/2 -translate-x-1/2"/><span className="absolute bottom-1 right-2 z-10 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
+    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<canvas ref={canvasRef} className={`absolute left-1/2 top-0 -translate-x-1/2 bg-white ${renderedWidth ? "opacity-100" : "opacity-0"}`}/><div ref={textLayerRef} className="textLayer left-1/2 -translate-x-1/2"/>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
 }

@@ -23,6 +23,8 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /IntersectionObserver/);
   assert.match(page, /rootMargin: "120% 0px"/);
   assert.match(page, /renderTask\?\.cancel\(\)/);
+  assert.match(page, /page\.render\(\{ canvas, canvasContext, viewport \}\)/);
+  assert.match(page, /renderError/);
   assert.doesNotMatch(route, /privateBlobExists/);
   assert.match(route, /"Accept-Ranges":"none"/);
 });

@@ -16,3 +16,4 @@ button:disabled { cursor: not-allowed; }
 .textLayer ::selection { background: rgba(0, 0, 0, .42); color: transparent; }
 .textLayer .markedContent { top: 0; height: 0; }
 @media (prefers-reduced-motion: reduce) { button, a, .animate-spin, .animate-pulse { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+@media (max-width: 1023px) { aside[aria-label="학습 대화"] { padding-bottom: 7rem; } }
