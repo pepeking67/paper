@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyTrayData } from "@/lib/study-tray/types";
@@ -10,7 +11,9 @@ export function StudyTray({ paper, tray, onAddMemo, onRemove }: { paper: Paper; 
   const [memo, setMemo] = useState("");
   const [packet, setPacket] = useState("");
   const [copied, setCopied] = useState(false);
+  const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
   const total = tray.highlights.length + tray.insights.length + tray.memos.length;
+  useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
 
   async function copyPacket() {
     const value = buildStudyPacket(paper, tray);
@@ -21,7 +24,7 @@ export function StudyTray({ paper, tray, onAddMemo, onRemove }: { paper: Paper; 
   }
 
   return <>
-    <button onClick={() => setOpen(true)} className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-20 rounded-full border border-white bg-black px-4 py-2 text-sm text-white shadow-xl lg:right-[376px]">Study Tray · {total}</button>
+    {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Study Tray · {total}</button>, triggerHost)}
     {open && <div className="fixed inset-0 z-40 flex justify-end bg-black/70" role="dialog" aria-modal="true" aria-labelledby="study-tray-title">
       <section className="scrollbar h-full w-full max-w-xl overflow-y-auto border-l border-[var(--line)] bg-black p-5 text-white">
         <header className="flex items-start justify-between"><div><p className="text-xs tracking-widest text-[var(--muted)]">CURRENT PAPER</p><h2 id="study-tray-title" className="mt-1 text-xl font-semibold">Study Tray</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.title}</p></div><button onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl">×</button></header>

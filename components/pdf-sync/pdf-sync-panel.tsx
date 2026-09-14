@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Paper } from "@/lib/papers/types";
 
 type UiStatus = "pending" | "checking" | "uploading" | "ready" | "skipped" | "failed" | "excluded";
@@ -11,6 +12,9 @@ export function PdfSyncPanel({ papers }: { papers: Paper[] }) {
   const [rows, setRows] = useState<Record<string, StatusRow>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
+
+  useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
 
   const loadStatuses = useCallback(async () => {
     setBusy(true); setError("");
@@ -61,7 +65,7 @@ export function PdfSyncPanel({ papers }: { papers: Paper[] }) {
   const failures = visible.filter((row) => row.status === "failed").map((row) => row.paperId);
 
   return <>
-    <button onClick={() => setOpen(true)} className="fixed bottom-[calc(env(safe-area-inset-bottom)+4rem)] right-4 z-20 rounded-full border border-[var(--line)] bg-black px-4 py-2 text-sm text-white shadow-xl lg:right-[376px]">PDF 관리</button>
+    {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">PDF 관리</button>, triggerHost)}
     {open && <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="pdf-sync-title">
       <section className="scrollbar max-h-[88dvh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--line)] bg-[#101512] p-5 shadow-2xl">
         <header className="flex items-start justify-between"><div><p className="text-xs text-[var(--accent)]">ADMIN</p><h2 id="pdf-sync-title" className="text-xl font-semibold">PDF 동기화</h2></div><button onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl">×</button></header>

@@ -16,12 +16,13 @@ type PdfViewerProps = {
 };
 
 type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
+type CapturedSelection = { text: string; page: number };
 
 export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange, onSaveHighlight }: PdfViewerProps) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState({ text: "", page: 1 });
+  const [selections, setSelections] = useState<CapturedSelection[]>([]);
   const [highlightMemo, setHighlightMemo] = useState("");
   const [zoom, setZoom] = useState(100);
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
@@ -33,7 +34,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
     const controller = new AbortController();
     let task: PDFDocumentLoadingTask | undefined;
     let document: PDFDocumentProxy | undefined;
-    setPdf(null); setLoadState("loading"); setError(""); setSelected({ text: "", page: 1 });
+    setPdf(null); setLoadState("loading"); setError(""); setSelections([]);
     pageTexts.current.clear(); onSelectionChange(""); onPageTextChange("");
 
     async function loadPdf() {
@@ -87,15 +88,30 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
   }, [onPageTextChange]);
 
   function captureSelection(text: string, selectedPage: number) {
-    setSelected({ text, page: selectedPage });
+    setSelections((current) => {
+      const next = current.some((item) => item.page === selectedPage && item.text === text) ? current : [...current, { text, page: selectedPage }].slice(-8);
+      onSelectionChange(next.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"));
+      return next;
+    });
     onPageChange(selectedPage);
-    onSelectionChange(text);
   }
 
   function saveHighlight() {
-    if (!selected.text) return;
-    onSaveHighlight(selected.text, selected.page, highlightMemo.trim());
-    setSelected({ text: "", page: selected.page }); setHighlightMemo(""); onSelectionChange(""); window.getSelection()?.removeAllRanges();
+    if (!selections.length) return;
+    for (const selection of selections) onSaveHighlight(selection.text, selection.page, highlightMemo.trim());
+    clearSelections(); setHighlightMemo("");
+  }
+
+  function removeSelection(index: number) {
+    setSelections((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      onSelectionChange(next.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"));
+      return next;
+    });
+  }
+
+  function clearSelections() {
+    setSelections([]); onSelectionChange(""); window.getSelection()?.removeAllRanges();
   }
 
   function scrollToPage(pageNumber: number) {
@@ -103,9 +119,9 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
   }
 
   return <section className="flex min-h-[620px] flex-col bg-[#111] lg:min-h-0" aria-label="PDF 뷰어">
-    <header className="border-b border-[var(--line)] px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-xs text-[var(--accent)]">{paper.tag} / {paper.id}</p><h2 className="mt-1 font-medium">{paper.title}</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p></div><a href={paper.notionUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Notion ↗</a></div></header>
+    <header className="border-b border-[var(--line)] px-5 py-4"><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><p className="text-xs text-[var(--accent)]">{paper.tag} / {paper.id}</p><h2 className="mt-1 font-medium">{paper.title}</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p></div><div className="flex shrink-0 flex-wrap items-center justify-end gap-2"><div id="paper-header-actions" className="flex items-center gap-2"/><a href={paper.notionUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Notion ↗</a></div></div></header>
     <div className="border-b border-[var(--line)] bg-black px-4 py-2"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-[var(--muted)]">{pdf ? `현재 ${page} / ${pdf.numPages} 페이지` : "텍스트를 드래그해 질문 문맥 또는 Highlight로 저장하세요"}</span>{pdf && <div className="flex items-center gap-2 text-xs"><label htmlFor="page-jump" className="sr-only">페이지 이동</label><input id="page-jump" type="number" min={1} max={pdf.numPages} value={page} onChange={(event) => { const target = Math.max(1, Math.min(pdf.numPages, Number(event.target.value))); onPageChange(target); scrollToPage(target); }} className="w-14 rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-center"/><button onClick={() => setZoom((value) => Math.max(75, value - 25))} disabled={zoom <= 75} aria-label="축소" className="rounded border border-[var(--line)] px-2 py-1">−</button><span className="w-10 text-center tabular-nums">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(150, value + 25))} disabled={zoom >= 150} aria-label="확대" className="rounded border border-[var(--line)] px-2 py-1">+</button></div>}</div>{pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}</div>
-    {selected.text && <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-black p-3"><p className="min-w-48 flex-1 truncate text-xs">p.{selected.page} · “{selected.text}”</p><input aria-label="Highlight 메모" value={highlightMemo} onChange={(event) => setHighlightMemo(event.target.value)} placeholder="메모 (선택)" className="rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-xs"/><button onClick={saveHighlight} className="rounded bg-white px-3 py-1 text-xs font-semibold text-black">Highlight 저장</button></div>}
+    {selections.length > 0 && <div className="border-b border-[var(--line)] bg-black p-3"><div className="flex flex-wrap gap-2">{selections.map((selection, index) => <span key={`${selection.page}-${selection.text}`} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs"><span className="max-w-64 truncate">p.{selection.page} · {selection.text}</span><button onClick={() => removeSelection(index)} aria-label={`선택 ${index + 1} 제거`} className="h-5 w-5 rounded-full">×</button></span>)}</div><div className="mt-2 flex flex-wrap items-center justify-end gap-2"><span className="mr-auto text-xs text-[var(--muted)]">선택 {selections.length}개를 질문 문맥으로 사용합니다</span><input aria-label="Highlight 메모" value={highlightMemo} onChange={(event) => setHighlightMemo(event.target.value)} placeholder="공통 메모 (선택)" className="rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-xs"/><button onClick={clearSelections} className="rounded border border-[var(--line)] px-3 py-1 text-xs">모두 지우기</button><button onClick={saveHighlight} className="rounded bg-white px-3 py-1 text-xs font-semibold text-black">Highlight 저장</button></div></div>}
     <div ref={setScrollRoot} className="scrollbar flex-1 overflow-auto overscroll-contain p-3 touch-pan-y sm:p-5">
       {loadState === "loading" && <DocumentLoading />}
       {loadState === "missing" && <EmptyPdf />}
