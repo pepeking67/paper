@@ -7,8 +7,9 @@ test("PDF viewer uses the same-origin prepared worker", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const preparationScript = await readFile("scripts/prepare-pdf-worker.mjs", "utf8");
   assert.match(viewer, /workerSrc="\/pdf\.worker\.min\.mjs"/);
-  assert.match(viewer, /installUint8ArrayToHex\(\)/);
+  assert.match(viewer, /installPdfJsCompatibility\(\)/);
   assert.match(preparationScript, /Uint8Array\.prototype\.toHex/);
+  assert.match(preparationScript, /Map\.prototype\.getOrInsertComputed/);
   assert.equal(packageJson.scripts.prebuild, "npm run prepare-pdf-worker");
   assert.equal(packageJson.scripts.predev, "npm run prepare-pdf-worker");
 });

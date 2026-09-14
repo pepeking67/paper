@@ -3,7 +3,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
-import { installUint8ArrayToHex } from "@/lib/pdf/uint8array-to-hex";
+import { installPdfJsCompatibility } from "@/lib/pdf/uint8array-to-hex";
 import { PdfPage } from "./pdf-page";
 
 type PdfViewerProps = {
@@ -47,7 +47,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
           return;
         }
         const bytes = await response.arrayBuffer();
-        installUint8ArrayToHex();
+        installPdfJsCompatibility();
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc="/pdf.worker.min.mjs";
         task = pdfjs.getDocument({ data: bytes });
