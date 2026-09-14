@@ -4,9 +4,11 @@ import { readFile } from "node:fs/promises";
 
 test("PDF viewer uses the same-origin prepared worker", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
+  const layout = await readFile("app/layout.tsx", "utf8");
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const preparationScript = await readFile("scripts/prepare-pdf-worker.mjs", "utf8");
   assert.match(viewer, /workerSrc="\/pdf\.worker\.min\.mjs"/);
+  assert.match(layout, /pdfjs-dist\/web\/pdf_viewer\.css/);
   assert.match(viewer, /installPdfJsCompatibility\(\)/);
   assert.match(preparationScript, /Uint8Array\.prototype\.toHex/);
   assert.match(preparationScript, /Map\.prototype\.getOrInsertComputed/);
