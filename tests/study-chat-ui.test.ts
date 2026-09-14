@@ -8,4 +8,6 @@ test("study chat offers contextual paper-reading prompts", async () => {
   assert.match(chat, /현재 페이지의 핵심을 요약해줘/);
   assert.match(chat, /논문의 가정과 한계를 비판적으로 검토해줘/);
   assert.match(chat, /setInput\(prompt\)/);
+  assert.doesNotMatch(chat, /선택 텍스트 ·/);
+  assert.match(chat, /선택 문장 포함/);
 });

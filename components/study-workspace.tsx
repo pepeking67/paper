@@ -25,7 +25,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   return <main className="grid min-h-dvh grid-cols-1 bg-black lg:h-dvh lg:grid-cols-[280px_minmax(420px,1fr)_360px] lg:overflow-hidden">
     <PaperList papers={papers} activeId={initialPaper.id} />
     <PdfViewer paper={initialPaper} page={page} onPageChange={setPage} onSelectionChange={setSelection} onPageTextChange={setPageText} onSaveHighlight={(text, highlightPage, memo) => updateTray((current) => ({ ...current, highlights: [...current.highlights, { id: crypto.randomUUID(), text, page: highlightPage, memo, createdAt: new Date().toISOString() }] }))} />
-    <StudyChat paper={initialPaper} context={context} onClearSelection={() => setSelection("")} onSaveInsight={(question, answer) => updateTray((current) => ({ ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selection || undefined, createdAt: new Date().toISOString() }] }))} />
+    <StudyChat paper={initialPaper} context={context} onSaveInsight={(question, answer) => updateTray((current) => ({ ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selection || undefined, createdAt: new Date().toISOString() }] }))} />
     <PdfSyncPanel papers={papers} />
     <StudyTray paper={initialPaper} tray={tray} onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))} onRemove={(kind, id) => updateTray((current) => ({ ...current, [kind]: current[kind].filter((item) => item.id !== id) }))} />
   </main>;

@@ -16,6 +16,7 @@ export function PdfPage({ pdf, pageNumber, zoom, scrollRoot, onText, onSelection
   const [renderedWidth, setRenderedWidth] = useState(0);
   const [renderedZoom, setRenderedZoom] = useState(0);
   const [renderError, setRenderError] = useState("");
+  const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -47,6 +48,7 @@ export function PdfPage({ pdf, pageNumber, zoom, scrollRoot, onText, onSelection
         setRatio(base.height / base.width);
         const cssWidth = Math.min(width, base.width * 1.5) * zoom / 100;
         const viewport = page.getViewport({ scale: cssWidth / base.width });
+        setSurfaceSize({ width: viewport.width, height: viewport.height });
         const canvas = canvasRef.current; const textContainer = textLayerRef.current;
         if (!canvas || !textContainer) return;
         canvas.width = Math.floor(viewport.width); canvas.height = Math.floor(viewport.height);
@@ -87,6 +89,6 @@ export function PdfPage({ pdf, pageNumber, zoom, scrollRoot, onText, onSelection
   }
 
   return <article ref={wrapperRef} data-page={pageNumber} className="relative w-full max-w-[900px] bg-white shadow-2xl" style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }} onPointerUp={captureSelection}>
-    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<canvas ref={canvasRef} className={`absolute left-1/2 top-0 -translate-x-1/2 bg-white ${renderedWidth ? "opacity-100" : "opacity-0"}`}/><div ref={textLayerRef} className="textLayer left-1/2 -translate-x-1/2"/>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
+    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}<div className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}><canvas ref={canvasRef} className="absolute inset-0 block bg-white"/><div ref={textLayerRef} className="textLayer"/></div>{renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}<span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
 }

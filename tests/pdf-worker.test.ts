@@ -26,6 +26,8 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /renderTask\?\.cancel\(\)/);
   assert.match(page, /page\.render\(\{ canvas, canvasContext, viewport \}\)/);
   assert.match(page, /renderError/);
+  assert.match(page, /surfaceSize/);
+  assert.match(page, /<canvas ref=\{canvasRef\}[^>]*\/><div ref=\{textLayerRef\}/);
   assert.match(viewer, /setZoom/);
   assert.match(viewer, /현재.*pdf\.numPages.*페이지/);
   assert.match(viewer, /paper-header-actions/);
