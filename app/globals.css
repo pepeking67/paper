@@ -14,7 +14,7 @@ button:disabled { cursor: not-allowed; }
 .textLayer { position: absolute; inset: 0; overflow: clip; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; }
 .textLayer :is(span, br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
 .textLayer::selection, .textLayer br::selection, .textLayer .markedContent::selection { background: transparent; }
-.textLayer span::selection { background: rgba(70, 70, 70, .45); color: transparent; }
+.textLayer span::selection { background: transparent; color: rgb(105 105 105 / .82); text-shadow: 0 0 1px rgb(255 255 255 / .65); }
 .textLayer span[role="img"] { cursor: default; user-select: none; }
 .textLayer .markedContent { top: 0; height: 0; }
 @media (prefers-reduced-motion: reduce) { button, a, .animate-spin, .animate-pulse { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
