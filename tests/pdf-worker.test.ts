@@ -35,6 +35,7 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /getSelectedGlyphRects/);
   assert.match(page, /mergeGlyphRects/);
   assert.match(page, /glyphRange\.getClientRects\(\)/);
+  assert.match(page, /setProperty\("--scale-factor", String\(viewport\.scale\)\)/);
   assert.match(page, /capturedTexts/);
   assert.match(viewer, /setZoom/);
   assert.match(viewer, /현재.*pdf\.numPages.*페이지/);
@@ -43,4 +44,14 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(viewer, /\[p\.\$\{item\.page\}\]/);
   assert.doesNotMatch(route, /privateBlobExists/);
   assert.match(route, /"Accept-Ranges":"none"/);
+});
+
+test("workspace exposes a persistent keyboard-accessible PDF/chat resizer", async () => {
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  const styles = await readFile("app/globals.css", "utf8");
+  assert.match(workspace, /role="separator"/);
+  assert.match(workspace, /setPointerCapture/);
+  assert.match(workspace, /paper-study-chat-width/);
+  assert.match(workspace, /--chat-width/);
+  assert.match(styles, /var\(--chat-width, 440px\)/);
 });

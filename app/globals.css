@@ -13,4 +13,7 @@ button:disabled { cursor: not-allowed; }
 .scrollbar { scrollbar-color: #555 transparent; scrollbar-width: thin; }
 .textLayer ::selection { background: transparent; color: transparent; }
 .textLayer br::selection { background: transparent; }
+.study-workspace { grid-template-columns: 1fr; }
+@media (min-width: 1024px) { .study-workspace { grid-template-columns: 220px minmax(360px, 1fr) var(--chat-width, 440px); } }
+.workspace-resizer:active { transform: none; }
 @media (prefers-reduced-motion: reduce) { button, a, .animate-spin, .animate-pulse { animation-duration: .001ms !important; transition-duration: .001ms !important; } }

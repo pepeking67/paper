@@ -68,6 +68,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedTexts, scrollRoot, onTe
         if (cancelled) return;
         onText(pageNumber, textContent.items.map((item) => ("str" in item ? item.str : "")).join(" "));
         textContainer.replaceChildren(); textContainer.style.width = `${viewport.width}px`; textContainer.style.height = `${viewport.height}px`;
+        textContainer.style.setProperty("--scale-factor", String(viewport.scale));
         const pdfjs = await import("pdfjs-dist");
         const layer = new pdfjs.TextLayer({ textContentSource: textContent, container: textContainer, viewport });
         textLayer = layer; await layer.render();
