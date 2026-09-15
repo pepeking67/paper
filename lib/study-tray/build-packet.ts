@@ -1,46 +1,34 @@
-import type { ChatTurn } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import type { StudyTrayData } from "./types";
 
-export function buildStudyPacket(paper: Paper, tray: StudyTrayData, chatHistory: ChatTurn[] = []) {
+export function buildStudyPacket(paper: Paper, tray: StudyTrayData) {
   const annotations = tray.highlights.length
-    ? tray.highlights.map((item) => {
-      const kind = (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight";
-      const priority = kind === "Underline" || item.memo ? "중요도 높음" : "참고";
-      return `### Page ${item.page} · ${kind} · ${item.color ?? "yellow"} · ${priority}\nOriginal:\n${item.text}\n\nMy memo:\n${item.memo || "(없음)"}`;
-    }).join("\n\n")
+    ? [...tray.highlights]
+      .sort((left, right) => left.page - right.page)
+      .map((item) => {
+        const kind = (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight";
+        const priority = kind === "Underline" || item.memo ? "중요도 높음" : "참고";
+        return `### Page ${item.page} · ${kind} · ${item.color ?? "yellow"} · ${priority}\nOriginal:\n${item.text}\n\nMy memo:\n${item.memo || "(없음)"}`;
+      }).join("\n\n")
     : "(저장된 Annotation 없음)";
 
   const areas = tray.areas?.length
-    ? tray.areas.map((item, index) => `### Area ${index + 1} · Page ${item.page}\nType: PDF image/figure/equation region\nNormalized region: x=${item.rect.x.toFixed(4)}, y=${item.rect.y.toFixed(4)}, width=${item.rect.width.toFixed(4)}, height=${item.rect.height.toFixed(4)}\nMy memo:\n${item.memo || "(없음)"}`).join("\n\n")
+    ? [...tray.areas]
+      .sort((left, right) => left.page - right.page)
+      .map((item, index) => `### Area ${index + 1} · Page ${item.page}\nType: PDF image/figure/equation region\nNormalized region: x=${item.rect.x.toFixed(4)}, y=${item.rect.y.toFixed(4)}, width=${item.rect.width.toFixed(4)}, height=${item.rect.height.toFixed(4)}\nMy memo:\n${item.memo || "(없음)"}`)
+      .join("\n\n")
     : "(저장된 영역 Annotation 없음)";
 
   const savedInsights = tray.insights.length
-    ? tray.insights.map((item) => `Question:\n${item.question}\n\nAnswer:\n${item.answer}\n\nSources:\nPage ${item.page}${item.sourceText ? ` — ${item.sourceText}` : ""}`).join("\n\n---\n\n")
-    : "(별도로 저장한 중요 Q&A 없음)";
+    ? [...tray.insights]
+      .sort((left, right) => left.page - right.page)
+      .map((item) => `### Page ${item.page} · Saved Insight\nQuestion:\n${item.question}\n\nAnswer:\n${item.answer}\n\nSource context:\n${item.sourceText || "(별도 선택 원문 없음)"}`)
+      .join("\n\n---\n\n")
+    : "(Save Insight로 저장한 Q&A 없음)";
 
   const memos = tray.memos.length
     ? tray.memos.map((item) => `- ${item.text}`).join("\n")
     : "(저장된 메모 없음)";
 
-  const conversation = buildConversation(chatHistory);
-
-  return `# Paper Study Material\n\nPaper: ${paper.title}\nPaper ID: ${paper.id}\n\n## 내가 중요하다고 표시한 논문 원문\n${annotations}\n\n## 내가 사각형으로 저장한 수식/그림/표 영역\n${areas}\n\n주의: 위 Area의 실제 이미지 픽셀은 앱의 Study Tray에 저장되어 있으며 이 텍스트 복사본에는 포함되지 않는다. 앱 안에서 Gemini에게 질문할 때는 선택한 Area 이미지 자체가 멀티모달 입력으로 전달된다.\n\n## 내 자유 메모\n${memos}\n\n## 이 논문을 공부하면서 나눈 전체 질문과 답변\n${conversation}\n\n## 별도로 저장한 중요 Q&A\n${savedInsights}\n\n## ChatGPT 정리 지시문\n이 자료는 내가 논문을 읽으면서 만든 개인 학습 기록이다. 단순히 항목을 나열하지 말고, 내가 무엇을 궁금해했고 무엇을 중요하게 봤는지가 드러나는 하나의 공부 노트로 재구성해줘.\n\n반드시 다음 원칙을 지켜라.\n1. 내가 실제로 했던 질문을 중심으로, 각 질문에서 무엇을 이해하려 했는지와 답변의 핵심을 정리한다.\n2. 밑줄(Underline), 내가 직접 작성한 메모, 메모가 붙은 Annotation은 내가 중요하다고 판단한 내용이므로 특히 높은 우선순위로 반영한다. 일반 Highlight도 중요한 참고 자료로 사용한다.\n3. Area Annotation은 수식·그림·표 등 텍스트 드래그가 어려워 내가 직접 영역을 지정한 부분이다. 이 텍스트 패킷에 이미지 자체가 없으므로 보이지 않는 내용을 추측하지 말고, 페이지/메모/관련 Q&A가 있을 때만 연결한다.\n4. AI 답변은 틀릴 수 있으므로 논문 원문과 내가 표시한 원문을 더 높은 근거로 취급한다. AI 답변과 원문이 충돌하거나 확신할 수 없는 부분은 그대로 지적한다.\n5. 서로 관련된 질문, 답변, Annotation, 메모를 하나의 개념 아래 묶고 연결 관계를 설명한다. 같은 내용을 중복해서 반복하지 않는다.\n6. 원문에서 페이지 정보가 제공된 경우 페이지 출처를 유지한다. 없는 출처를 만들어내지 않는다.\n7. 내가 아직 이해하지 못했거나 다시 확인해야 할 부분이 보이면 '남은 의문 / 재검증 필요'에 따로 모은다.\n\n최종 결과는 다음 구조로 작성해라.\n- 핵심 개념과 논문 흐름\n- 내가 했던 질문과 답변 정리\n- 중요 표시한 원문과 메모에서 드러나는 핵심 포인트\n- 영역으로 저장한 수식/그림/표 확인 목록\n- 개념 간 연결 관계\n- 남은 의문 / 재검증 필요\n- 나중에 빠르게 복습할 체크리스트\n\n설명은 내가 다시 논문을 공부할 때 바로 사용할 수 있을 정도로 구체적으로 작성하되, 불필요하게 장황하게 늘리지 마라.`;
-}
-
-function buildConversation(history: ChatTurn[]) {
-  if (!history.length) return "(저장된 학습 대화 없음)";
-
-  const entries: string[] = [];
-  let questionNumber = 0;
-  for (let index = 0; index < history.length; index++) {
-    const turn = history[index];
-    if (turn.role !== "user") continue;
-    questionNumber += 1;
-    const next = history[index + 1];
-    const answer = next?.role === "assistant" ? next.content : "(답변 없음)";
-    entries.push(`### Q${questionNumber}\nQuestion:\n${turn.content}\n\nAnswer:\n${answer}`);
-  }
-
-  return entries.length ? entries.join("\n\n---\n\n") : "(저장된 학습 대화 없음)";
+  return `# Paper Study Material\n\nPaper: ${paper.title}\nPaper ID: ${paper.id}\n\n## 내가 중요하다고 표시한 논문 원문 — 페이지 순서\n${annotations}\n\n## 내가 사각형으로 저장한 수식/그림/표 영역 — 페이지 순서\n${areas}\n\n주의: 위 Area의 실제 이미지 픽셀은 앱 안의 학습 노트 생성 시 멀티모달 입력으로 전달된다. 텍스트만 복사하는 경우에는 페이지/영역 정보와 메모만 사용할 수 있다.\n\n## 내 자유 메모\n${memos}\n\n## 내가 직접 Save Insight 한 중요 Q&A\n${savedInsights}\n\n주의: 일반 채팅 기록은 학습 노트 재료가 아니다. 사용자가 명시적으로 Save Insight 한 Q&A만 위 섹션에 포함된다.\n\n## 학습 노트 작성 방식\n이 자료를 질문 순서대로 나열하지 말고, 논문 자체의 전개 순서를 뼈대로 삼아 내가 Notion에 정리하듯 하나의 paper note로 재구성한다.\n\n반드시 다음 원칙을 지켜라.\n1. 최상위 heading은 논문의 자연스러운 section 순서를 따른다. 보통 Introduction에서 시작하고, 이후 논문에 맞는 Model / Architecture / Method, Training / Data, Experiments, Ablations / Analysis, Limitations, Conclusion 등의 순서를 사용한다. 모든 heading을 억지로 만들지 말고 실제 자료로 뒷받침되는 section만 사용한다.\n2. Model / Architecture / Method 아래에서는 실제 구조의 처리 순서대로 세부 component를 ## 또는 ### heading으로 나눈다. 예: Image tokenization → TokenLearner → Transformer처럼 입력에서 출력으로 이어지는 순서를 보존한다.\n3. Experiments 아래에서는 평가 기준, 데이터셋, baseline, main result, generalization/robustness, ablation 등의 실험 흐름을 논문 순서에 맞춰 하위 section으로 배치한다.\n4. Save Insight의 질문과 답변을 별도의 Q&A section으로 만들지 않는다. 해당 질문으로 얻은 이해를 Introduction, Model, Experiments 등 가장 관련 있는 section 본문에 자연스럽게 녹인다.\n5. 밑줄(Underline), 내가 직접 작성한 메모, 메모가 붙은 Annotation, Saved Insight는 높은 우선순위로 반영한다. 일반 Highlight도 중요한 근거로 사용한다.\n6. Annotation과 Saved Insight에 페이지가 있으면 가능한 한 논문의 페이지 순서를 유지하고, 서로 관련된 내용만 같은 하위 section으로 묶는다.\n7. AI 답변은 틀릴 수 있으므로 논문 원문 Annotation과 영역 이미지를 더 높은 근거로 취급한다. 충돌하거나 확신할 수 없는 부분은 명확히 표시한다.\n8. Area Annotation이 수식·그림·표라면 실제 이미지가 제공된 경우 직접 읽어서 관련 section 안에 배치한다. 이미지가 보이지 않는 경우 추측하지 않는다.\n9. 문체는 기존 Notion paper note처럼 짧고 직접적인 설명 위주로 한다. 핵심 용어는 **bold**, 수식은 $...$ 또는 $$...$$, 필요한 경우 표와 목록을 사용한다.\n10. 별도의 '내 질문 모음', '전체 Q&A', '체크리스트'를 기본적으로 만들지 않는다. 논문 section 중심의 노트가 우선이다. 아직 해결되지 않은 내용이 실제로 있을 때만 마지막에 # Limitations 또는 # Open Questions 형태로 짧게 남긴다.\n\n권장 형태의 예시는 다음과 같다. 단, 실제 논문에 맞게 heading 이름과 개수는 바꿔라.\n\n# Introduction\n문제 설정, 기존 방법의 한계, 이 논문의 핵심 아이디어와 기여\n\n# Model 또는 # Architecture\n전체 구조 설명\n\n## 1. 첫 번째 핵심 component\n세부 메커니즘과 중요한 수식\n\n## 2. 두 번째 핵심 component\n앞 component와의 연결\n\n# Experiments\n평가 설정과 핵심 결과\n\n## 1. Main Results\n## 2. Generalization / Robustness / Ablation\n\n# Limitations\n실제로 자료에서 확인되는 한계만 정리\n\n설명은 다시 논문을 공부할 때 바로 사용할 수 있을 만큼 구체적으로 쓰되, 논문 순서를 깨면서까지 Q&A를 따로 모으지 마라.`;
 }
