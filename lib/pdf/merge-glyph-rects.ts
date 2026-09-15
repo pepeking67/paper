@@ -1,7 +1,39 @@
 export type GlyphRect = { left: number; top: number; width: number; height: number };
 export type NormalizedHighlightRect = { x: number; y: number; width: number; height: number };
+export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 
-/** Resolve a selected substring inside a horizontal PDF.js text fragment. */
+/**
+ * Convert the browser's actual DOM Range rectangles into page-relative coordinates.
+ *
+ * PDF.js already positions/scales every text-layer glyph in the browser. Using
+ * Range#getClientRects therefore preserves the real visual geometry (including
+ * transforms, kerning, equations and mixed font fragments) instead of estimating
+ * character widths from an entire PDF.js span.
+ */
+export function normalizeClientRects(rects: readonly ClientRectLike[], surface: ClientRectLike): NormalizedHighlightRect[] {
+  if (surface.width <= 0 || surface.height <= 0) return [];
+
+  const normalized: NormalizedHighlightRect[] = [];
+  for (const rect of rects) {
+    const left = Math.max(rect.left, surface.left);
+    const top = Math.max(rect.top, surface.top);
+    const right = Math.min(rect.right, surface.right);
+    const bottom = Math.min(rect.bottom, surface.bottom);
+    const width = right - left;
+    const height = bottom - top;
+    if (width < 0.5 || height < 0.5) continue;
+
+    normalized.push({
+      x: (left - surface.left) / surface.width,
+      y: (top - surface.top) / surface.height,
+      width: width / surface.width,
+      height: height / surface.height,
+    });
+  }
+  return normalized;
+}
+
+/** Legacy helper retained for existing tests and stored geometry migration. */
 export function getTextFragmentRect(rect: GlyphRect, text: string, start: number, end: number, measure = (value: string) => value.length): GlyphRect | null {
   if (!text.length) return null;
   const safeStart = Math.max(0, Math.min(text.length, start));
@@ -14,7 +46,7 @@ export function getTextFragmentRect(rect: GlyphRect, text: string, start: number
   return { left: rect.left + rect.width * startRatio, top: rect.top, width: rect.width * (endRatio - startRatio), height: rect.height };
 }
 
-/** Join neighboring selection fragments without expanding a line's vertical bounds. */
+/** Legacy helper retained for compatibility; new selections do not use heuristic merging. */
 export function mergeGlyphRects(rects: GlyphRect[]): GlyphRect[] {
   const sorted = [...rects].sort((a, b) => (a.top + a.height / 2) - (b.top + b.height / 2) || a.left - b.left);
   const groups: GlyphRect[][] = [];
