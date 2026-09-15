@@ -17,6 +17,7 @@ export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 export interface AiProvider {
   answer(message: string, context: StudyContext, history?: ChatTurn[]): Promise<string>;
+  composeStudyNote(material: string, areas?: StudyAreaContext[]): Promise<string>;
 }
 
 export function getAiProvider(): AiProvider | null {
@@ -32,25 +33,39 @@ class GeminiProvider implements AiProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async answer(message: string, context: StudyContext, history: ChatTurn[] = []): Promise<string> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45_000);
-    try {
-      const parts: GeminiPart[] = [{ text: buildStudyPrompt(message, context, history) }];
-      for (const area of context.selectedAreas?.slice(0, 4) ?? []) {
-        const image = parseImageDataUrl(area.imageDataUrl);
-        if (!image) continue;
-        parts.push({ text: `Selected PDF area from page ${area.page}. Analyze this image as part of the user's paper context.` });
-        parts.push({ inlineData: image });
-      }
+    const parts: GeminiPart[] = [{ text: buildStudyPrompt(message, context, history) }];
+    appendAreaImages(parts, context.selectedAreas);
+    return this.generate(
+      parts,
+      "You are a careful paper-study assistant. Use only the supplied paper context and attached PDF-area images for paper-specific claims. When an image contains an equation, figure, table, or diagram, inspect the image directly rather than guessing from nearby text. Clearly label uncertainty and do not invent quotations. Answer naturally in the user's language. Format answers as clean GitHub-flavored Markdown. Use headings only when useful, bullet or numbered lists for structure, Markdown tables when comparison helps, fenced code blocks for code, blockquotes for key quotations, and LaTeX math using $...$ for inline equations or $$...$$ for display equations. Never wrap the entire answer in a Markdown code fence.",
+      0.2,
+    );
+  }
 
+  async composeStudyNote(material: string, areas: StudyAreaContext[] = []): Promise<string> {
+    const parts: GeminiPart[] = [{
+      text: `Create a polished study note from the following personal paper-study material. Preserve the learner's questions, annotations, page references, uncertainty, and priorities. Do not invent claims that are not supported by the supplied material.\n\n${material.slice(0, 60_000)}`,
+    }];
+    appendAreaImages(parts, areas);
+    return this.generate(
+      parts,
+      "You turn paper-reading records into a durable personal study document. Return only the study document itself in clean GitHub-flavored Markdown, with no preamble about what you did. Organize related questions, answers, annotations, and memos by concept rather than chronology. Prefer Korean when the study material is Korean. Preserve page references. Use concise headings, lists, blockquotes for important paper quotations, Markdown tables where useful, and LaTeX math with $...$ and $$...$$. When attached area images contain equations, figures, or tables, inspect them and explain only what is actually visible. Include a final section for unresolved questions or items that need verification. Never wrap the entire document in a code fence.",
+      0.15,
+    );
+  }
+
+  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number): Promise<string> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55_000);
+    try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
         method: "POST",
         signal: controller.signal,
         headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: "You are a careful paper-study assistant. Use only the supplied paper context and attached PDF-area images for paper-specific claims. When an image contains an equation, figure, table, or diagram, inspect the image directly rather than guessing from nearby text. Clearly label uncertainty, do not invent quotations, and answer naturally in the user's language." }] },
+          systemInstruction: { parts: [{ text: systemInstruction }] },
           contents: [{ role: "user", parts }],
-          generationConfig: { temperature: 0.2 },
+          generationConfig: { temperature },
         }),
       });
       if (!response.ok) throw new Error(`GEMINI_HTTP_${response.status}`);
@@ -84,6 +99,15 @@ export function buildStudyPrompt(message: string, context: StudyContext, history
     recentHistory ? `Recent conversation:\n${recentHistory}` : "",
     `Question:\n${message.trim().slice(0, 4_000)}`,
   ].filter(Boolean).join("\n\n");
+}
+
+function appendAreaImages(parts: GeminiPart[], areas: StudyAreaContext[] | undefined) {
+  for (const area of areas?.slice(0, 4) ?? []) {
+    const image = parseImageDataUrl(area.imageDataUrl);
+    if (!image) continue;
+    parts.push({ text: `Selected PDF area from page ${area.page}. Inspect this image directly as part of the study material.` });
+    parts.push({ inlineData: image });
+  }
 }
 
 function parseImageDataUrl(value: string): { mimeType: string; data: string } | null {
