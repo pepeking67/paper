@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAiProvider, type ChatTurn, type StudyAreaContext } from "@/lib/ai/provider";
+import { getAiProvider, type StudyAreaContext } from "@/lib/ai/provider";
 import { findPaper } from "@/lib/papers/catalog";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyHighlight, StudyInsight, StudyMemo, StudyTrayData } from "@/lib/study-tray/types";
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const candidate = body as { paperId?: unknown; tray?: unknown; chatHistory?: unknown };
+  const candidate = body as { paperId?: unknown; tray?: unknown };
   if (typeof candidate.paperId !== "string") return NextResponse.json({ error: "Invalid paper" }, { status: 400 });
   const paper = findPaper(candidate.paperId);
   if (!paper) return NextResponse.json({ error: "Unknown paper" }, { status: 404 });
@@ -17,8 +17,7 @@ export async function POST(request: Request) {
   if (!provider) return NextResponse.json({ error: "Gemini API is not configured", code: "AI_NOT_CONFIGURED" }, { status: 503 });
 
   const tray = sanitizeTray(candidate.tray);
-  const chatHistory = sanitizeHistory(candidate.chatHistory);
-  const packet = buildStudyPacket(paper, tray, chatHistory);
+  const packet = buildStudyPacket(paper, tray);
   const areas: StudyAreaContext[] = (tray.areas ?? []).slice(0, 4).map((area) => ({ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }));
 
   try {
@@ -42,11 +41,6 @@ function sanitizeTray(value: unknown): StudyTrayData {
     insights: Array.isArray(tray.insights) ? tray.insights.filter(isInsight).slice(0, 40).map((item) => ({ ...item, question: item.question.slice(0, 4_000), answer: item.answer.slice(0, 8_000), sourceText: item.sourceText?.slice(0, 4_000) })) : [],
     memos: Array.isArray(tray.memos) ? tray.memos.filter(isMemo).slice(0, 60).map((item) => ({ ...item, text: item.text.slice(0, 4_000) })) : [],
   };
-}
-
-function sanitizeHistory(value: unknown): ChatTurn[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is ChatTurn => Boolean(item && typeof item === "object" && ((item as ChatTurn).role === "user" || (item as ChatTurn).role === "assistant") && typeof (item as ChatTurn).content === "string")).slice(-40).map((item) => ({ ...item, content: item.content.slice(0, 8_000) }));
 }
 
 function isHighlight(value: unknown): value is StudyHighlight {
