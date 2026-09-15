@@ -38,7 +38,7 @@ function sanitizeTray(value: unknown): StudyTrayData {
   const tray = value as Partial<StudyTrayData>;
   return {
     highlights: Array.isArray(tray.highlights) ? tray.highlights.filter(isHighlight).slice(0, 80).map((item) => ({ ...item, text: item.text.slice(0, 4_000), memo: item.memo.slice(0, 2_000) })) : [],
-    areas: Array.isArray(tray.areas) ? tray.areas.filter(isArea).slice(0, 8) : [],
+    areas: Array.isArray(tray.areas) ? tray.areas.filter(isArea).slice(0, 8).map((item) => ({ ...item, memo: item.memo.slice(0, 2_000) })) : [],
     insights: Array.isArray(tray.insights) ? tray.insights.filter(isInsight).slice(0, 40).map((item) => ({ ...item, question: item.question.slice(0, 4_000), answer: item.answer.slice(0, 8_000), sourceText: item.sourceText?.slice(0, 4_000) })) : [],
     memos: Array.isArray(tray.memos) ? tray.memos.filter(isMemo).slice(0, 60).map((item) => ({ ...item, text: item.text.slice(0, 4_000) })) : [],
   };
@@ -58,9 +58,14 @@ function isHighlight(value: unknown): value is StudyHighlight {
 function isArea(value: unknown): value is StudyArea {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<StudyArea>;
+  const rect = item.rect as Partial<StudyArea["rect"]> | undefined;
   return typeof item.id === "string"
     && Number.isInteger(item.page)
-    && Boolean(item.rect && typeof item.rect === "object")
+    && Boolean(rect)
+    && Number.isFinite(rect?.x)
+    && Number.isFinite(rect?.y)
+    && Number.isFinite(rect?.width)
+    && Number.isFinite(rect?.height)
     && typeof item.imageDataUrl === "string"
     && item.imageDataUrl.length <= 1_500_000
     && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/u.test(item.imageDataUrl)
