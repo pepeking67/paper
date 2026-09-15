@@ -15,12 +15,13 @@ type PdfViewerProps = {
   onSelectionChange: (text: string) => void;
   onPageTextChange: (text: string) => void;
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
+  onDeleteHighlight: (id: string) => void;
   savedHighlights: StudyHighlight[];
 };
 
 type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
 type CapturedSelection = { text: string; page: number; rects: NormalizedHighlightRect[] };
-type AnnotationTool = "select" | AnnotationKind;
+type AnnotationTool = "select" | AnnotationKind | "erase";
 
 const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] = [
   { value: "yellow", label: "노랑", swatch: "#facc15" },
@@ -30,7 +31,7 @@ const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] 
   { value: "purple", label: "보라", swatch: "#c084fc" },
 ];
 
-export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange, onSaveHighlight, savedHighlights }: PdfViewerProps) {
+export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPageTextChange, onSaveHighlight, onDeleteHighlight, savedHighlights }: PdfViewerProps) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
@@ -119,6 +120,7 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
   }, [onPageTextChange]);
 
   function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
+    if (tool === "erase") return;
     onPageChange(selectedPage);
 
     if (tool !== "select") {
@@ -194,8 +196,9 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
           <ToolButton active={tool === "select"} onClick={() => setTool("select")} label="선택" title="텍스트를 채팅 문맥으로 선택"/>
           <ToolButton active={tool === "highlight"} onClick={() => setTool("highlight")} label="형광펜" title="드래그할 때마다 형광펜을 즉시 저장"/>
           <ToolButton active={tool === "underline"} onClick={() => setTool("underline")} label="밑줄" title="드래그할 때마다 밑줄을 즉시 저장"/>
+          <ToolButton active={tool === "erase"} onClick={() => { clearSelections(); setTool("erase"); }} label="지우개" title="저장된 형광펜이나 밑줄을 클릭해서 삭제"/>
         </div>
-        <div className="flex items-center gap-1" role="group" aria-label="주석 색상">
+        {tool !== "erase" && <div className="flex items-center gap-1" role="group" aria-label="주석 색상">
           {colorOptions.map((option) => <button
             key={option.value}
             type="button"
@@ -205,8 +208,8 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
             className={`h-6 w-6 rounded-full border-2 ${annotationColor === option.value ? "border-white" : "border-transparent"}`}
             style={{ background: option.swatch }}
           />)}
-        </div>
-        <span className="text-[11px] text-[var(--muted)]">{tool === "select" ? "선택 모드: 드래그한 문장을 질문 문맥으로 모읍니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 고정 모드: 드래그 즉시 저장됩니다.`}</span>
+        </div>}
+        <span className="text-[11px] text-[var(--muted)]">{tool === "select" ? "선택 모드: 드래그한 문장을 질문 문맥으로 모읍니다." : tool === "erase" ? "지우개 모드: 저장된 형광펜/밑줄을 클릭하면 해당 주석 전체가 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 고정 모드: 드래그 즉시 저장됩니다.`}</span>
       </div>}
 
       {pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
@@ -239,13 +242,15 @@ export function PdfViewer({ paper, page, onPageChange, onSelectionChange, onPage
           pdf={pdf}
           pageNumber={index + 1}
           zoom={zoom}
+          deleteMode={tool === "erase"}
           capturedSelections={[
-            ...savedHighlights.filter((selection) => selection.page === index + 1).map((selection) => ({ text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow" })),
+            ...savedHighlights.filter((selection) => selection.page === index + 1).map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow" })),
             ...selections.filter((selection) => selection.page === index + 1).map((selection) => ({ text: selection.text, rects: selection.rects, kind: "context" as const, color: "blue" as const })),
           ]}
           scrollRoot={scrollRoot}
           onText={handlePageText}
           onSelection={captureSelection}
+          onDeleteAnnotation={onDeleteHighlight}
         />)}
       </div>}
     </div>
