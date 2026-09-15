@@ -6,6 +6,7 @@ import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type N
 import type { AnnotationColor, AnnotationKind } from "@/lib/study-tray/types";
 
 type CapturedSelection = {
+  annotationId?: string;
   text: string;
   rects: NormalizedHighlightRect[];
   kind?: AnnotationKind | "context";
@@ -16,10 +17,12 @@ type Props = {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   zoom: number;
+  deleteMode: boolean;
   capturedSelections: CapturedSelection[];
   scrollRoot: HTMLDivElement | null;
   onText: (page: number, text: string) => void;
   onSelection: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
+  onDeleteAnnotation: (id: string) => void;
 };
 
 type TextEndpoint = { divIndex: number; offset: number };
@@ -38,7 +41,7 @@ const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }
   purple: { fill: "rgba(192, 132, 252, 0.34)", stroke: "#9333ea" },
 };
 
-export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot, onText, onSelection }: Props) {
+export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections, scrollRoot, onText, onSelection, onDeleteAnnotation }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,9 +129,6 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
         await layer.render();
         if (cancelled) return;
 
-        // PDF.js guarantees that textDivs and textContentItemsStr correspond to
-        // the text items in the same order. Selection geometry is therefore
-        // built from this mapping rather than from DOM Range traversal order.
         textDivsRef.current = [...textLayer.textDivs];
         textItemsRef.current = [...textLayer.textContentItemsStr];
         setRenderedWidth(width);
@@ -165,6 +165,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
   }, [nearViewport]);
 
   function captureSelection() {
+    if (deleteMode) return;
     const selection = window.getSelection();
     const layer = textLayerRef.current;
     const surface = surfaceRef.current;
@@ -203,60 +204,44 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
         style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}
       >
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
-        <div className="pointer-events-none absolute inset-0 z-[1]" aria-hidden="true">
+        <div className={`absolute inset-0 ${deleteMode ? "pointer-events-auto z-[3]" : "pointer-events-none z-[1]"}`}>
           {capturedSelections.flatMap((selection, selectionIndex) =>
             selection.rects.map((normalized, rectIndex) => {
               const rect = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
               const kind = selection.kind ?? "highlight";
               const color = selection.color ?? "yellow";
               const palette = annotationColors[color];
-              const key = `${selectionIndex}-${rectIndex}`;
+              const key = `${selection.annotationId ?? "context"}-${selectionIndex}-${rectIndex}`;
+              const canDelete = deleteMode && Boolean(selection.annotationId) && kind !== "context";
 
               if (kind === "context") {
-                return (
-                  <span
-                    key={key}
-                    className="absolute rounded-[2px]"
-                    style={{
-                      left: rect.left,
-                      top: rect.top,
-                      width: rect.width,
-                      height: rect.height,
-                      background: "rgba(59, 130, 246, 0.18)",
-                      outline: "1px solid rgba(59, 130, 246, 0.32)",
-                    }}
-                  />
-                );
+                return <span key={key} className="pointer-events-none absolute rounded-[2px]" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height, background: "rgba(59, 130, 246, 0.18)", outline: "1px solid rgba(59, 130, 246, 0.32)" }} />;
               }
+
+              const commonProps = canDelete ? {
+                type: "button" as const,
+                title: "이 주석 삭제",
+                "aria-label": `${kind === "underline" ? "밑줄" : "형광펜"} 주석 삭제: ${selection.text.slice(0, 80)}`,
+                tabIndex: rectIndex === 0 ? 0 : -1,
+                onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => event.stopPropagation(),
+                onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => event.stopPropagation(),
+                onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+                  event.stopPropagation();
+                  if (selection.annotationId) onDeleteAnnotation(selection.annotationId);
+                },
+              } : null;
+
               if (kind === "underline") {
-                return (
-                  <span
-                    key={key}
-                    className="absolute"
-                    style={{
-                      left: rect.left,
-                      top: rect.top,
-                      width: rect.width,
-                      height: rect.height,
-                      borderBottom: `2px solid ${palette.stroke}`,
-                    }}
-                  />
-                );
+                const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: `2px solid ${palette.stroke}`, background: "transparent", padding: 0 };
+                return commonProps
+                  ? <button key={key} {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
+                  : <span key={key} className="absolute" style={style} />;
               }
-              return (
-                <span
-                  key={key}
-                  className="absolute rounded-[2px]"
-                  style={{
-                    left: rect.left,
-                    top: rect.top + rect.height * 0.08,
-                    width: rect.width,
-                    height: rect.height * 0.84,
-                    background: palette.fill,
-                    mixBlendMode: "multiply",
-                  }}
-                />
-              );
+
+              const style = { left: rect.left, top: rect.top + rect.height * 0.08, width: rect.width, height: rect.height * 0.84, border: "none", padding: 0, background: palette.fill, mixBlendMode: "multiply" as const };
+              return commonProps
+                ? <button key={key} {...commonProps} className="absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
+                : <span key={key} className="absolute rounded-[2px]" style={style} />;
             }),
           )}
         </div>
@@ -272,12 +257,6 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
   );
 }
 
-/**
- * Convert one native selection endpoint to PDF.js's stable text-item mapping.
- * We use DOM selection only to identify the two endpoints; intermediate DOM
- * nodes are deliberately ignored because PDF text-layer DOM order/wrappers can
- * differ from the actual PDF text flow.
- */
 function mapSelectionEndpoint(node: Node | null, offset: number, layer: HTMLElement, textDivs: HTMLElement[]): TextEndpoint | null {
   if (!node) return null;
 
@@ -338,8 +317,6 @@ function collectSelectionFromTextItems(
     const selectedFragment = source.slice(from, to);
     if (selectedFragment.trim()) fragments.push(selectedFragment);
 
-    // Measure only the characters belonging to the selected PDF.js text items.
-    // Crucially, we never traverse arbitrary DOM nodes between the two endpoints.
     for (let i = from; i < to && i < textNode.length; i++) {
       const character = textNode.data.slice(i, i + 1);
       if (!character || /\s/u.test(character)) continue;
@@ -349,9 +326,6 @@ function collectSelectionFromTextItems(
       characterRange.setEnd(textNode, i + 1);
       for (const rect of Array.from(characterRange.getClientRects())) {
         if (rect.width < 0.25 || rect.height < 0.5) continue;
-        // A single horizontal glyph cannot legitimately occupy a large fraction
-        // of the line. This rejects browser/PDF.js wrapper artefacts while still
-        // allowing wide glyphs and equations.
         if (rect.width > Math.max(24, rect.height * 3.5)) continue;
         rects.push(rect);
       }
@@ -373,10 +347,6 @@ function getDirectTextNode(div: HTMLElement): Text | null {
   return walker.nextNode() as Text | null;
 }
 
-/**
- * Merge neighbouring character boxes into visual line rectangles. A line ends
- * at the last measured glyph, never at a text-layer span or page boundary.
- */
 function mergeCharacterRects(rects: ClientRectLike[]): ClientRectLike[] {
   if (!rects.length) return [];
   const sorted = [...rects].sort((a, b) => a.top + a.height / 2 - (b.top + b.height / 2) || a.left - b.left);
