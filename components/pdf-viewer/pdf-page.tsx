@@ -2,14 +2,7 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
-import {
-  mergeGlyphRects,
-  normalizeClientRects,
-  projectHighlightRect,
-  type ClientRectLike,
-  type GlyphRect,
-  type NormalizedHighlightRect,
-} from "@/lib/pdf/merge-glyph-rects";
+import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind } from "@/lib/study-tray/types";
 
 type CapturedSelection = {
@@ -18,6 +11,7 @@ type CapturedSelection = {
   kind?: AnnotationKind | "context";
   color?: AnnotationColor;
 };
+
 type Props = {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -26,6 +20,14 @@ type Props = {
   scrollRoot: HTMLDivElement | null;
   onText: (page: number, text: string) => void;
   onSelection: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
+};
+
+type TextEndpoint = { divIndex: number; offset: number };
+
+type RenderedTextLayer = {
+  cancel: () => void;
+  textDivs: HTMLElement[];
+  textContentItemsStr: string[];
 };
 
 const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }> = {
@@ -41,6 +43,8 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
   const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
+  const textDivsRef = useRef<HTMLElement[]>([]);
+  const textItemsRef = useRef<string[]>([]);
   const [nearViewport, setNearViewport] = useState(pageNumber <= 2);
   const [width, setWidth] = useState(0);
   const [ratio, setRatio] = useState(1.414);
@@ -53,7 +57,11 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
   useEffect(() => {
     const node = wrapperRef.current;
     if (!node || !scrollRoot) return;
-    const observer = new IntersectionObserver(([entry]) => setNearViewport(entry.isIntersecting), { root: scrollRoot, rootMargin: "120% 0px", threshold: 0 });
+    const observer = new IntersectionObserver(([entry]) => setNearViewport(entry.isIntersecting), {
+      root: scrollRoot,
+      rootMargin: "120% 0px",
+      threshold: 0,
+    });
     observer.observe(node);
     return () => observer.disconnect();
   }, [scrollRoot]);
@@ -70,7 +78,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
     if (!nearViewport || width < 1 || (renderedWidth === width && renderedZoom === zoom)) return;
     let cancelled = false;
     let renderTask: RenderTask | undefined;
-    let textLayer: { cancel: () => void } | undefined;
+    let textLayer: RenderedTextLayer | undefined;
     setRendering(true);
     setRenderError("");
 
@@ -80,7 +88,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
         if (cancelled) return;
         const base = page.getViewport({ scale: 1 });
         setRatio(base.height / base.width);
-        const cssWidth = Math.min(width, base.width * 1.5) * zoom / 100;
+        const cssWidth = (Math.min(width, base.width * 1.5) * zoom) / 100;
         const viewport = page.getViewport({ scale: cssWidth / base.width });
         setSurfaceSize({ width: viewport.width, height: viewport.height });
 
@@ -111,14 +119,20 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
         textContainer.style.width = `${viewport.width}px`;
         textContainer.style.height = `${viewport.height}px`;
         textContainer.style.setProperty("--scale-factor", String(viewport.scale));
+
         const pdfjs = await import("pdfjs-dist");
         const layer = new pdfjs.TextLayer({ textContentSource: textContent, container: textContainer, viewport });
-        textLayer = layer;
+        textLayer = layer as unknown as RenderedTextLayer;
         await layer.render();
-        if (!cancelled) {
-          setRenderedWidth(width);
-          setRenderedZoom(zoom);
-        }
+        if (cancelled) return;
+
+        // PDF.js guarantees that textDivs and textContentItemsStr correspond to
+        // the text items in the same order. Selection geometry is therefore
+        // built from this mapping rather than from DOM Range traversal order.
+        textDivsRef.current = [...textLayer.textDivs];
+        textItemsRef.current = [...textLayer.textContentItemsStr];
+        setRenderedWidth(width);
+        setRenderedZoom(zoom);
       } catch (caught) {
         if (!cancelled && !(caught instanceof Error && caught.name === "RenderingCancelledException")) {
           setRenderedWidth(0);
@@ -144,6 +158,8 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
       canvas.height = 0;
     }
     textLayerRef.current?.replaceChildren();
+    textDivsRef.current = [];
+    textItemsRef.current = [];
     setRenderedWidth(0);
     setRenderedZoom(0);
   }, [nearViewport]);
@@ -152,107 +168,269 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
     const selection = window.getSelection();
     const layer = textLayerRef.current;
     const surface = surfaceRef.current;
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0 || !layer || !surface) return;
+    const textDivs = textDivsRef.current;
+    const textItems = textItemsRef.current;
+    if (!selection || selection.isCollapsed || !layer || !surface || !textDivs.length) return;
 
-    const range = selection.getRangeAt(0);
-    if (!layer.contains(range.startContainer) || !layer.contains(range.endContainer)) return;
+    const anchor = mapSelectionEndpoint(selection.anchorNode, selection.anchorOffset, layer, textDivs);
+    const focus = mapSelectionEndpoint(selection.focusNode, selection.focusOffset, layer, textDivs);
+    if (!anchor || !focus) return;
 
-    const text = selection.toString().trim();
-    const rects = normalizeClientRects(getSelectedGlyphLineRects(range, layer), surface.getBoundingClientRect());
+    const [start, end] = orderEndpoints(anchor, focus);
+    const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
+    const mergedRects = mergeCharacterRects(characterRects);
+    const rects = normalizeClientRects(mergedRects, surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
     onSelection(text, pageNumber, rects);
     selection.removeAllRanges();
   }
 
-  return <article
-    ref={wrapperRef}
-    data-page={pageNumber}
-    className="relative w-full max-w-[720px] bg-white shadow-2xl"
-    style={{ aspectRatio: `1 / ${ratio * zoom / 100}` }}
-    onPointerUp={captureSelection}
-  >
-    {(rendering || !renderedWidth) && !renderError && <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`}/>}
-    <div ref={surfaceRef} className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`} style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}>
-      <canvas ref={canvasRef} className="absolute inset-0 block bg-white"/>
-      <div className="pointer-events-none absolute inset-0 z-[1]" aria-hidden="true">
-        {capturedSelections.flatMap((selection, selectionIndex) => selection.rects.map((normalized, rectIndex) => {
-          const rect = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
-          const kind = selection.kind ?? "highlight";
-          const color = selection.color ?? "yellow";
-          const palette = annotationColors[color];
-          const key = `${selectionIndex}-${rectIndex}`;
+  return (
+    <article
+      ref={wrapperRef}
+      data-page={pageNumber}
+      className="relative w-full max-w-[720px] bg-white shadow-2xl"
+      style={{ aspectRatio: `1 / ${(ratio * zoom) / 100}` }}
+      onPointerUp={captureSelection}
+    >
+      {(rendering || !renderedWidth) && !renderError && (
+        <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`} />
+      )}
+      <div
+        ref={surfaceRef}
+        className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`}
+        style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}
+      >
+        <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
+        <div className="pointer-events-none absolute inset-0 z-[1]" aria-hidden="true">
+          {capturedSelections.flatMap((selection, selectionIndex) =>
+            selection.rects.map((normalized, rectIndex) => {
+              const rect = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
+              const kind = selection.kind ?? "highlight";
+              const color = selection.color ?? "yellow";
+              const palette = annotationColors[color];
+              const key = `${selectionIndex}-${rectIndex}`;
 
-          if (kind === "context") {
-            return <span key={key} className="absolute rounded-[2px]" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height, background: "rgba(59, 130, 246, 0.18)", outline: "1px solid rgba(59, 130, 246, 0.32)" }}/>;
-          }
-          if (kind === "underline") {
-            return <span key={key} className="absolute" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height, borderBottom: `2px solid ${palette.stroke}` }}/>;
-          }
-          return <span key={key} className="absolute rounded-[2px]" style={{ left: rect.left, top: rect.top + rect.height * 0.08, width: rect.width, height: rect.height * 0.84, background: palette.fill, mixBlendMode: "multiply" }}/>;
-        }))}
+              if (kind === "context") {
+                return (
+                  <span
+                    key={key}
+                    className="absolute rounded-[2px]"
+                    style={{
+                      left: rect.left,
+                      top: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                      background: "rgba(59, 130, 246, 0.18)",
+                      outline: "1px solid rgba(59, 130, 246, 0.32)",
+                    }}
+                  />
+                );
+              }
+              if (kind === "underline") {
+                return (
+                  <span
+                    key={key}
+                    className="absolute"
+                    style={{
+                      left: rect.left,
+                      top: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                      borderBottom: `2px solid ${palette.stroke}`,
+                    }}
+                  />
+                );
+              }
+              return (
+                <span
+                  key={key}
+                  className="absolute rounded-[2px]"
+                  style={{
+                    left: rect.left,
+                    top: rect.top + rect.height * 0.08,
+                    width: rect.width,
+                    height: rect.height * 0.84,
+                    background: palette.fill,
+                    mixBlendMode: "multiply",
+                  }}
+                />
+              );
+            }),
+          )}
+        </div>
+        <div ref={textLayerRef} className="textLayer z-[2]" />
       </div>
-      <div ref={textLayerRef} className="textLayer z-[2]"/>
-    </div>
-    {renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}
-    <span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
-  </article>;
+      {renderError && (
+        <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">
+          Page {pageNumber}: {renderError}
+        </div>
+      )}
+      <span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
+    </article>
+  );
 }
 
 /**
- * PDF text selection is only used to determine which characters the user picked.
- * Geometry is rebuilt from one-character ranges and then merged per visual line.
- *
- * This mirrors mature PDF readers such as Zotero: character boxes are the source
- * of truth for annotation geometry, not the browser's multi-node selection box.
- * A PDF.js span/wrapper may extend to the end of a column even when its visible
- * glyphs do not; a one-character range cannot contribute that empty tail.
+ * Convert one native selection endpoint to PDF.js's stable text-item mapping.
+ * We use DOM selection only to identify the two endpoints; intermediate DOM
+ * nodes are deliberately ignored because PDF text-layer DOM order/wrappers can
+ * differ from the actual PDF text flow.
  */
-function getSelectedGlyphLineRects(range: Range, layer: HTMLElement): ClientRectLike[] {
-  const glyphs: GlyphRect[] = [];
-  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+function mapSelectionEndpoint(node: Node | null, offset: number, layer: HTMLElement, textDivs: HTMLElement[]): TextEndpoint | null {
+  if (!node) return null;
 
-  while (walker.nextNode()) {
-    const node = walker.currentNode as Text;
-    if (!node.data || !range.intersectsNode(node)) continue;
+  let element: HTMLElement | null = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+  let textDiv: HTMLElement | null = null;
+  let divIndex = -1;
+  while (element && element !== layer) {
+    divIndex = textDivs.indexOf(element);
+    if (divIndex >= 0) {
+      textDiv = element;
+      break;
+    }
+    element = element.parentElement;
+  }
+  if (!textDiv || divIndex < 0) return null;
 
-    let start = node === range.startContainer ? range.startOffset : 0;
-    let end = node === range.endContainer ? range.endOffset : node.length;
-    start = Math.max(0, Math.min(node.length, start));
-    end = Math.max(start, Math.min(node.length, end));
+  const textLength = textDiv.textContent?.length ?? 0;
+  if (node.nodeType === Node.TEXT_NODE && node.parentElement === textDiv) {
+    return { divIndex, offset: Math.max(0, Math.min(offset, textLength)) };
+  }
 
-    for (let offset = start; offset < end;) {
-      const codePoint = node.data.codePointAt(offset);
-      if (codePoint === undefined) break;
-      const charLength = codePoint > 0xffff ? 2 : 1;
-      const nextOffset = Math.min(end, offset + charLength);
-      const character = node.data.slice(offset, nextOffset);
+  try {
+    const prefix = document.createRange();
+    prefix.setStart(textDiv, 0);
+    prefix.setEnd(node, offset);
+    const textOffset = prefix.toString().length;
+    prefix.detach();
+    return { divIndex, offset: Math.max(0, Math.min(textOffset, textLength)) };
+  } catch {
+    return { divIndex, offset: offset <= 0 ? 0 : textLength };
+  }
+}
 
-      if (!/^\s+$/u.test(character)) {
-        const charRange = document.createRange();
-        charRange.setStart(node, offset);
-        charRange.setEnd(node, nextOffset);
-        for (const rect of Array.from(charRange.getClientRects())) {
-          if (rect.width < 0.25 || rect.height < 0.25) continue;
-          // A single printable glyph should never span a substantial fraction
-          // of a PDF line. Reject the oversized wrapper-like rect that causes
-          // the "highlight to the right edge" failure in Chrome/PDF.js.
-          if (rect.width > rect.height * 4.5) continue;
-          glyphs.push({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-        }
-        charRange.detach();
+function orderEndpoints(a: TextEndpoint, b: TextEndpoint): [TextEndpoint, TextEndpoint] {
+  if (a.divIndex < b.divIndex || (a.divIndex === b.divIndex && a.offset <= b.offset)) return [a, b];
+  return [b, a];
+}
+
+function collectSelectionFromTextItems(
+  start: TextEndpoint,
+  end: TextEndpoint,
+  textDivs: HTMLElement[],
+  textItems: string[],
+): { text: string; rects: ClientRectLike[] } {
+  const rects: ClientRectLike[] = [];
+  const fragments: string[] = [];
+
+  for (let divIndex = start.divIndex; divIndex <= end.divIndex; divIndex++) {
+    const div = textDivs[divIndex];
+    const source = textItems[divIndex] ?? div.textContent ?? "";
+    const textNode = getDirectTextNode(div);
+    if (!textNode || !source) continue;
+
+    const from = divIndex === start.divIndex ? Math.max(0, Math.min(start.offset, source.length)) : 0;
+    const to = divIndex === end.divIndex ? Math.max(from, Math.min(end.offset, source.length)) : source.length;
+    if (from >= to) continue;
+
+    const selectedFragment = source.slice(from, to);
+    if (selectedFragment.trim()) fragments.push(selectedFragment);
+
+    // Measure only the characters belonging to the selected PDF.js text items.
+    // Crucially, we never traverse arbitrary DOM nodes between the two endpoints.
+    for (let i = from; i < to && i < textNode.length; i++) {
+      const character = textNode.data.slice(i, i + 1);
+      if (!character || /\s/u.test(character)) continue;
+
+      const characterRange = document.createRange();
+      characterRange.setStart(textNode, i);
+      characterRange.setEnd(textNode, i + 1);
+      for (const rect of Array.from(characterRange.getClientRects())) {
+        if (rect.width < 0.25 || rect.height < 0.5) continue;
+        // A single horizontal glyph cannot legitimately occupy a large fraction
+        // of the line. This rejects browser/PDF.js wrapper artefacts while still
+        // allowing wide glyphs and equations.
+        if (rect.width > Math.max(24, rect.height * 3.5)) continue;
+        rects.push(rect);
       }
-
-      offset = nextOffset;
+      characterRange.detach();
     }
   }
 
-  return mergeGlyphRects(glyphs).map((rect) => ({
-    left: rect.left,
-    top: rect.top,
-    right: rect.left + rect.width,
-    bottom: rect.top + rect.height,
-    width: rect.width,
-    height: rect.height,
-  }));
+  return {
+    text: fragments.join(" ").replace(/\s+/gu, " ").trim(),
+    rects,
+  };
+}
+
+function getDirectTextNode(div: HTMLElement): Text | null {
+  for (const child of Array.from(div.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE) return child as Text;
+  }
+  const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
+  return walker.nextNode() as Text | null;
+}
+
+/**
+ * Merge neighbouring character boxes into visual line rectangles. A line ends
+ * at the last measured glyph, never at a text-layer span or page boundary.
+ */
+function mergeCharacterRects(rects: ClientRectLike[]): ClientRectLike[] {
+  if (!rects.length) return [];
+  const sorted = [...rects].sort((a, b) => a.top + a.height / 2 - (b.top + b.height / 2) || a.left - b.left);
+  const lines: ClientRectLike[][] = [];
+
+  for (const rect of sorted) {
+    let target: ClientRectLike[] | undefined;
+    for (const line of lines) {
+      const sample = line[0];
+      const sampleCenter = sample.top + sample.height / 2;
+      const rectCenter = rect.top + rect.height / 2;
+      if (Math.abs(sampleCenter - rectCenter) <= Math.max(1.5, Math.min(sample.height, rect.height) * 0.45)) {
+        target = line;
+        break;
+      }
+    }
+    if (!target) {
+      lines.push([rect]);
+      continue;
+    }
+    target.push(rect);
+  }
+
+  const merged: ClientRectLike[] = [];
+  for (const line of lines) {
+    line.sort((a, b) => a.left - b.left);
+    let run: ClientRectLike[] = [];
+
+    const flush = () => {
+      if (!run.length) return;
+      const left = Math.min(...run.map((rect) => rect.left));
+      const right = Math.max(...run.map((rect) => rect.right));
+      const top = Math.min(...run.map((rect) => rect.top));
+      const bottom = Math.max(...run.map((rect) => rect.bottom));
+      merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
+      run = [];
+    };
+
+    for (const rect of line) {
+      const previous = run.at(-1);
+      if (!previous) {
+        run.push(rect);
+        continue;
+      }
+      const allowedGap = Math.max(3, Math.min(previous.height, rect.height) * 1.15);
+      if (rect.left - previous.right <= allowedGap) {
+        run.push(rect);
+      } else {
+        flush();
+        run.push(rect);
+      }
+    }
+    flush();
+  }
+
+  return merged.sort((a, b) => a.top - b.top || a.left - b.left);
 }
