@@ -12,21 +12,20 @@ type PdfViewerProps = {
   paper: Paper;
   page: number;
   onPageChange: (page: number) => void;
-  onSelectionChange: (text: string) => void;
   onPageTextChange: (text: string) => void;
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
   onDeleteHighlight: (id: string) => void;
   onSaveArea: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
   onDeleteArea: (id: string) => void;
+  onClearQuestionContext: () => void;
   savedHighlights: StudyHighlight[];
   savedAreas: StudyArea[];
+  questionHighlights: StudyHighlight[];
   questionAreas: StudyArea[];
-  onQuestionAreasChange: (areas: StudyArea[]) => void;
 };
 
 type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
-type CapturedSelection = { text: string; page: number; rects: NormalizedHighlightRect[] };
-type AnnotationTool = "select" | AnnotationKind | "area" | "erase";
+type AnnotationTool = AnnotationKind | "area" | "erase";
 
 const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] = [
   { value: "yellow", label: "노랑", swatch: "#facc15" },
@@ -40,23 +39,21 @@ export function PdfViewer({
   paper,
   page,
   onPageChange,
-  onSelectionChange,
   onPageTextChange,
   onSaveHighlight,
   onDeleteHighlight,
   onSaveArea,
   onDeleteArea,
+  onClearQuestionContext,
   savedHighlights,
   savedAreas,
+  questionHighlights,
   questionAreas,
-  onQuestionAreasChange,
 }: PdfViewerProps) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
-  const [selections, setSelections] = useState<CapturedSelection[]>([]);
-  const [highlightMemo, setHighlightMemo] = useState("");
-  const [tool, setTool] = useState<AnnotationTool>("select");
+  const [tool, setTool] = useState<AnnotationTool>("highlight");
   const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("yellow");
   const [zoom, setZoom] = useState(100);
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
@@ -71,9 +68,7 @@ export function PdfViewer({
     setPdf(null);
     setLoadState("loading");
     setError("");
-    setSelections([]);
     pageTexts.current.clear();
-    onSelectionChange("");
     onPageTextChange("");
 
     async function loadPdf() {
@@ -110,7 +105,7 @@ export function PdfViewer({
       void task?.destroy();
       if (!task) void document?.destroy();
     };
-  }, [paper.id, onPageChange, onPageTextChange, onSelectionChange]);
+  }, [paper.id, onPageChange, onPageTextChange]);
 
   useEffect(() => { onPageTextChange(pageTexts.current.get(page) ?? ""); }, [page, onPageTextChange]);
 
@@ -141,60 +136,17 @@ export function PdfViewer({
   function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
     if (tool === "erase" || tool === "area") return;
     onPageChange(selectedPage);
-
-    if (tool !== "select") {
-      onSaveHighlight(text, selectedPage, rects, "", tool, annotationColor);
-      return;
-    }
-
-    setSelections((current) => {
-      const next = current.some((item) => item.page === selectedPage && item.text === text)
-        ? current
-        : [...current, { text, page: selectedPage, rects }].slice(-8);
-      onSelectionChange(next.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"));
-      return next;
-    });
-  }
-
-  function saveSelections(kind: AnnotationKind) {
-    if (!selections.length) return;
-    for (const selection of selections) {
-      onSaveHighlight(selection.text, selection.page, selection.rects, highlightMemo.trim(), kind, annotationColor);
-    }
-    clearTextSelections();
-    setHighlightMemo("");
-  }
-
-  function removeSelection(index: number) {
-    setSelections((current) => {
-      const next = current.filter((_, itemIndex) => itemIndex !== index);
-      onSelectionChange(next.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"));
-      return next;
-    });
-  }
-
-  function clearTextSelections() {
-    setSelections([]);
-    onSelectionChange("");
-    window.getSelection()?.removeAllRanges();
-  }
-
-  function clearQuestionContext() {
-    clearTextSelections();
-    onQuestionAreasChange([]);
-  }
-
-  function removeQuestionArea(id: string) {
-    onQuestionAreasChange(questionAreas.filter((item) => item.id !== id));
+    onSaveHighlight(text, selectedPage, rects, "", tool, annotationColor);
   }
 
   function scrollToPage(pageNumber: number) {
     scrollRoot?.querySelector<HTMLElement>(`[data-page="${pageNumber}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const contextCount = selections.length + questionAreas.length;
+  const contextCount = questionHighlights.length + questionAreas.length;
 
   return <section className="flex min-h-[620px] flex-col bg-[#111] lg:min-h-0" aria-label="PDF 뷰어">
+    <style>{`[aria-label="저장된 PDF 영역"]{pointer-events:none!important}[aria-label="저장된 PDF 영역"]>button{pointer-events:auto!important}`}</style>
     <header className="border-b border-[var(--line)] px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -223,11 +175,10 @@ export function PdfViewer({
 
       {pdf && <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[#222] pt-2">
         <div className="flex items-center rounded-lg border border-[var(--line)] bg-[#111] p-0.5" role="group" aria-label="PDF 주석 도구">
-          <ToolButton active={tool === "select"} onClick={() => setTool("select")} label="선택" title="텍스트를 채팅 문맥으로 선택"/>
-          <ToolButton active={tool === "highlight"} onClick={() => setTool("highlight")} label="형광펜" title="드래그할 때마다 형광펜을 즉시 저장"/>
-          <ToolButton active={tool === "underline"} onClick={() => setTool("underline")} label="밑줄" title="드래그할 때마다 밑줄을 즉시 저장"/>
-          <ToolButton active={tool === "area"} onClick={() => { clearTextSelections(); setTool("area"); }} label="영역" title="수식·그림·표를 사각형으로 선택해 저장하고 질문 문맥에 추가"/>
-          <ToolButton active={tool === "erase"} onClick={() => { clearTextSelections(); setTool("erase"); }} label="지우개" title="저장된 주석이나 영역을 클릭해서 삭제"/>
+          <ToolButton active={tool === "highlight"} onClick={() => setTool("highlight")} label="형광펜" title="드래그하면 형광펜으로 저장되고 다음 질문 문맥에도 추가"/>
+          <ToolButton active={tool === "underline"} onClick={() => setTool("underline")} label="밑줄" title="드래그하면 밑줄로 저장되고 다음 질문 문맥에도 추가"/>
+          <ToolButton active={tool === "area"} onClick={() => setTool("area")} label="영역" title="수식·그림·표를 사각형으로 선택해 저장하고 질문 문맥에 추가"/>
+          <ToolButton active={tool === "erase"} onClick={() => setTool("erase")} label="지우개" title="저장된 형광펜·밑줄·영역을 클릭해서 삭제"/>
         </div>
         {tool !== "erase" && tool !== "area" && <div className="flex items-center gap-1" role="group" aria-label="주석 색상">
           {colorOptions.map((option) => <button
@@ -240,7 +191,7 @@ export function PdfViewer({
             style={{ background: option.swatch }}
           />)}
         </div>}
-        <span className="text-[11px] text-[var(--muted)]">{tool === "select" ? "선택 모드: 드래그한 문장을 질문 문맥으로 모읍니다." : tool === "area" ? "영역 모드: 수식·그림·표를 사각형으로 드래그하면 Study Tray에 저장되고 질문 문맥에도 추가됩니다." : tool === "erase" ? "지우개 모드: 저장된 형광펜·밑줄·영역을 클릭하면 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 고정 모드: 드래그 즉시 저장됩니다.`}</span>
+        <span className="text-[11px] text-[var(--muted)]">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 저장 항목과 질문 문맥에서 함께 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
       </div>}
 
       {pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
@@ -248,22 +199,19 @@ export function PdfViewer({
 
     {contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-3">
       <div className="flex flex-wrap gap-2">
-        {selections.map((selection, index) => <span key={`${selection.page}-${selection.text}`} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
-          <span className="max-w-64 truncate">p.{selection.page} · {selection.text}</span>
-          <button onClick={() => removeSelection(index)} aria-label={`선택 ${index + 1} 제거`} className="h-5 w-5 rounded-full">×</button>
+        {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
+          <span className="max-w-72 truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
+          <button onClick={() => onDeleteHighlight(highlight.id)} aria-label={`Page ${highlight.page} 주석 삭제`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
         {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-2 rounded-lg border border-sky-500/50 bg-[#111] py-1 pl-1 pr-1 text-xs">
           <img src={area.imageDataUrl} alt="" className="h-8 w-12 rounded bg-white object-contain"/>
           <span>p.{area.page} · 영역</span>
-          <button onClick={() => removeQuestionArea(area.id)} aria-label={`Page ${area.page} 영역 질문 문맥에서 제거`} className="h-5 w-5 rounded-full">×</button>
+          <button onClick={() => onDeleteArea(area.id)} aria-label={`Page ${area.page} 영역 삭제`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-        <span className="mr-auto text-xs text-[var(--muted)]">텍스트 {selections.length}개 · 영역 {questionAreas.length}개를 다음 질문 문맥으로 사용합니다</span>
-        {selections.length > 0 && <input aria-label="주석 메모" value={highlightMemo} onChange={(event) => setHighlightMemo(event.target.value)} placeholder="공통 메모 (선택)" className="rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-xs"/>}
-        <button onClick={clearQuestionContext} className="rounded border border-[var(--line)] px-3 py-1 text-xs">문맥 모두 지우기</button>
-        {selections.length > 0 && <button onClick={() => saveSelections("underline")} className="rounded border border-[var(--line)] px-3 py-1 text-xs font-semibold">밑줄 저장</button>}
-        {selections.length > 0 && <button onClick={() => saveSelections("highlight")} className="rounded bg-white px-3 py-1 text-xs font-semibold text-black">형광펜 저장</button>}
+        <span className="mr-auto text-xs text-[var(--muted)]">주석 {questionHighlights.length}개 · 영역 {questionAreas.length}개를 다음 질문 문맥으로 사용합니다</span>
+        <button onClick={onClearQuestionContext} className="rounded border border-[var(--line)] px-3 py-1 text-xs">목록 전체 삭제</button>
       </div>
     </div>}
 
@@ -280,10 +228,9 @@ export function PdfViewer({
           zoom={zoom}
           areaMode={tool === "area"}
           deleteMode={tool === "erase"}
-          capturedSelections={[
-            ...savedHighlights.filter((selection) => selection.page === index + 1).map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow" })),
-            ...selections.filter((selection) => selection.page === index + 1).map((selection) => ({ text: selection.text, rects: selection.rects, kind: "context" as const, color: "blue" as const })),
-          ]}
+          capturedSelections={savedHighlights
+            .filter((selection) => selection.page === index + 1)
+            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow" }))}
           savedAreas={savedAreas.filter((area) => area.page === index + 1)}
           activeAreaIds={new Set(questionAreas.filter((area) => area.page === index + 1).map((area) => area.id))}
           scrollRoot={scrollRoot}
