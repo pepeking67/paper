@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import type { ChatTurn } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
-import type { StudyTrayData } from "@/lib/study-tray/types";
+import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
 
 export function StudyTray({
   paper,
@@ -13,12 +13,14 @@ export function StudyTray({
   chatHistory,
   onAddMemo,
   onRemove,
+  onUseArea,
 }: {
   paper: Paper;
   tray: StudyTrayData;
   chatHistory: ChatTurn[];
   onAddMemo: (text: string) => void;
   onRemove: (kind: keyof StudyTrayData, id: string) => void;
+  onUseArea: (area: StudyArea) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [memo, setMemo] = useState("");
@@ -26,7 +28,8 @@ export function StudyTray({
   const [copied, setCopied] = useState(false);
   const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
   const conversationCount = useMemo(() => chatHistory.filter((turn) => turn.role === "user").length, [chatHistory]);
-  const trayCount = tray.highlights.length + tray.insights.length + tray.memos.length;
+  const areas = tray.areas ?? [];
+  const trayCount = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
   const total = trayCount + conversationCount;
 
   useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
@@ -48,6 +51,16 @@ export function StudyTray({
 
         <TraySection title={`Annotations (${tray.highlights.length})`}>{tray.highlights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("highlights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p><p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>{item.memo && <p className="mt-2 border-l border-white pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}</TrayItem>)}</TraySection>
 
+        <TraySection title={`Areas (${areas.length})`}>
+          {areas.length === 0 && <p className="rounded-lg border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">수식·그림·표를 `영역` 도구로 사각형 선택하면 여기에 저장됩니다.</p>}
+          {areas.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("areas", item.id)}>
+            <p className="text-xs text-[var(--muted)]">Page {item.page} · Area annotation</p>
+            <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded border border-[#333] bg-white object-contain"/>
+            {item.memo && <p className="mt-2 border-l border-white pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
+            <button type="button" onClick={() => onUseArea(item)} className="mt-3 rounded border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white hover:text-black">질문에 사용</button>
+          </TrayItem>)}
+        </TraySection>
+
         <TraySection title={`Study Q&A (${conversationCount})`}>
           {conversationCount === 0 && <p className="rounded-lg border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">아직 이 논문에서 나눈 질문과 답변이 없습니다.</p>}
           {chatHistory.map((turn, index) => turn.role === "user" ? <article key={`chat-${index}`} className="rounded-lg border border-[var(--line)] bg-[#0b0b0b] p-3"><p className="text-sm font-semibold">Q. {turn.content}</p>{chatHistory[index + 1]?.role === "assistant" ? <p className="mt-2 whitespace-pre-wrap text-sm text-[#ccc]">{chatHistory[index + 1].content}</p> : <p className="mt-2 text-xs text-[var(--muted)]">답변 없음</p>}</article> : null)}
@@ -57,7 +70,7 @@ export function StudyTray({
         <TraySection title={`Memos (${tray.memos.length})`}>{tray.memos.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("memos", item.id)}><p className="whitespace-pre-wrap text-sm">{item.text}</p></TrayItem>)}</TraySection>
 
         <div className="sticky bottom-0 mt-6 border-t border-[var(--line)] bg-black py-4">
-          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">전체 Q&A와 Annotation을 함께 넣습니다. 밑줄·직접 작성한 메모·메모가 붙은 원문은 GPT 정리에서 높은 우선순위로 취급하도록 지시합니다.</p>
+          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">전체 Q&A와 Annotation을 함께 넣습니다. Area 이미지는 앱 안의 Gemini 질문에는 실제 이미지로 전달되며, 복사되는 텍스트 프롬프트에는 페이지/영역 정보만 포함됩니다.</p>
           <button disabled={!total} onClick={() => void copyPacket()} className="w-full rounded-lg bg-white px-4 py-3 font-semibold text-black disabled:opacity-40">{copied ? "복사됨" : "ChatGPT용 학습 정리 프롬프트 생성·복사"}</button>
           {packet && <details className="mt-3"><summary className="cursor-pointer text-xs text-[var(--muted)]">생성된 Markdown 미리보기</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[#111] p-3 text-xs">{packet}</pre></details>}
         </div>
