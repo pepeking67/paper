@@ -5,7 +5,6 @@ import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
 import { PdfSyncPanel } from "./pdf-sync/pdf-sync-panel";
 import { StudyTray } from "./study-tray/study-tray";
-import type { ChatTurn } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import { emptyStudyTray, type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
@@ -22,7 +21,6 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   const [tray, setTray] = useState<StudyTrayData>(emptyStudyTray);
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
   const [libraryWidth, setLibraryWidth] = useState(220);
   const [chatWidth, setChatWidth] = useState(440);
   const libraryWidthRef = useRef(220);
@@ -255,14 +253,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     <StudyChat
       paper={initialPaper}
       context={context}
-      onHistoryChange={setChatHistory}
       onSaveInsight={(question, answer) => updateTray((current) => ({ ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] }))}
     />
     <PdfSyncPanel papers={papers} />
     <StudyTray
       paper={initialPaper}
       tray={tray}
-      chatHistory={chatHistory}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}
       onUseArea={useAreaForQuestion}
