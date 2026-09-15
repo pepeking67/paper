@@ -7,21 +7,26 @@ import { PdfSyncPanel } from "./pdf-sync/pdf-sync-panel";
 import { StudyTray } from "./study-tray/study-tray";
 import type { ChatTurn } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
-import { emptyStudyTray, type StudyTrayData } from "@/lib/study-tray/types";
+import { emptyStudyTray, type StudyArea, type StudyTrayData } from "@/lib/study-tray/types";
+import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const [page, setPage] = useState(1);
   const [selection, setSelection] = useState("");
   const [pageText, setPageText] = useState("");
   const [tray, setTray] = useState<StudyTrayData>(emptyStudyTray);
+  const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
   const [chatWidth, setChatWidth] = useState(440);
   const chatWidthRef = useRef(440);
   const storageKey = `paper-study-tray:${initialPaper.id}`;
 
   useEffect(() => {
-    try { setTray(JSON.parse(localStorage.getItem(storageKey) ?? "null") ?? emptyStudyTray()); }
-    catch { setTray(emptyStudyTray()); }
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as Partial<StudyTrayData> | null;
+      setTray(stored ? { ...emptyStudyTray(), ...stored, areas: Array.isArray(stored.areas) ? stored.areas : [] } : emptyStudyTray());
+    } catch { setTray(emptyStudyTray()); }
+    setQuestionAreas([]);
   }, [storageKey]);
 
   useEffect(() => {
@@ -30,7 +35,36 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   }, []);
 
   function updateTray(updater: (current: StudyTrayData) => StudyTrayData) {
-    setTray((current) => { const next = updater(current); localStorage.setItem(storageKey, JSON.stringify(next)); return next; });
+    setTray((current) => {
+      const next = updater(current);
+      try { localStorage.setItem(storageKey, JSON.stringify(next)); }
+      catch { /* Keep the in-memory annotation even if browser storage quota is full. */ }
+      return next;
+    });
+  }
+
+  function createArea(areaPage: number, rect: NormalizedHighlightRect, imageDataUrl: string) {
+    const area: StudyArea = { id: crypto.randomUUID(), page: areaPage, rect, imageDataUrl, memo: "", createdAt: new Date().toISOString() };
+    updateTray((current) => ({ ...current, areas: [...(current.areas ?? []), area] }));
+    setQuestionAreas((current) => [...current.filter((item) => item.id !== area.id), area].slice(-4));
+    setPage(areaPage);
+  }
+
+  function removeArea(id: string) {
+    updateTray((current) => ({ ...current, areas: (current.areas ?? []).filter((item) => item.id !== id) }));
+    setQuestionAreas((current) => current.filter((item) => item.id !== id));
+  }
+
+  function removeTrayItem(kind: keyof StudyTrayData, id: string) {
+    if (kind === "areas") { removeArea(id); return; }
+    if (kind === "highlights") { updateTray((current) => ({ ...current, highlights: current.highlights.filter((item) => item.id !== id) })); return; }
+    if (kind === "insights") { updateTray((current) => ({ ...current, insights: current.insights.filter((item) => item.id !== id) })); return; }
+    if (kind === "memos") updateTray((current) => ({ ...current, memos: current.memos.filter((item) => item.id !== id) }));
+  }
+
+  function useAreaForQuestion(area: StudyArea) {
+    setQuestionAreas((current) => [...current.filter((item) => item.id !== area.id), area].slice(-4));
+    setPage(area.page);
   }
 
   function resizeChat(clientX: number) {
@@ -50,7 +84,13 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     localStorage.setItem("paper-study-chat-width", String(chatWidthRef.current));
   }
 
-  const context = useMemo(() => ({ paperId: initialPaper.id, page, selectedText: selection, pageText }), [initialPaper.id, page, selection, pageText]);
+  const context = useMemo(() => ({
+    paperId: initialPaper.id,
+    page,
+    selectedText: selection,
+    selectedAreas: questionAreas.map((area) => ({ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl })),
+    pageText,
+  }), [initialPaper.id, page, selection, questionAreas, pageText]);
 
   return <main className="study-workspace relative grid min-h-dvh grid-cols-1 bg-black lg:h-dvh lg:overflow-hidden" style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties}>
     <PaperList papers={papers} activeId={initialPaper.id} />
@@ -61,6 +101,11 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       onSelectionChange={setSelection}
       onPageTextChange={setPageText}
       savedHighlights={tray.highlights}
+      savedAreas={tray.areas ?? []}
+      questionAreas={questionAreas}
+      onQuestionAreasChange={setQuestionAreas}
+      onSaveArea={createArea}
+      onDeleteArea={removeArea}
       onSaveHighlight={(text, highlightPage, rects, memo, kind, color) => updateTray((current) => ({ ...current, highlights: [...current.highlights, { id: crypto.randomUUID(), text, page: highlightPage, rects, memo, kind, color, createdAt: new Date().toISOString() }] }))}
       onDeleteHighlight={(id) => updateTray((current) => ({ ...current, highlights: current.highlights.filter((item) => item.id !== id) }))}
     />
@@ -77,7 +122,8 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       tray={tray}
       chatHistory={chatHistory}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
-      onRemove={(kind, id) => updateTray((current) => ({ ...current, [kind]: current[kind].filter((item) => item.id !== id) }))}
+      onRemove={removeTrayItem}
+      onUseArea={useAreaForQuestion}
     />
   </main>;
 }
