@@ -13,12 +13,16 @@ button:disabled { cursor: not-allowed; }
 .scrollbar { scrollbar-color: #555 transparent; scrollbar-width: thin; }
 
 /*
- * Keep this in sync with PDF.js' text_layer_builder.css. TextLayer calculates
- * span positions assuming these layout rules. In particular the markedContent
- * wrapper fix prevents Chrome from exposing oversized selection boxes that can
- * stretch into the blank area at the right edge of a line.
+ * PDF.js text layer for the exact pdfjs-dist version used by this project
+ * (5.7.284). TextLayer writes --font-height, --scale-x and --rotate on spans;
+ * these rules MUST consume those variables or the invisible selectable text
+ * will drift away from the canvas, especially when zoom changes.
+ *
+ * We don't use PDFViewer's .page wrapper, so expose --total-scale-factor from
+ * the --scale-factor that PdfPage sets on the text layer container.
  */
 .textLayer {
+  color-scheme: only light;
   position: absolute;
   text-align: initial;
   inset: 0;
@@ -31,27 +35,48 @@ button:disabled { cursor: not-allowed; }
   caret-color: CanvasText;
   z-index: 0;
   user-select: text;
+
+  --total-scale-factor: var(--scale-factor, 1);
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
+
 .textLayer.highlighting { touch-action: none; }
+
 .textLayer :is(span, br) {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
-  transform-origin: 0 0;
+  transform-origin: 0% 0%;
+  user-select: text;
 }
+
 .textLayer > :not(.markedContent),
-.textLayer .markedContent span:not(.markedContent) { z-index: 1; }
-.textLayer span.markedContent {
-  top: 0;
-  height: 0;
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
+
+.textLayer .markedContent { display: contents; }
+
 .textLayer span[role="img"] {
   user-select: none;
   cursor: default;
 }
-.textLayer ::selection { background: rgb(59 130 246 / 32%); color: transparent; }
+
+.textLayer ::selection {
+  background: rgb(59 130 246 / 32%);
+  color: transparent;
+}
+
 .textLayer br::selection { background: transparent; }
+
 .textLayer .endOfContent {
   display: block;
   position: absolute;
@@ -60,6 +85,7 @@ button:disabled { cursor: not-allowed; }
   cursor: default;
   user-select: none;
 }
+
 .textLayer.selecting .endOfContent { top: 0; }
 
 .study-workspace { grid-template-columns: 1fr; }
