@@ -3,7 +3,7 @@
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
 import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
-import type { AnnotationColor, AnnotationKind } from "@/lib/study-tray/types";
+import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
 
 type CapturedSelection = {
   annotationId?: string;
@@ -17,15 +17,21 @@ type Props = {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   zoom: number;
+  areaMode: boolean;
   deleteMode: boolean;
   capturedSelections: CapturedSelection[];
+  savedAreas: StudyArea[];
+  activeAreaIds: Set<string>;
   scrollRoot: HTMLDivElement | null;
   onText: (page: number, text: string) => void;
   onSelection: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
+  onAreaSelection: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
   onDeleteAnnotation: (id: string) => void;
+  onDeleteArea: (id: string) => void;
 };
 
 type TextEndpoint = { divIndex: number; offset: number };
+type AreaDraft = { left: number; top: number; width: number; height: number };
 
 type RenderedTextLayer = {
   cancel: () => void;
@@ -41,13 +47,30 @@ const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }
   purple: { fill: "rgba(192, 132, 252, 0.34)", stroke: "#9333ea" },
 };
 
-export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections, scrollRoot, onText, onSelection, onDeleteAnnotation }: Props) {
+export function PdfPage({
+  pdf,
+  pageNumber,
+  zoom,
+  areaMode,
+  deleteMode,
+  capturedSelections,
+  savedAreas,
+  activeAreaIds,
+  scrollRoot,
+  onText,
+  onSelection,
+  onAreaSelection,
+  onDeleteAnnotation,
+  onDeleteArea,
+}: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const textDivsRef = useRef<HTMLElement[]>([]);
   const textItemsRef = useRef<string[]>([]);
+  const areaStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [areaDraft, setAreaDraft] = useState<AreaDraft | null>(null);
   const [nearViewport, setNearViewport] = useState(pageNumber <= 2);
   const [width, setWidth] = useState(0);
   const [ratio, setRatio] = useState(1.414);
@@ -76,6 +99,13 @@ export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections,
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!areaMode) {
+      areaStartRef.current = null;
+      setAreaDraft(null);
+    }
+  }, [areaMode]);
 
   useEffect(() => {
     if (!nearViewport || width < 1 || (renderedWidth === width && renderedZoom === zoom)) return;
@@ -165,7 +195,7 @@ export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections,
   }, [nearViewport]);
 
   function captureSelection() {
-    if (deleteMode) return;
+    if (deleteMode || areaMode) return;
     const selection = window.getSelection();
     const layer = textLayerRef.current;
     const surface = surfaceRef.current;
@@ -187,6 +217,77 @@ export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections,
     selection.removeAllRanges();
   }
 
+  function pointInSurface(event: React.PointerEvent<HTMLElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return {
+      x: clamp(event.clientX - bounds.left, 0, surfaceSize.width),
+      y: clamp(event.clientY - bounds.top, 0, surfaceSize.height),
+    };
+  }
+
+  function beginArea(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const point = pointInSurface(event);
+    areaStartRef.current = point;
+    setAreaDraft({ left: point.x, top: point.y, width: 0, height: 0 });
+  }
+
+  function moveArea(event: React.PointerEvent<HTMLDivElement>) {
+    const start = areaStartRef.current;
+    if (!start || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const point = pointInSurface(event);
+    setAreaDraft(rectFromPoints(start, point));
+  }
+
+  function finishArea(event: React.PointerEvent<HTMLDivElement>) {
+    const start = areaStartRef.current;
+    if (!start) return;
+    const point = pointInSurface(event);
+    const rect = rectFromPoints(start, point);
+    areaStartRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    setAreaDraft(null);
+    if (rect.width < 8 || rect.height < 8 || surfaceSize.width <= 0 || surfaceSize.height <= 0) return;
+
+    const normalized: NormalizedHighlightRect = {
+      x: rect.left / surfaceSize.width,
+      y: rect.top / surfaceSize.height,
+      width: rect.width / surfaceSize.width,
+      height: rect.height / surfaceSize.height,
+    };
+    const imageDataUrl = cropCanvasArea(rect);
+    if (imageDataUrl) onAreaSelection(pageNumber, normalized, imageDataUrl);
+  }
+
+  function cancelArea(event: React.PointerEvent<HTMLDivElement>) {
+    areaStartRef.current = null;
+    setAreaDraft(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function cropCanvasArea(rect: AreaDraft) {
+    const canvas = canvasRef.current;
+    if (!canvas || surfaceSize.width <= 0 || surfaceSize.height <= 0) return "";
+    const scaleX = canvas.width / surfaceSize.width;
+    const scaleY = canvas.height / surfaceSize.height;
+    const sx = Math.max(0, Math.round(rect.left * scaleX));
+    const sy = Math.max(0, Math.round(rect.top * scaleY));
+    const sw = Math.max(1, Math.min(canvas.width - sx, Math.round(rect.width * scaleX)));
+    const sh = Math.max(1, Math.min(canvas.height - sy, Math.round(rect.height * scaleY)));
+    const outputScale = Math.min(1, 1000 / Math.max(sw, sh));
+    const crop = document.createElement("canvas");
+    crop.width = Math.max(1, Math.round(sw * outputScale));
+    crop.height = Math.max(1, Math.round(sh * outputScale));
+    const context = crop.getContext("2d", { alpha: false });
+    if (!context) return "";
+    context.fillStyle = "white";
+    context.fillRect(0, 0, crop.width, crop.height);
+    context.drawImage(canvas, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+    return crop.toDataURL("image/jpeg", 0.88);
+  }
+
   return (
     <article
       ref={wrapperRef}
@@ -204,6 +305,7 @@ export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections,
         style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}
       >
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
+
         <div className={`absolute inset-0 ${deleteMode ? "pointer-events-auto z-[3]" : "pointer-events-none z-[1]"}`}>
           {capturedSelections.flatMap((selection, selectionIndex) =>
             selection.rects.map((normalized, rectIndex) => {
@@ -245,7 +347,38 @@ export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections,
             }),
           )}
         </div>
-        <div ref={textLayerRef} className="textLayer z-[2]" />
+
+        <div className={`absolute inset-0 ${deleteMode ? "pointer-events-auto z-[3]" : "pointer-events-none z-[1]"}`} aria-label="저장된 PDF 영역">
+          {savedAreas.map((area) => {
+            const rect = projectHighlightRect(area.rect, surfaceSize.width, surfaceSize.height);
+            const active = activeAreaIds.has(area.id);
+            const style = {
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+              border: active ? "2px solid rgb(56 189 248)" : "1px dashed rgba(14, 165, 233, 0.7)",
+              background: active ? "rgba(14, 165, 233, 0.08)" : "rgba(14, 165, 233, 0.025)",
+            };
+            if (deleteMode) {
+              return <button key={area.id} type="button" title="이 영역 삭제" aria-label={`Page ${area.page} 영역 삭제`} className="absolute cursor-pointer hover:outline hover:outline-2 hover:outline-red-500" style={style} onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onDeleteArea(area.id); }}/>
+            }
+            return <span key={area.id} className="absolute" style={style}/>;
+          })}
+        </div>
+
+        <div ref={textLayerRef} className={`textLayer z-[2] ${areaMode ? "pointer-events-none" : ""}`} />
+
+        {areaMode && <div
+          className="absolute inset-0 z-[4] cursor-crosshair touch-none"
+          aria-label={`Page ${pageNumber} 영역 선택`}
+          onPointerDown={beginArea}
+          onPointerMove={moveArea}
+          onPointerUp={finishArea}
+          onPointerCancel={cancelArea}
+        >
+          {areaDraft && <span className="pointer-events-none absolute border-2 border-sky-500 bg-sky-400/10" style={{ left: areaDraft.left, top: areaDraft.top, width: areaDraft.width, height: areaDraft.height }}/>} 
+        </div>}
       </div>
       {renderError && (
         <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">
@@ -255,6 +388,19 @@ export function PdfPage({ pdf, pageNumber, zoom, deleteMode, capturedSelections,
       <span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
     </article>
   );
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function rectFromPoints(start: { x: number; y: number }, end: { x: number; y: number }): AreaDraft {
+  return {
+    left: Math.min(start.x, end.x),
+    top: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+  };
 }
 
 function mapSelectionEndpoint(node: Node | null, offset: number, layer: HTMLElement, textDivs: HTMLElement[]): TextEndpoint | null {
