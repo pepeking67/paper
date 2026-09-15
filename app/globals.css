@@ -121,6 +121,84 @@ input::placeholder, textarea::placeholder { color: #7d7d82 !important; }
 .workspace-resizer:hover > span:last-child,
 .workspace-resizer:focus-visible > span:last-child { background: var(--accent) !important; }
 
+/* Markdown is the shared visual language for AI answers and durable study notes. */
+.markdown-content {
+  color: #f5f5f7;
+  font-size: 15px;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+.markdown-content > :first-child { margin-top: 0 !important; }
+.markdown-content > :last-child { margin-bottom: 0 !important; }
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  color: #fff;
+  font-weight: 680;
+  letter-spacing: -.018em;
+  line-height: 1.22;
+}
+.markdown-content h1 { margin: 1.8em 0 .7em; font-size: 2rem; }
+.markdown-content h2 { margin: 1.65em 0 .65em; padding-bottom: .35em; border-bottom: 1px solid var(--line); font-size: 1.45rem; }
+.markdown-content h3 { margin: 1.4em 0 .55em; font-size: 1.16rem; }
+.markdown-content h4 { margin: 1.2em 0 .5em; font-size: 1rem; }
+.markdown-content p { margin: .72em 0; }
+.markdown-content strong { color: #fff; font-weight: 650; }
+.markdown-content em { color: #d7d7dc; }
+.markdown-content a { color: #64a9ff; text-decoration: underline; text-decoration-color: rgba(100,169,255,.38); text-underline-offset: 3px; }
+.markdown-content ul,
+.markdown-content ol { margin: .75em 0; padding-left: 1.45em; }
+.markdown-content li { margin: .28em 0; padding-left: .15em; }
+.markdown-content li::marker { color: #8e8e93; }
+.markdown-content blockquote {
+  margin: 1em 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: rgba(10,132,255,.075);
+  padding: .7em 1em;
+  color: #d1d1d6;
+}
+.markdown-content blockquote > :first-child { margin-top: 0; }
+.markdown-content blockquote > :last-child { margin-bottom: 0; }
+.markdown-content hr { margin: 1.6em 0; border: 0; border-top: 1px solid var(--line); }
+.markdown-content pre {
+  margin: 1em 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #111214;
+  padding: 14px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .86em;
+  line-height: 1.6;
+}
+.markdown-content pre code { background: transparent; padding: 0; color: #e8e8ed; }
+.markdown-inline-code {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,.065);
+  padding: .08em .35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .9em;
+  color: #ffd60a;
+}
+.markdown-table-wrap { margin: 1em 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+.markdown-content table { width: 100%; border-collapse: collapse; font-size: .92em; }
+.markdown-content th { background: rgba(255,255,255,.055); color: #fff; font-weight: 620; text-align: left; }
+.markdown-content th,
+.markdown-content td { border-bottom: 1px solid var(--line); padding: .65em .8em; vertical-align: top; }
+.markdown-content tr:last-child td { border-bottom: 0; }
+.markdown-content .katex-display { margin: 1.15em 0; overflow-x: auto; overflow-y: hidden; padding: .35em 0; }
+.markdown-content .katex { font-size: 1.04em; }
+.markdown-content-compact { font-size: 13px; line-height: 1.62; }
+.markdown-content-compact h1 { font-size: 1.35rem; }
+.markdown-content-compact h2 { font-size: 1.15rem; }
+.markdown-content-compact h3 { font-size: 1rem; }
+.markdown-content-compact h1,
+.markdown-content-compact h2,
+.markdown-content-compact h3 { margin-top: 1.15em; }
+
 /*
  * PDF.js text layer for the exact pdfjs-dist version used by this project
  * (5.7.284). TextLayer writes --font-height, --scale-x and --rotate on spans;
