@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
-import type { ChatTurn } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
@@ -11,14 +10,12 @@ import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
 export function StudyTray({
   paper,
   tray,
-  chatHistory,
   onAddMemo,
   onRemove,
   onUseArea,
 }: {
   paper: Paper;
   tray: StudyTrayData;
-  chatHistory: ChatTurn[];
   onAddMemo: (text: string) => void;
   onRemove: (kind: keyof StudyTrayData, id: string) => void;
   onUseArea: (area: StudyArea) => void;
@@ -34,10 +31,8 @@ export function StudyTray({
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [noteCopied, setNoteCopied] = useState(false);
-  const conversationCount = useMemo(() => chatHistory.filter((turn) => turn.role === "user").length, [chatHistory]);
   const areas = tray.areas ?? [];
-  const trayCount = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
-  const total = trayCount + conversationCount;
+  const total = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
   const noteStorageKey = `paper-study-note:${paper.id}`;
 
   useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
@@ -62,7 +57,7 @@ export function StudyTray({
   }, [open, noteOpen]);
 
   async function copyPacket() {
-    const value = buildStudyPacket(paper, tray, chatHistory);
+    const value = buildStudyPacket(paper, tray);
     setPacket(value);
     await navigator.clipboard.writeText(value);
     setCopied(true);
@@ -83,7 +78,7 @@ export function StudyTray({
       const response = await fetch("/api/study-note", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ paperId: paper.id, tray, chatHistory }),
+        body: JSON.stringify({ paperId: paper.id, tray }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "학습 노트 생성 실패"}`);
@@ -119,7 +114,7 @@ export function StudyTray({
 
         <section className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.045)] p-4">
           <div className="flex items-start justify-between gap-4">
-            <div><p className="text-xs font-semibold text-[var(--accent)]">STUDY NOTE</p><h3 className="mt-1 font-semibold">논문 공부 내용을 하나의 노트로 정리</h3><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Q&A, 형광펜·밑줄, 메모, 선택한 수식·그림 영역을 Gemini가 Markdown 학습 노트로 재구성합니다.</p></div>
+            <div><p className="text-xs font-semibold text-[var(--accent)]">STUDY NOTE</p><h3 className="mt-1 font-semibold">논문 순서대로 학습 노트 정리</h3><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">형광펜·밑줄, 메모, 영역 이미지와 직접 Save Insight 한 Q&A만 사용해 Introduction → Model/Architecture → Experiments → Limitations 등 논문 흐름대로 재구성합니다.</p></div>
             {noteMarkdown && <button type="button" onClick={() => { setNoteMode("preview"); setNoteOpen(true); }} className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">노트 열기</button>}
           </div>
           <button disabled={!total || noteLoading} type="button" onClick={() => void generateStudyNote()} className="mt-4 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-40">{noteLoading ? "학습 노트 생성 중…" : noteMarkdown ? "학습 노트 다시 생성" : "학습 노트 생성"}</button>
@@ -140,16 +135,14 @@ export function StudyTray({
           </TrayItem>)}
         </TraySection>
 
-        <TraySection title={`Study Q&A (${conversationCount})`}>
-          {conversationCount === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">아직 이 논문에서 나눈 질문과 답변이 없습니다.</p>}
-          {chatHistory.map((turn, index) => turn.role === "user" ? <article key={`chat-${index}`} className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3"><p className="text-sm font-semibold">Q. {turn.content}</p>{chatHistory[index + 1]?.role === "assistant" ? <div className="mt-3"><MarkdownContent content={chatHistory[index + 1].content} compact /></div> : <p className="mt-2 text-xs text-[var(--muted)]">답변 없음</p>}</article> : null)}
+        <TraySection title={`Saved Insights (${tray.insights.length})`}>
+          {tray.insights.length === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">채팅 답변은 자동으로 들어오지 않습니다. 남기고 싶은 Q&A에서 Save Insight를 눌러야 여기에 저장되고 학습 노트에도 반영됩니다.</p>}
+          {tray.insights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("insights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · 중요 Q&A</p><p className="mt-2 text-sm font-semibold">Q. {item.question}</p><div className="mt-3"><MarkdownContent content={item.answer} compact /></div></TrayItem>)}
         </TraySection>
-
-        <TraySection title={`Saved Insights (${tray.insights.length})`}>{tray.insights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("insights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · 중요 Q&A</p><p className="mt-2 text-sm font-semibold">Q. {item.question}</p><div className="mt-3"><MarkdownContent content={item.answer} compact /></div></TrayItem>)}</TraySection>
         <TraySection title={`Memos (${tray.memos.length})`}>{tray.memos.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("memos", item.id)}><p className="whitespace-pre-wrap text-sm">{item.text}</p></TrayItem>)}</TraySection>
 
         <div className="sticky bottom-0 mt-6 border-t border-[var(--line)] bg-[rgba(28,28,30,.94)] py-4 backdrop-blur-xl">
-          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">외부 ChatGPT에서 별도로 정리하고 싶다면 전체 Q&A와 Annotation을 텍스트 프롬프트로 복사할 수도 있습니다.</p>
+          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">외부 ChatGPT용 프롬프트에도 전체 채팅이 아니라 Annotation, 메모, 영역 정보와 직접 Save Insight 한 Q&A만 포함됩니다.</p>
           <button disabled={!total} onClick={() => void copyPacket()} className="w-full rounded-xl border border-[var(--line)] px-4 py-3 text-sm font-semibold hover:bg-white/5 disabled:opacity-40">{copied ? "복사됨" : "ChatGPT용 학습 정리 프롬프트 복사"}</button>
           {packet && <details className="mt-3"><summary className="cursor-pointer text-xs text-[var(--muted)]">생성된 프롬프트 미리보기</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[#111] p-3 text-xs">{packet}</pre></details>}
         </div>
