@@ -151,7 +151,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
     if (!layer.contains(range.startContainer) || !layer.contains(range.endContainer)) return;
 
     const text = selection.toString().trim();
-    const rects = normalizeClientRects(Array.from(range.getClientRects()), surface.getBoundingClientRect());
+    const rects = normalizeClientRects(getSelectedTextRects(range, layer), surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
     onSelection(text, pageNumber, rects);
@@ -190,4 +190,43 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
     {renderError && <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">Page {pageNumber}: {renderError}</div>}
     <span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
   </article>;
+}
+
+/**
+ * Range#getClientRects() can include boxes contributed by PDF.js wrappers,
+ * line breaks and trailing whitespace. Those boxes are the reason a highlight
+ * can run through the empty space on the right side of a PDF line.
+ *
+ * Build a small range for each actually selected text node instead. Trimming
+ * only the outer whitespace of each selected fragment keeps spaces inside a
+ * sentence while removing PDF layout padding at line boundaries.
+ */
+function getSelectedTextRects(range: Range, layer: HTMLElement): DOMRect[] {
+  const rects: DOMRect[] = [];
+  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    if (!node.data || !range.intersectsNode(node)) continue;
+
+    let start = node === range.startContainer ? range.startOffset : 0;
+    let end = node === range.endContainer ? range.endOffset : node.length;
+    start = Math.max(0, Math.min(node.length, start));
+    end = Math.max(start, Math.min(node.length, end));
+
+    const fragment = node.data.slice(start, end);
+    const leadingWhitespace = fragment.match(/^\s+/u)?.[0].length ?? 0;
+    const trailingWhitespace = fragment.match(/\s+$/u)?.[0].length ?? 0;
+    start += leadingWhitespace;
+    end -= trailingWhitespace;
+    if (start >= end) continue;
+
+    const textRange = document.createRange();
+    textRange.setStart(node, start);
+    textRange.setEnd(node, end);
+    rects.push(...Array.from(textRange.getClientRects()));
+    textRange.detach();
+  }
+
+  return rects;
 }
