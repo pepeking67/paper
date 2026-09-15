@@ -13,7 +13,12 @@ export type StudyContext = {
   chunks?: Array<{ page: number; section: string | null; text: string }>;
 };
 
-export type ChatTurn = { role: "user" | "assistant"; content: string };
+export type ChatTurn = {
+  role: "user" | "assistant";
+  content: string;
+  sourcePage?: number;
+  sourceText?: string;
+};
 
 export interface AiProvider {
   answer(message: string, context: StudyContext, history?: ChatTurn[]): Promise<string>;
@@ -44,12 +49,12 @@ class GeminiProvider implements AiProvider {
 
   async composeStudyNote(material: string, areas: StudyAreaContext[] = []): Promise<string> {
     const parts: GeminiPart[] = [{
-      text: `Create a polished paper study note from the following deliberately saved study material. The learner's preferred Notion style follows the paper itself: Introduction first, then the paper's Model / Architecture / Method in mechanism order, then Experiments and their subsections, then Limitations or Conclusion only when supported. Saved Insights are deliberate important Q&A and must be integrated into the relevant paper section rather than copied into a separate Q&A section. Preserve page references, uncertainty, equations, and the learner's priorities. Do not invent unsupported sections or claims.\n\n${material.slice(0, 60_000)}`,
+      text: `Create a polished paper study note from the following deliberately saved study material. The learner's preferred Notion style follows the paper itself: Introduction first, then the paper's Model / Architecture / Method in mechanism order, then Experiments and their subsections, then Limitations or Conclusion only when supported. Saved Insights are deliberate important Q&A and must be integrated into the relevant paper section rather than copied into a separate Q&A section. Preserve page references, uncertainty, equations, and the learner's priorities. Do not invent unsupported sections or claims. PDF area images have stable markers in the form [[PDF_AREA:<id>]]. When an area image is useful in the note, place its exact marker on its own line near the explanation. Never invent a URL and never use normal Markdown image syntax for an attached PDF area.\n\n${material.slice(0, 60_000)}`,
     }];
     appendAreaImages(parts, areas);
     return this.generate(
       parts,
-      "You turn paper-reading records into a durable personal paper note that resembles a concise Notion research page. Return only the note itself in clean GitHub-flavored Markdown, with no preamble. Structure the document by the paper's natural section order, not by question chronology. Start with # Introduction when supported. Then choose the paper's own natural top-level heading such as # Model, # Architecture, or # Method; do not create duplicate synonym sections. Inside it, use ## / ### headings for components in actual processing or conceptual order. Follow with # Training / # Data only if relevant, then # Experiments with paper-order experiment subsections such as main results, generalization, robustness, analysis, or ablation. Add # Limitations and # Conclusion only when the supplied evidence supports them. Do not create a general Q&A, Saved Insights, checklist, or annotation-dump section. Instead, integrate each explicitly saved insight into the section whose concept it explains. Keep prose concise and direct like research notes, emphasize key concepts with bold, keep useful page references, and place equations close to their explanations using $...$ and $$...$$. Use tables or lists only when they improve clarity. When attached area images contain equations, figures, or tables, inspect them directly and place their explanation in the relevant paper section. If evidence is insufficient, omit the section or clearly mark uncertainty rather than guessing. Never wrap the entire document in a code fence.",
+      "You turn paper-reading records into a durable personal paper note that resembles a concise Notion research page. Return only the note itself in clean GitHub-flavored Markdown, with no preamble. Structure the document by the paper's natural section order, not by question chronology. Start with # Introduction when supported. Then choose the paper's own natural top-level heading such as # Model, # Architecture, or # Method; do not create duplicate synonym sections. Inside it, use ## / ### headings for components in actual processing or conceptual order. Follow with # Training / # Data only if relevant, then # Experiments with paper-order experiment subsections such as main results, generalization, robustness, analysis, or ablation. Add # Limitations and # Conclusion only when the supplied evidence supports them. Do not create a general Q&A, Saved Insights, checklist, or annotation-dump section. Instead, integrate each explicitly saved insight into the section whose concept it explains. Keep prose concise and direct like research notes, emphasize key concepts with bold, keep useful page references, and place equations close to their explanations using $...$ and $$...$$. Use tables or lists only when they improve clarity. When an attached PDF area contains an equation, figure, or table, inspect it directly and, when it belongs in the final note, put the exact supplied [[PDF_AREA:<id>]] marker on a standalone line immediately beside the relevant explanation. Do not output ![...](...) for attached PDF areas and do not invent image URLs. If evidence is insufficient, omit the section or clearly mark uncertainty rather than guessing. Never wrap the entire document in a code fence.",
       0.15,
     );
   }
@@ -105,7 +110,8 @@ function appendAreaImages(parts: GeminiPart[], areas: StudyAreaContext[] | undef
   for (const area of areas?.slice(0, 4) ?? []) {
     const image = parseImageDataUrl(area.imageDataUrl);
     if (!image) continue;
-    parts.push({ text: `Selected PDF area from page ${area.page}. Inspect this image directly as part of the study material.` });
+    const marker = area.id ? `[[PDF_AREA:${area.id}]]` : "(no marker)";
+    parts.push({ text: `Selected PDF area from page ${area.page}. Stable note marker: ${marker}. Inspect this image directly as part of the study material.` });
     parts.push({ inlineData: image });
   }
 }
