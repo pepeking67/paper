@@ -34,6 +34,15 @@ export function StudyTray({
 
   useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   async function copyPacket() {
     const value = buildStudyPacket(paper, tray, chatHistory);
     setPacket(value);
@@ -44,7 +53,13 @@ export function StudyTray({
 
   return <>
     {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Study Tray · {total}</button>, triggerHost)}
-    {open && <div className="fixed inset-0 z-40 flex justify-end bg-black/70" role="dialog" aria-modal="true" aria-labelledby="study-tray-title">
+    {open && <div
+      className="fixed inset-0 z-40 flex justify-end bg-black/70"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="study-tray-title"
+      onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
+    >
       <section className="scrollbar h-full w-full max-w-xl overflow-y-auto border-l border-[var(--line)] bg-black p-5 text-white">
         <header className="flex items-start justify-between"><div><p className="text-xs tracking-widest text-[var(--muted)]">CURRENT PAPER</p><h2 id="study-tray-title" className="mt-1 text-xl font-semibold">Study Tray</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.title}</p></div><button onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl">×</button></header>
         <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!memo.trim()) return; onAddMemo(memo.trim()); setMemo(""); }}><label htmlFor="tray-memo" className="sr-only">자유 메모</label><textarea id="tray-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="자유 메모 추가…" rows={2} className="min-w-0 flex-1 resize-none rounded-lg border border-[var(--line)] bg-[#111] p-3 text-sm"/><button className="rounded-lg bg-white px-4 text-sm font-medium text-black">추가</button></form>
