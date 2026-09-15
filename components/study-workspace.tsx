@@ -10,6 +10,12 @@ import type { Paper } from "@/lib/papers/types";
 import { emptyStudyTray, type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 
+const LIBRARY_MIN = 180;
+const LIBRARY_MAX = 360;
+const CHAT_MIN = 360;
+const CHAT_MAX = 720;
+const PDF_MIN = 360;
+
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
@@ -17,7 +23,9 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
+  const [libraryWidth, setLibraryWidth] = useState(220);
   const [chatWidth, setChatWidth] = useState(440);
+  const libraryWidthRef = useRef(220);
   const chatWidthRef = useRef(440);
   const storageKey = `paper-study-tray:${initialPaper.id}`;
 
@@ -31,8 +39,16 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   }, [storageKey]);
 
   useEffect(() => {
-    const stored = Number(localStorage.getItem("paper-study-chat-width"));
-    if (stored >= 360 && stored <= 720) { chatWidthRef.current = stored; setChatWidth(stored); }
+    const storedLibrary = Number(localStorage.getItem("paper-study-library-width"));
+    if (storedLibrary >= LIBRARY_MIN && storedLibrary <= LIBRARY_MAX) {
+      libraryWidthRef.current = storedLibrary;
+      setLibraryWidth(storedLibrary);
+    }
+    const storedChat = Number(localStorage.getItem("paper-study-chat-width"));
+    if (storedChat >= CHAT_MIN && storedChat <= CHAT_MAX) {
+      chatWidthRef.current = storedChat;
+      setChatWidth(storedChat);
+    }
   }, []);
 
   function updateTray(updater: (current: StudyTrayData) => StudyTrayData) {
@@ -101,9 +117,35 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setPage(area.page);
   }
 
+  function libraryMaximum() {
+    if (typeof window === "undefined") return LIBRARY_MAX;
+    return Math.max(LIBRARY_MIN, Math.min(LIBRARY_MAX, window.innerWidth - chatWidthRef.current - PDF_MIN));
+  }
+
+  function chatMaximum() {
+    if (typeof window === "undefined") return CHAT_MAX;
+    return Math.max(CHAT_MIN, Math.min(CHAT_MAX, window.innerWidth - libraryWidthRef.current - PDF_MIN));
+  }
+
+  function resizeLibrary(clientX: number) {
+    const next = Math.max(LIBRARY_MIN, Math.min(libraryMaximum(), clientX));
+    libraryWidthRef.current = next;
+    setLibraryWidth(next);
+  }
+
+  function startLibraryResize(event: React.PointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeLibrary(event.clientX);
+  }
+
+  function finishLibraryResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    localStorage.setItem("paper-study-library-width", String(libraryWidthRef.current));
+  }
+
   function resizeChat(clientX: number) {
-    const maximum = Math.min(720, window.innerWidth - 220 - 360);
-    const next = Math.max(360, Math.min(maximum, window.innerWidth - clientX));
+    const maximum = chatMaximum();
+    const next = Math.max(CHAT_MIN, Math.min(maximum, window.innerWidth - clientX));
     chatWidthRef.current = next;
     setChatWidth(next);
   }
@@ -131,8 +173,42 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     pageText,
   }), [initialPaper.id, page, selectedText, questionAreas, pageText]);
 
-  return <main className="study-workspace relative grid min-h-dvh grid-cols-1 bg-black lg:h-dvh lg:overflow-hidden" style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties}>
+  const workspaceStyle = {
+    "--library-width": `${libraryWidth}px`,
+    "--chat-width": `${chatWidth}px`,
+  } as React.CSSProperties;
+
+  return <main className="study-workspace relative grid min-h-dvh grid-cols-1 lg:h-dvh lg:overflow-hidden" style={workspaceStyle}>
     <PaperList papers={papers} activeId={initialPaper.id} />
+
+    <div
+      role="separator"
+      aria-label="논문 목록과 PDF 영역 너비 조절"
+      aria-orientation="vertical"
+      aria-valuemin={LIBRARY_MIN}
+      aria-valuemax={LIBRARY_MAX}
+      aria-valuenow={libraryWidth}
+      tabIndex={0}
+      className="workspace-resizer group absolute bottom-0 top-0 z-30 hidden w-2 cursor-col-resize touch-none select-none lg:block"
+      style={{ left: libraryWidth - 4 }}
+      onPointerDown={startLibraryResize}
+      onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeLibrary(event.clientX); }}
+      onPointerUp={finishLibraryResize}
+      onPointerCancel={finishLibraryResize}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const delta = event.key === "ArrowRight" ? 20 : -20;
+        const next = Math.max(LIBRARY_MIN, Math.min(libraryMaximum(), libraryWidth + delta));
+        libraryWidthRef.current = next;
+        setLibraryWidth(next);
+        localStorage.setItem("paper-study-library-width", String(next));
+      }}
+    >
+      <span className="absolute bottom-0 left-1/2 top-0 w-px transition-colors"/>
+      <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"/>
+    </div>
+
     <PdfViewer
       paper={initialPaper}
       page={page}
@@ -148,7 +224,34 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       onDeleteHighlight={removeHighlight}
       onClearQuestionContext={clearQuestionAnnotations}
     />
-    <div role="separator" aria-label="PDF와 채팅 영역 너비 조절" aria-orientation="vertical" aria-valuemin={360} aria-valuemax={720} aria-valuenow={chatWidth} tabIndex={0} className="workspace-resizer group absolute bottom-0 top-0 z-20 hidden w-2 cursor-col-resize touch-none select-none lg:block" style={{ right: chatWidth - 4 }} onPointerDown={startResize} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeChat(event.clientX); }} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={(event) => { if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return; event.preventDefault(); const next = Math.max(360, Math.min(720, chatWidth + (event.key === "ArrowLeft" ? 24 : -24))); chatWidthRef.current = next; setChatWidth(next); localStorage.setItem("paper-study-chat-width", String(next)); }}><span className="absolute bottom-0 left-1/2 top-0 w-px bg-[var(--line)] transition-colors group-hover:bg-white group-focus-visible:bg-white"/><span aria-hidden="true" className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#777] transition-colors group-hover:bg-white group-focus-visible:bg-white"/></div>
+
+    <div
+      role="separator"
+      aria-label="PDF와 채팅 영역 너비 조절"
+      aria-orientation="vertical"
+      aria-valuemin={CHAT_MIN}
+      aria-valuemax={CHAT_MAX}
+      aria-valuenow={chatWidth}
+      tabIndex={0}
+      className="workspace-resizer group absolute bottom-0 top-0 z-30 hidden w-2 cursor-col-resize touch-none select-none lg:block"
+      style={{ right: chatWidth - 4 }}
+      onPointerDown={startResize}
+      onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeChat(event.clientX); }}
+      onPointerUp={finishResize}
+      onPointerCancel={finishResize}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const next = Math.max(CHAT_MIN, Math.min(chatMaximum(), chatWidth + (event.key === "ArrowLeft" ? 24 : -24)));
+        chatWidthRef.current = next;
+        setChatWidth(next);
+        localStorage.setItem("paper-study-chat-width", String(next));
+      }}
+    >
+      <span className="absolute bottom-0 left-1/2 top-0 w-px transition-colors"/>
+      <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"/>
+    </div>
+
     <StudyChat
       paper={initialPaper}
       context={context}
