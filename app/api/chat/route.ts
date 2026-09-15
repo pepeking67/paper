@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findPaper } from "@/lib/papers/catalog";
-import { getAiProvider, type ChatTurn, type StudyContext } from "@/lib/ai/provider";
+import { getAiProvider, type ChatTurn, type StudyAreaContext, type StudyContext } from "@/lib/ai/provider";
 
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
@@ -26,7 +26,27 @@ function isChatRequest(value: unknown): value is { message: string; context: Stu
 }
 
 function sanitizeContext(context: StudyContext): StudyContext {
-  return { paperId: context.paperId, page: context.page, selectedText: typeof context.selectedText === "string" ? context.selectedText : undefined, pageText: typeof context.pageText === "string" ? context.pageText : undefined, chunks: Array.isArray(context.chunks) ? context.chunks : undefined };
+  const selectedAreas = Array.isArray(context.selectedAreas)
+    ? context.selectedAreas.filter(isSafeAreaContext).slice(0, 4).map((area) => ({ id: typeof area.id === "string" ? area.id : undefined, page: area.page, imageDataUrl: area.imageDataUrl }))
+    : undefined;
+
+  return {
+    paperId: context.paperId,
+    page: context.page,
+    selectedText: typeof context.selectedText === "string" ? context.selectedText : undefined,
+    selectedAreas,
+    pageText: typeof context.pageText === "string" ? context.pageText : undefined,
+    chunks: Array.isArray(context.chunks) ? context.chunks : undefined,
+  };
+}
+
+function isSafeAreaContext(value: unknown): value is StudyAreaContext {
+  if (!value || typeof value !== "object") return false;
+  const area = value as Partial<StudyAreaContext>;
+  return Number.isInteger(area.page)
+    && typeof area.imageDataUrl === "string"
+    && area.imageDataUrl.length <= 1_500_000
+    && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/u.test(area.imageDataUrl);
 }
 
 function sanitizeHistory(history: ChatTurn[] | undefined): ChatTurn[] {
