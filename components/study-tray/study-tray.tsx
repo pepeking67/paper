@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { MarkdownContent } from "@/components/markdown/markdown-content";
 import type { ChatTurn } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
@@ -27,21 +28,38 @@ export function StudyTray({
   const [packet, setPacket] = useState("");
   const [copied, setCopied] = useState(false);
   const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteMode, setNoteMode] = useState<"preview" | "edit">("preview");
+  const [noteMarkdown, setNoteMarkdown] = useState("");
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteError, setNoteError] = useState("");
+  const [noteCopied, setNoteCopied] = useState(false);
   const conversationCount = useMemo(() => chatHistory.filter((turn) => turn.role === "user").length, [chatHistory]);
   const areas = tray.areas ?? [];
   const trayCount = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
   const total = trayCount + conversationCount;
+  const noteStorageKey = `paper-study-note:${paper.id}`;
 
   useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
 
   useEffect(() => {
-    if (!open) return;
+    try { setNoteMarkdown(localStorage.getItem(noteStorageKey) ?? ""); }
+    catch { setNoteMarkdown(""); }
+    setNoteOpen(false);
+    setNoteMode("preview");
+    setNoteError("");
+  }, [noteStorageKey]);
+
+  useEffect(() => {
+    if (!open && !noteOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      if (noteOpen) setNoteOpen(false);
+      else setOpen(false);
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, noteOpen]);
 
   async function copyPacket() {
     const value = buildStudyPacket(paper, tray, chatHistory);
@@ -51,10 +69,46 @@ export function StudyTray({
     window.setTimeout(() => setCopied(false), 1800);
   }
 
+  function persistNote(value: string) {
+    setNoteMarkdown(value);
+    try { localStorage.setItem(noteStorageKey, value); }
+    catch { /* Keep the edited note in memory if browser storage is unavailable. */ }
+  }
+
+  async function generateStudyNote() {
+    if (!total || noteLoading) return;
+    setNoteLoading(true);
+    setNoteError("");
+    try {
+      const response = await fetch("/api/study-note", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ paperId: paper.id, tray, chatHistory }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "학습 노트 생성 실패"}`);
+      if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("빈 학습 노트가 반환되었습니다.");
+      persistNote(data.markdown.trim());
+      setNoteMode("preview");
+      setNoteOpen(true);
+    } catch (caught) {
+      setNoteError(caught instanceof Error ? caught.message : "학습 노트 생성 실패");
+    } finally {
+      setNoteLoading(false);
+    }
+  }
+
+  async function copyNote() {
+    if (!noteMarkdown) return;
+    await navigator.clipboard.writeText(noteMarkdown);
+    setNoteCopied(true);
+    window.setTimeout(() => setNoteCopied(false), 1800);
+  }
+
   return <>
-    {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Study Tray · {total}</button>, triggerHost)}
+    {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">Study Tray · {total}</button>, triggerHost)}
     {open && <div
-      className="fixed inset-0 z-40 flex justify-end bg-black/70"
+      className="fixed inset-0 z-40 flex justify-end bg-black/60"
       role="dialog"
       aria-modal="true"
       aria-labelledby="study-tray-title"
@@ -62,37 +116,65 @@ export function StudyTray({
     >
       <section className="scrollbar h-full w-full max-w-xl overflow-y-auto border-l border-[var(--line)] bg-black p-5 text-white">
         <header className="flex items-start justify-between"><div><p className="text-xs tracking-widest text-[var(--muted)]">CURRENT PAPER</p><h2 id="study-tray-title" className="mt-1 text-xl font-semibold">Study Tray</h2><p className="mt-1 text-xs text-[var(--muted)]">{paper.title}</p></div><button onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl">×</button></header>
-        <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!memo.trim()) return; onAddMemo(memo.trim()); setMemo(""); }}><label htmlFor="tray-memo" className="sr-only">자유 메모</label><textarea id="tray-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="자유 메모 추가…" rows={2} className="min-w-0 flex-1 resize-none rounded-lg border border-[var(--line)] bg-[#111] p-3 text-sm"/><button className="rounded-lg bg-white px-4 text-sm font-medium text-black">추가</button></form>
 
-        <TraySection title={`Annotations (${tray.highlights.length})`}>{tray.highlights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("highlights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p><p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>{item.memo && <p className="mt-2 border-l border-white pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}</TrayItem>)}</TraySection>
+        <section className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.045)] p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="text-xs font-semibold text-[var(--accent)]">STUDY NOTE</p><h3 className="mt-1 font-semibold">논문 공부 내용을 하나의 노트로 정리</h3><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Q&A, 형광펜·밑줄, 메모, 선택한 수식·그림 영역을 Gemini가 Markdown 학습 노트로 재구성합니다.</p></div>
+            {noteMarkdown && <button type="button" onClick={() => { setNoteMode("preview"); setNoteOpen(true); }} className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">노트 열기</button>}
+          </div>
+          <button disabled={!total || noteLoading} type="button" onClick={() => void generateStudyNote()} className="mt-4 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-40">{noteLoading ? "학습 노트 생성 중…" : noteMarkdown ? "학습 노트 다시 생성" : "학습 노트 생성"}</button>
+          {noteError && <p role="alert" className="mt-3 rounded-lg border border-[var(--danger)]/60 bg-[rgba(255,69,58,.08)] p-2.5 text-xs">{noteError}</p>}
+        </section>
+
+        <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!memo.trim()) return; onAddMemo(memo.trim()); setMemo(""); }}><label htmlFor="tray-memo" className="sr-only">자유 메모</label><textarea id="tray-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="자유 메모 추가…" rows={2} className="min-w-0 flex-1 resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/><button className="rounded-xl bg-white px-4 text-sm font-medium text-black">추가</button></form>
+
+        <TraySection title={`Annotations (${tray.highlights.length})`}>{tray.highlights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("highlights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p><p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>{item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}</TrayItem>)}</TraySection>
 
         <TraySection title={`Areas (${areas.length})`}>
-          {areas.length === 0 && <p className="rounded-lg border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">수식·그림·표를 `영역` 도구로 사각형 선택하면 여기에 저장됩니다.</p>}
+          {areas.length === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">수식·그림·표를 `영역` 도구로 사각형 선택하면 여기에 저장됩니다.</p>}
           {areas.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("areas", item.id)}>
             <p className="text-xs text-[var(--muted)]">Page {item.page} · Area annotation</p>
-            <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded border border-[#333] bg-white object-contain"/>
-            {item.memo && <p className="mt-2 border-l border-white pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
-            <button type="button" onClick={() => onUseArea(item)} className="mt-3 rounded border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white hover:text-black">질문에 사용</button>
+            <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded-xl border border-[var(--line)] bg-white object-contain"/>
+            {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
+            <button type="button" onClick={() => onUseArea(item)} className="mt-3 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white/5">질문에 사용</button>
           </TrayItem>)}
         </TraySection>
 
         <TraySection title={`Study Q&A (${conversationCount})`}>
-          {conversationCount === 0 && <p className="rounded-lg border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">아직 이 논문에서 나눈 질문과 답변이 없습니다.</p>}
-          {chatHistory.map((turn, index) => turn.role === "user" ? <article key={`chat-${index}`} className="rounded-lg border border-[var(--line)] bg-[#0b0b0b] p-3"><p className="text-sm font-semibold">Q. {turn.content}</p>{chatHistory[index + 1]?.role === "assistant" ? <p className="mt-2 whitespace-pre-wrap text-sm text-[#ccc]">{chatHistory[index + 1].content}</p> : <p className="mt-2 text-xs text-[var(--muted)]">답변 없음</p>}</article> : null)}
+          {conversationCount === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">아직 이 논문에서 나눈 질문과 답변이 없습니다.</p>}
+          {chatHistory.map((turn, index) => turn.role === "user" ? <article key={`chat-${index}`} className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3"><p className="text-sm font-semibold">Q. {turn.content}</p>{chatHistory[index + 1]?.role === "assistant" ? <div className="mt-3"><MarkdownContent content={chatHistory[index + 1].content} compact /></div> : <p className="mt-2 text-xs text-[var(--muted)]">답변 없음</p>}</article> : null)}
         </TraySection>
 
-        <TraySection title={`Saved Insights (${tray.insights.length})`}>{tray.insights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("insights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · 중요 Q&A</p><p className="mt-2 text-sm font-semibold">Q. {item.question}</p><p className="mt-2 whitespace-pre-wrap text-sm text-[#ccc]">{item.answer}</p></TrayItem>)}</TraySection>
+        <TraySection title={`Saved Insights (${tray.insights.length})`}>{tray.insights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("insights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · 중요 Q&A</p><p className="mt-2 text-sm font-semibold">Q. {item.question}</p><div className="mt-3"><MarkdownContent content={item.answer} compact /></div></TrayItem>)}</TraySection>
         <TraySection title={`Memos (${tray.memos.length})`}>{tray.memos.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("memos", item.id)}><p className="whitespace-pre-wrap text-sm">{item.text}</p></TrayItem>)}</TraySection>
 
-        <div className="sticky bottom-0 mt-6 border-t border-[var(--line)] bg-black py-4">
-          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">전체 Q&A와 Annotation을 함께 넣습니다. Area 이미지는 앱 안의 Gemini 질문에는 실제 이미지로 전달되며, 복사되는 텍스트 프롬프트에는 페이지/영역 정보만 포함됩니다.</p>
-          <button disabled={!total} onClick={() => void copyPacket()} className="w-full rounded-lg bg-white px-4 py-3 font-semibold text-black disabled:opacity-40">{copied ? "복사됨" : "ChatGPT용 학습 정리 프롬프트 생성·복사"}</button>
-          {packet && <details className="mt-3"><summary className="cursor-pointer text-xs text-[var(--muted)]">생성된 Markdown 미리보기</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[#111] p-3 text-xs">{packet}</pre></details>}
+        <div className="sticky bottom-0 mt-6 border-t border-[var(--line)] bg-[rgba(28,28,30,.94)] py-4 backdrop-blur-xl">
+          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">외부 ChatGPT에서 별도로 정리하고 싶다면 전체 Q&A와 Annotation을 텍스트 프롬프트로 복사할 수도 있습니다.</p>
+          <button disabled={!total} onClick={() => void copyPacket()} className="w-full rounded-xl border border-[var(--line)] px-4 py-3 text-sm font-semibold hover:bg-white/5 disabled:opacity-40">{copied ? "복사됨" : "ChatGPT용 학습 정리 프롬프트 복사"}</button>
+          {packet && <details className="mt-3"><summary className="cursor-pointer text-xs text-[var(--muted)]">생성된 프롬프트 미리보기</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[#111] p-3 text-xs">{packet}</pre></details>}
         </div>
+      </section>
+    </div>}
+
+    {noteOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="study-note-title" onPointerDown={(event) => { if (event.target === event.currentTarget) setNoteOpen(false); }}>
+      <section className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border border-[var(--line-strong)] bg-[rgba(28,28,30,.98)] shadow-2xl">
+        <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[.12em] text-[var(--accent)]">STUDY NOTE</p><h2 id="study-note-title" className="truncate text-base font-semibold">{paper.title}</h2></div>
+          <div className="flex rounded-lg bg-black/20 p-0.5" role="group" aria-label="학습 노트 보기 방식">
+            <button type="button" onClick={() => setNoteMode("preview")} aria-pressed={noteMode === "preview"} className={`rounded-md px-3 py-1.5 text-xs ${noteMode === "preview" ? "bg-white/12 text-white" : "text-[var(--muted)]"}`}>미리보기</button>
+            <button type="button" onClick={() => setNoteMode("edit")} aria-pressed={noteMode === "edit"} className={`rounded-md px-3 py-1.5 text-xs ${noteMode === "edit" ? "bg-white/12 text-white" : "text-[var(--muted)]"}`}>Markdown 편집</button>
+          </div>
+          <button type="button" onClick={() => void copyNote()} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-white/5">{noteCopied ? "복사됨" : "Markdown 복사"}</button>
+          <button type="button" onClick={() => setNoteOpen(false)} aria-label="학습 노트 닫기" className="h-8 w-8 rounded-full text-xl text-[var(--muted)] hover:bg-white/5">×</button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {noteMode === "preview" ? <article className="scrollbar h-full overflow-y-auto px-5 py-7 sm:px-10 lg:px-16"><div className="mx-auto max-w-3xl"><MarkdownContent content={noteMarkdown} /></div></article> : <div className="h-full p-3 sm:p-4"><label htmlFor="study-note-editor" className="sr-only">학습 노트 Markdown 편집</label><textarea id="study-note-editor" value={noteMarkdown} onChange={(event) => persistNote(event.target.value)} spellCheck={false} className="scrollbar h-full w-full resize-none rounded-2xl border border-[var(--line)] bg-[#111] p-5 font-mono text-[13px] leading-6 outline-none"/></div>}
+        </div>
+        <footer className="flex items-center justify-between border-t border-[var(--line)] px-4 py-2.5 text-[11px] text-[var(--muted)]"><span>편집 내용은 이 브라우저에 자동 저장됩니다.</span><button disabled={noteLoading} type="button" onClick={() => void generateStudyNote()} className="rounded-lg px-2.5 py-1.5 text-[var(--accent)] hover:bg-[var(--accent-soft)]">{noteLoading ? "재생성 중…" : "자료에서 다시 생성"}</button></footer>
       </section>
     </div>}
   </>;
 }
 
 function TraySection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="mt-6"><h3 className="border-b border-[var(--line)] pb-2 font-semibold">{title}</h3><div className="mt-3 space-y-2">{children}</div></section>; }
-function TrayItem({ children, onRemove }: { children: React.ReactNode; onRemove: () => void }) { return <article className="relative rounded-lg border border-[var(--line)] bg-[#0b0b0b] p-3 pr-10">{children}<button onClick={onRemove} aria-label="저장 항목 삭제" className="absolute right-3 top-2 text-lg text-[var(--muted)]">×</button></article>; }
+function TrayItem({ children, onRemove }: { children: React.ReactNode; onRemove: () => void }) { return <article className="relative rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3 pr-10">{children}<button onClick={onRemove} aria-label="저장 항목 삭제" className="absolute right-3 top-2 text-lg text-[var(--muted)]">×</button></article>; }
