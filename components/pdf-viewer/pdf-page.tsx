@@ -2,7 +2,14 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useEffect, useRef, useState } from "react";
-import { normalizeClientRects, projectHighlightRect, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import {
+  mergeGlyphRects,
+  normalizeClientRects,
+  projectHighlightRect,
+  type ClientRectLike,
+  type GlyphRect,
+  type NormalizedHighlightRect,
+} from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind } from "@/lib/study-tray/types";
 
 type CapturedSelection = {
@@ -151,7 +158,7 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
     if (!layer.contains(range.startContainer) || !layer.contains(range.endContainer)) return;
 
     const text = selection.toString().trim();
-    const rects = normalizeClientRects(getSelectedTextRects(range, layer), surface.getBoundingClientRect());
+    const rects = normalizeClientRects(getSelectedGlyphLineRects(range, layer), surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
     onSelection(text, pageNumber, rects);
@@ -193,16 +200,16 @@ export function PdfPage({ pdf, pageNumber, zoom, capturedSelections, scrollRoot,
 }
 
 /**
- * Range#getClientRects() can include boxes contributed by PDF.js wrappers,
- * line breaks and trailing whitespace. Those boxes are the reason a highlight
- * can run through the empty space on the right side of a PDF line.
+ * PDF text selection is only used to determine which characters the user picked.
+ * Geometry is rebuilt from one-character ranges and then merged per visual line.
  *
- * Build a small range for each actually selected text node instead. Trimming
- * only the outer whitespace of each selected fragment keeps spaces inside a
- * sentence while removing PDF layout padding at line boundaries.
+ * This mirrors mature PDF readers such as Zotero: character boxes are the source
+ * of truth for annotation geometry, not the browser's multi-node selection box.
+ * A PDF.js span/wrapper may extend to the end of a column even when its visible
+ * glyphs do not; a one-character range cannot contribute that empty tail.
  */
-function getSelectedTextRects(range: Range, layer: HTMLElement): DOMRect[] {
-  const rects: DOMRect[] = [];
+function getSelectedGlyphLineRects(range: Range, layer: HTMLElement): ClientRectLike[] {
+  const glyphs: GlyphRect[] = [];
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
 
   while (walker.nextNode()) {
@@ -214,19 +221,38 @@ function getSelectedTextRects(range: Range, layer: HTMLElement): DOMRect[] {
     start = Math.max(0, Math.min(node.length, start));
     end = Math.max(start, Math.min(node.length, end));
 
-    const fragment = node.data.slice(start, end);
-    const leadingWhitespace = fragment.match(/^\s+/u)?.[0].length ?? 0;
-    const trailingWhitespace = fragment.match(/\s+$/u)?.[0].length ?? 0;
-    start += leadingWhitespace;
-    end -= trailingWhitespace;
-    if (start >= end) continue;
+    for (let offset = start; offset < end;) {
+      const codePoint = node.data.codePointAt(offset);
+      if (codePoint === undefined) break;
+      const charLength = codePoint > 0xffff ? 2 : 1;
+      const nextOffset = Math.min(end, offset + charLength);
+      const character = node.data.slice(offset, nextOffset);
 
-    const textRange = document.createRange();
-    textRange.setStart(node, start);
-    textRange.setEnd(node, end);
-    rects.push(...Array.from(textRange.getClientRects()));
-    textRange.detach();
+      if (!/^\s+$/u.test(character)) {
+        const charRange = document.createRange();
+        charRange.setStart(node, offset);
+        charRange.setEnd(node, nextOffset);
+        for (const rect of Array.from(charRange.getClientRects())) {
+          if (rect.width < 0.25 || rect.height < 0.25) continue;
+          // A single printable glyph should never span a substantial fraction
+          // of a PDF line. Reject the oversized wrapper-like rect that causes
+          // the "highlight to the right edge" failure in Chrome/PDF.js.
+          if (rect.width > rect.height * 4.5) continue;
+          glyphs.push({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+        }
+        charRange.detach();
+      }
+
+      offset = nextOffset;
+    }
   }
 
-  return rects;
+  return mergeGlyphRects(glyphs).map((rect) => ({
+    left: rect.left,
+    top: rect.top,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    width: rect.width,
+    height: rect.height,
+  }));
 }
