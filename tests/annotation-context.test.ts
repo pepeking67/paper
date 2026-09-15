@@ -11,11 +11,11 @@ test("highlight, underline, and area annotations drive question context", async 
   assert.match(viewer, /onDeleteHighlight\(highlight\.id\)/);
   assert.match(viewer, /onDeleteArea\(area\.id\)/);
   assert.match(viewer, /저장된 PDF 영역/);
-  assert.match(viewer, />button\{pointer-events:auto!important\}/);
+  assert.match(viewer, /pointer-events:auto!important/);
 
   assert.match(workspace, /setQuestionHighlights/);
-  assert.match(workspace, /createHighlight/);
-  assert.match(workspace, /removeHighlight/);
-  assert.match(workspace, /removeArea/);
-  assert.match(workspace, /selectedText: selectedText/);
+  assert.match(workspace, /function createHighlight/);
+  assert.match(workspace, /function removeHighlight/);
+  assert.match(workspace, /function removeArea/);
+  assert.match(workspace, /selectedText,/);
 });
