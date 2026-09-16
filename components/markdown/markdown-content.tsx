@@ -5,23 +5,79 @@ import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
-export function MarkdownContent({ content, compact = false }: { content: string; compact?: boolean }) {
+type EmbeddedPdfArea = {
+  id: string;
+  page: number;
+  imageDataUrl: string;
+};
+
+type MarkdownSegment =
+  | { kind: "markdown"; value: string }
+  | { kind: "area"; id: string };
+
+export function MarkdownContent({
+  content,
+  compact = false,
+  areas = [],
+}: {
+  content: string;
+  compact?: boolean;
+  areas?: EmbeddedPdfArea[];
+}) {
+  const areaById = new Map(areas.map((area) => [area.id, area]));
+  const segments = splitPdfAreaMarkers(content);
+
   return <div className={`markdown-content ${compact ? "markdown-content-compact" : ""}`}>
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-      components={{
-        a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
-        table: ({ children, ...props }) => <div className="markdown-table-wrap"><table {...props}>{children}</table></div>,
-        code: ({ className, children, ...props }) => {
-          const block = Boolean(className?.startsWith("language-"));
-          return block
-            ? <code {...props} className={className}>{children}</code>
-            : <code {...props} className="markdown-inline-code">{children}</code>;
-        },
-      }}
-    >
-      {content}
-    </ReactMarkdown>
+    {segments.map((segment, index) => {
+      if (segment.kind === "area") {
+        const area = areaById.get(segment.id);
+        if (!area) {
+          return <div key={`missing-area-${segment.id}-${index}`} className="markdown-pdf-area-missing" role="note">
+            저장된 PDF 영역을 찾을 수 없습니다. PDF에서 해당 영역이 지워졌다면 노트를 다시 생성하세요.
+          </div>;
+        }
+        return <figure key={`area-${segment.id}-${index}`} className="markdown-pdf-area">
+          <img src={area.imageDataUrl} alt={`PDF ${area.page}페이지에서 저장한 영역`} />
+          <figcaption>PDF p.{area.page} · 저장한 영역</figcaption>
+        </figure>;
+      }
+
+      if (!segment.value) return null;
+      return <ReactMarkdown
+        key={`markdown-${index}`}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
+          table: ({ children, ...props }) => <div className="markdown-table-wrap"><table {...props}>{children}</table></div>,
+          code: ({ className, children, ...props }) => {
+            const block = Boolean(className?.startsWith("language-"));
+            return block
+              ? <code {...props} className={className}>{children}</code>
+              : <code {...props} className="markdown-inline-code">{children}</code>;
+          },
+        }}
+      >
+        {segment.value}
+      </ReactMarkdown>;
+    })}
   </div>;
+}
+
+function splitPdfAreaMarkers(content: string): MarkdownSegment[] {
+  const pattern = /\[\[PDF_AREA:([^\]\r\n]+)\]\]/gu;
+  const segments: MarkdownSegment[] = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    if (start > cursor) segments.push({ kind: "markdown", value: content.slice(cursor, start) });
+    const id = match[1]?.trim();
+    if (id) segments.push({ kind: "area", id });
+    cursor = start + match[0].length;
+  }
+
+  if (cursor < content.length) segments.push({ kind: "markdown", value: content.slice(cursor) });
+  if (!segments.length) segments.push({ kind: "markdown", value: content });
+  return segments;
 }
