@@ -26,7 +26,7 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
         title="논문 목록 닫기"
         className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:bg-white/[.06] hover:text-white"
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18"/><path d="m6 10-2 2 2 2"/></svg>
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18"/></svg>
       </button>
     </header>
 
