@@ -30,7 +30,10 @@ export async function createPdfiumVisualRenderer(pdfBytes: Uint8Array): Promise<
   const filePtr = malloc(pdfBytes.byteLength);
   runtime.HEAPU8.set(pdfBytes, filePtr);
 
-  const documentPtr = pdfium.FPDF_LoadMemDocument(filePtr, pdfBytes.byteLength, 0);
+  // @embedpdf/pdfium's generated JS binding marshals the password string to
+  // the FPDF_BYTESTRING pointer expected by native PDFium. An empty string is
+  // the wrapper-level equivalent of "no password".
+  const documentPtr = pdfium.FPDF_LoadMemDocument(filePtr, pdfBytes.byteLength, "");
   if (!documentPtr) {
     const code = pdfium.FPDF_GetLastError();
     free(filePtr);
