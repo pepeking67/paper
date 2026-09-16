@@ -33,18 +33,29 @@ test("image block presentation metadata survives parsing", () => {
   assert.equal(blocks[0]?.imageAlign, "right");
 });
 
-test("study tray uses a block editor instead of a raw markdown textarea", async () => {
+test("study note is one live Notion-style editing surface", async () => {
   const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
   const editor = await readFile("components/study-note/notion-note-editor.tsx", "utf8");
   const markdown = await readFile("components/markdown/markdown-content.tsx", "utf8");
 
   assert.match(tray, /NotionNoteEditor/);
-  assert.match(tray, /블록 편집/);
-  assert.doesNotMatch(tray, /id="study-note-editor"/);
+  assert.doesNotMatch(tray, /noteMode/);
+  assert.doesNotMatch(tray, /미리보기.*블록 편집/s);
+  assert.match(tray, /보이는 그대로 편집/);
+
+  assert.match(editor, /contentEditable/);
+  assert.match(editor, /SlashMenu/);
+  assert.match(editor, /\/ 명령/);
+  assert.match(editor, /hover:bg-white\/\[\.035\]/);
   assert.match(editor, /draggable/);
-  assert.match(editor, /type="range"/);
+  assert.match(editor, /블록 메뉴 및 이동/);
+  assert.match(editor, /beginResize/);
+  assert.match(editor, /pointermove/);
+  assert.match(editor, /이미지 오른쪽 크기 조절/);
   assert.match(editor, /imageAlign/);
-  assert.match(editor, /Enter는 새 블록/);
+  assert.match(editor, /document\.execCommand\("bold"\)/);
+  assert.match(editor, /MarkdownContent content=\{serializeStudyNoteBlocks\(\[block\]\)\}/);
+
   assert.match(markdown, /width=\(\\d\{1,3\}\)/);
   assert.match(markdown, /style=\{\{ width:/);
 });
