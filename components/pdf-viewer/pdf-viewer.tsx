@@ -15,8 +15,10 @@ type PdfViewerProps = {
   onPageTextChange: (text: string) => void;
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
   onDeleteHighlight: (id: string) => void;
+  onRemoveQuestionHighlight: (id: string) => void;
   onSaveArea: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
   onDeleteArea: (id: string) => void;
+  onRemoveQuestionArea: (id: string) => void;
   onClearQuestionContext: () => void;
   savedHighlights: StudyHighlight[];
   savedAreas: StudyArea[];
@@ -42,8 +44,10 @@ export function PdfViewer({
   onPageTextChange,
   onSaveHighlight,
   onDeleteHighlight,
+  onRemoveQuestionHighlight,
   onSaveArea,
   onDeleteArea,
+  onRemoveQuestionArea,
   onClearQuestionContext,
   savedHighlights,
   savedAreas,
@@ -86,7 +90,12 @@ export function PdfViewer({
         installPdfJsCompatibility();
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-        task = pdfjs.getDocument({ data: bytes });
+        task = pdfjs.getDocument({
+          data: bytes,
+          cMapUrl: "/pdfjs/cmaps/",
+          cMapPacked: true,
+          standardFontDataUrl: "/pdfjs/standard_fonts/",
+        });
         document = await task.promise;
         if (controller.signal.aborted) return;
         setPdf(document);
@@ -191,7 +200,7 @@ export function PdfViewer({
             style={{ background: option.swatch }}
           />)}
         </div>}
-        <span className="text-[11px] text-[var(--muted)]">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 저장 항목과 질문 문맥에서 함께 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
+        <span className="text-[11px] text-[var(--muted)]">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 PDF와 Study Tray에서 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
       </div>}
 
       {pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
@@ -201,17 +210,17 @@ export function PdfViewer({
       <div className="flex flex-wrap gap-2">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
           <span className="max-w-72 truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
-          <button onClick={() => onDeleteHighlight(highlight.id)} aria-label={`Page ${highlight.page} 주석 삭제`} className="h-5 w-5 rounded-full">×</button>
+          <button onClick={() => onRemoveQuestionHighlight(highlight.id)} aria-label={`Page ${highlight.page} 질문 문맥에서 제외`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
         {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-2 rounded-lg border border-sky-500/50 bg-[#111] py-1 pl-1 pr-1 text-xs">
           <img src={area.imageDataUrl} alt="" className="h-8 w-12 rounded bg-white object-contain"/>
           <span>p.{area.page} · 영역</span>
-          <button onClick={() => onDeleteArea(area.id)} aria-label={`Page ${area.page} 영역 삭제`} className="h-5 w-5 rounded-full">×</button>
+          <button onClick={() => onRemoveQuestionArea(area.id)} aria-label={`Page ${area.page} 질문 문맥에서 제외`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
         <span className="mr-auto text-xs text-[var(--muted)]">주석 {questionHighlights.length}개 · 영역 {questionAreas.length}개를 다음 질문 문맥으로 사용합니다</span>
-        <button onClick={onClearQuestionContext} className="rounded border border-[var(--line)] px-3 py-1 text-xs">목록 전체 삭제</button>
+        <button onClick={onClearQuestionContext} className="rounded border border-[var(--line)] px-3 py-1 text-xs">질문 문맥 비우기</button>
       </div>
     </div>}
 
