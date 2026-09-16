@@ -2,23 +2,35 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("PDF viewer uses same-origin worker, CMaps, standard fonts, and PDF.js glyph-path rendering", async () => {
+test("PDF viewer keeps normal PDF.js fonts and uses a Chromium 138-139 PDFium visual fallback", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
+  const fallback = await readFile("lib/pdf/pdfium-visual-renderer.ts", "utf8");
   const layout = await readFile("app/layout.tsx", "utf8");
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const preparationScript = await readFile("scripts/prepare-pdf-worker.mjs", "utf8");
+
   assert.match(viewer, /workerSrc = "\/pdf\.worker\.min\.mjs"/);
   assert.match(layout, /pdfjs-dist\/web\/pdf_viewer\.css/);
   assert.match(viewer, /installPdfJsCompatibility\(\)/);
   assert.match(viewer, /cMapUrl: "\/pdfjs\/cmaps\/"/);
   assert.match(viewer, /cMapPacked: true/);
   assert.match(viewer, /standardFontDataUrl: "\/pdfjs\/standard_fonts\/"/);
-  assert.match(viewer, /disableFontFace: true/);
-  assert.match(viewer, /useSystemFonts: false/);
+  assert.doesNotMatch(viewer, /disableFontFace:\s*true/);
+  assert.doesNotMatch(viewer, /useSystemFonts:\s*false/);
+
+  assert.match(viewer, /needsChromiumFontMatrixFallback\(\)/);
+  assert.match(viewer, /createPdfiumVisualRenderer/);
+  assert.match(viewer, /installPdfiumPageRendering/);
+  assert.match(fallback, /major >= 138 && major < 140/);
+  assert.match(fallback, /FPDF_RenderPageBitmap/);
+  assert.match(fallback, /fetch\("\/pdfium\.wasm"\)/);
+  assert.equal(packageJson.dependencies["@embedpdf/pdfium"], "^2.15.0");
+
   assert.match(preparationScript, /Uint8Array\.prototype\.toHex/);
   assert.match(preparationScript, /Map\.prototype\.getOrInsertComputed/);
   assert.match(preparationScript, /path\.join\(packageRoot, "cmaps"\)/);
   assert.match(preparationScript, /path\.join\(packageRoot, "standard_fonts"\)/);
+  assert.match(preparationScript, /pdfium\.wasm/);
   assert.equal(packageJson.scripts.prebuild, "npm run prepare-pdf-worker");
   assert.equal(packageJson.scripts.predev, "npm run prepare-pdf-worker");
 });
