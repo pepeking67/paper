@@ -128,8 +128,16 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   return <main
     className="study-workspace relative grid h-dvh min-h-0 grid-cols-1 overflow-hidden"
     data-library-open={libraryOpen ? "true" : "false"}
-    data-chat-open={chatOpen ? "true" : "false"}
+    data-chat-open="false"
+    data-chat-drawer-open={chatOpen ? "true" : "false"}
   >
+    <style>{`
+      /* Question-context chips now live inside Study Chat so the PDF keeps its full vertical space. */
+      [aria-label="PDF 뷰어"] > header + div + div:not(.scrollbar) { display: none !important; }
+      /* Only one library toggle is visible at a time: the sidebar's own control while open. */
+      [aria-label="PDF 뷰어"] button[aria-label="논문 목록 닫기"] { display: none !important; }
+    `}</style>
+
     {(libraryOpen || chatOpen) && <button
       type="button"
       aria-label="열린 사이드바 닫기"
@@ -165,11 +173,16 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       />
     </div>
 
-    {chatOpen && <div className="fixed inset-y-0 right-0 z-40 w-[min(92vw,460px)] min-w-0 lg:static lg:z-auto lg:w-auto">
+    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,460px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)]">
       <StudyChat
         paper={initialPaper}
         context={context}
         savedInsights={tray.insights}
+        questionHighlights={questionHighlights}
+        questionAreas={questionAreas}
+        onRemoveQuestionHighlight={removeQuestionHighlight}
+        onRemoveQuestionArea={removeQuestionArea}
+        onClearQuestionContext={clearQuestionAnnotations}
         onClose={() => setChatVisibility(false)}
         onQuestionContextConsumed={clearQuestionAnnotations}
         onSaveInsight={(question, answer) => updateTray((current) => {
