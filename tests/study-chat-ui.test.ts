@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-test("study chat offers annotation-aware paper-reading prompts", async () => {
+test("study chat offers annotation-aware prompts and consumes used context", async () => {
   const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
   assert.match(chat, /표시한 내용을 설명해줘/);
   assert.match(chat, /표시한 주장의 근거를 분석해줘/);
@@ -12,4 +12,6 @@ test("study chat offers annotation-aware paper-reading prompts", async () => {
   assert.match(chat, /ask\(prompt\)/);
   assert.match(chat, /주석 문장 포함/);
   assert.match(chat, /영역 \$\{context\.selectedAreas\?\.length\}개 포함/);
+  assert.match(chat, /usedAnnotationContext = hasAnnotationContext/);
+  assert.match(chat, /if \(usedAnnotationContext\) onQuestionContextConsumed\?\.\(\)/);
 });

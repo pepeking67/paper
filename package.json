@@ -16,6 +16,7 @@
     "upload-papers": "tsx scripts/upload-papers/index.ts"
   },
   "dependencies": {
+    "@embedpdf/pdfium": "2.15.0",
     "@vercel/blob": "^2.0.0",
     "katex": "^0.16.22",
     "next": "^15.5.0",

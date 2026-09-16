@@ -123,15 +123,25 @@ export function StudyTray({
 
         <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!memo.trim()) return; onAddMemo(memo.trim()); setMemo(""); }}><label htmlFor="tray-memo" className="sr-only">자유 메모</label><textarea id="tray-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="자유 메모 추가…" rows={2} className="min-w-0 flex-1 resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/><button className="rounded-xl bg-white px-4 text-sm font-medium text-black">추가</button></form>
 
-        <TraySection title={`Annotations (${tray.highlights.length})`}>{tray.highlights.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("highlights", item.id)}><p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p><p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>{item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}</TrayItem>)}</TraySection>
+        <TraySection title={`Annotations (${tray.highlights.length})`}>
+          {tray.highlights.map((item) => <TrayItem key={item.id}>
+            <p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>
+            {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
+            <p className="mt-2 text-[10px] text-[var(--muted)]">삭제는 PDF의 지우개 도구에서만 할 수 있습니다.</p>
+          </TrayItem>)}
+        </TraySection>
 
         <TraySection title={`Areas (${areas.length})`}>
           {areas.length === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">수식·그림·표를 `영역` 도구로 사각형 선택하면 여기에 저장됩니다.</p>}
-          {areas.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("areas", item.id)}>
+          {areas.map((item) => <TrayItem key={item.id}>
             <p className="text-xs text-[var(--muted)]">Page {item.page} · Area annotation</p>
             <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded-xl border border-[var(--line)] bg-white object-contain"/>
             {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
-            <button type="button" onClick={() => onUseArea(item)} className="mt-3 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white/5">질문에 사용</button>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button type="button" onClick={() => onUseArea(item)} className="rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white/5">질문에 사용</button>
+              <span className="text-[10px] text-[var(--muted)]">삭제는 PDF 지우개에서</span>
+            </div>
           </TrayItem>)}
         </TraySection>
 
@@ -161,7 +171,7 @@ export function StudyTray({
           <button type="button" onClick={() => setNoteOpen(false)} aria-label="학습 노트 닫기" className="h-8 w-8 rounded-full text-xl text-[var(--muted)] hover:bg-white/5">×</button>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          {noteMode === "preview" ? <article className="scrollbar h-full overflow-y-auto px-5 py-7 sm:px-10 lg:px-16"><div className="mx-auto max-w-3xl"><MarkdownContent content={noteMarkdown} /></div></article> : <div className="h-full p-3 sm:p-4"><label htmlFor="study-note-editor" className="sr-only">학습 노트 Markdown 편집</label><textarea id="study-note-editor" value={noteMarkdown} onChange={(event) => persistNote(event.target.value)} spellCheck={false} className="scrollbar h-full w-full resize-none rounded-2xl border border-[var(--line)] bg-[#111] p-5 font-mono text-[13px] leading-6 outline-none"/></div>}
+          {noteMode === "preview" ? <article className="scrollbar h-full overflow-y-auto px-5 py-7 sm:px-10 lg:px-16"><div className="mx-auto max-w-3xl"><MarkdownContent content={noteMarkdown} areas={areas} /></div></article> : <div className="h-full p-3 sm:p-4"><label htmlFor="study-note-editor" className="sr-only">학습 노트 Markdown 편집</label><textarea id="study-note-editor" value={noteMarkdown} onChange={(event) => persistNote(event.target.value)} spellCheck={false} className="scrollbar h-full w-full resize-none rounded-2xl border border-[var(--line)] bg-[#111] p-5 font-mono text-[13px] leading-6 outline-none"/></div>}
         </div>
         <footer className="flex items-center justify-between border-t border-[var(--line)] px-4 py-2.5 text-[11px] text-[var(--muted)]"><span>편집 내용은 이 브라우저에 자동 저장됩니다.</span><button disabled={noteLoading} type="button" onClick={() => void generateStudyNote()} className="rounded-lg px-2.5 py-1.5 text-[var(--accent)] hover:bg-[var(--accent-soft)]">{noteLoading ? "재생성 중…" : "자료에서 다시 생성"}</button></footer>
       </section>
@@ -170,4 +180,4 @@ export function StudyTray({
 }
 
 function TraySection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="mt-6"><h3 className="border-b border-[var(--line)] pb-2 font-semibold">{title}</h3><div className="mt-3 space-y-2">{children}</div></section>; }
-function TrayItem({ children, onRemove }: { children: React.ReactNode; onRemove: () => void }) { return <article className="relative rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3 pr-10">{children}<button onClick={onRemove} aria-label="저장 항목 삭제" className="absolute right-3 top-2 text-lg text-[var(--muted)]">×</button></article>; }
+function TrayItem({ children, onRemove }: { children: React.ReactNode; onRemove?: () => void }) { return <article className={`relative rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,.035)] p-3 ${onRemove ? "pr-10" : ""}`}>{children}{onRemove && <button onClick={onRemove} aria-label="저장 항목 삭제" className="absolute right-3 top-2 text-lg text-[var(--muted)]">×</button>}</article>; }

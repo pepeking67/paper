@@ -10,11 +10,13 @@ export function StudyChat({
   context,
   onSaveInsight,
   onHistoryChange,
+  onQuestionContextConsumed,
 }: {
   paper: Paper;
   context: StudyContext;
   onSaveInsight: (question: string, answer: string) => void;
   onHistoryChange?: (messages: ChatTurn[]) => void;
+  onQuestionContextConsumed?: () => void;
 }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatTurn[]>([]);
@@ -49,6 +51,7 @@ export function StudyChat({
     const question = value.trim();
     if (!question || loading) return;
     const previous = messages;
+    const usedAnnotationContext = hasAnnotationContext;
     save([...previous, { role: "user", content: question }]);
     setInput(""); setLoading(true); setError("");
     try {
@@ -56,6 +59,7 @@ export function StudyChat({
       const data = await response.json();
       if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "AI 응답 실패"}`);
       save([...previous, { role: "user", content: question }, { role: "assistant", content: data.message }]);
+      if (usedAnnotationContext) onQuestionContextConsumed?.();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "AI 응답 실패"); }
     finally { setLoading(false); }
   }

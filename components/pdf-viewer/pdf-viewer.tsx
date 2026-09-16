@@ -1,11 +1,16 @@
 "use client";
 
-import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea, StudyHighlight } from "@/lib/study-tray/types";
 import { installPdfJsCompatibility } from "@/lib/pdf/uint8array-to-hex";
+import {
+  createPdfiumVisualRenderer,
+  needsChromiumFontMatrixFallback,
+  type PdfiumVisualRenderer,
+} from "@/lib/pdf/pdfium-visual-renderer";
 import { PdfPage } from "./pdf-page";
 
 type PdfViewerProps = {
@@ -15,8 +20,10 @@ type PdfViewerProps = {
   onPageTextChange: (text: string) => void;
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
   onDeleteHighlight: (id: string) => void;
+  onRemoveQuestionHighlight: (id: string) => void;
   onSaveArea: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
   onDeleteArea: (id: string) => void;
+  onRemoveQuestionArea: (id: string) => void;
   onClearQuestionContext: () => void;
   savedHighlights: StudyHighlight[];
   savedAreas: StudyArea[];
@@ -42,8 +49,10 @@ export function PdfViewer({
   onPageTextChange,
   onSaveHighlight,
   onDeleteHighlight,
+  onRemoveQuestionHighlight,
   onSaveArea,
   onDeleteArea,
+  onRemoveQuestionArea,
   onClearQuestionContext,
   savedHighlights,
   savedAreas,
@@ -65,6 +74,7 @@ export function PdfViewer({
     const controller = new AbortController();
     let task: PDFDocumentLoadingTask | undefined;
     let document: PDFDocumentProxy | undefined;
+    let visualRenderer: PdfiumVisualRenderer | undefined;
     setPdf(null);
     setLoadState("loading");
     setError("");
@@ -82,13 +92,41 @@ export function PdfViewer({
           setError(message);
           return;
         }
-        const bytes = await response.arrayBuffer();
+
+        const sourceBytes = new Uint8Array(await response.arrayBuffer());
+        // Chromium 138/139 has an upstream CFF FontMatrix regression for the
+        // embedded Type1 math fonts produced by PDF.js. Only those browser
+        // versions use PDFium for visible pixels; PDF.js remains responsible
+        // for text extraction, selection, and annotation geometry.
+        const usePdfiumVisualFallback = needsChromiumFontMatrixFallback();
+        const pdfiumPromise = usePdfiumVisualFallback
+          ? createPdfiumVisualRenderer(sourceBytes).catch(() => null)
+          : null;
+
         installPdfJsCompatibility();
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-        task = pdfjs.getDocument({ data: bytes });
+        task = pdfjs.getDocument({
+          // PDF.js transfers typed-array ownership to its worker. Keep the
+          // original bytes alive only when the Chromium/PDFium visual fallback
+          // needs a second copy of the same document.
+          data: usePdfiumVisualFallback ? sourceBytes.slice() : sourceBytes,
+          cMapUrl: "/pdfjs/cmaps/",
+          cMapPacked: true,
+          standardFontDataUrl: "/pdfjs/standard_fonts/",
+        });
         document = await task.promise;
         if (controller.signal.aborted) return;
+
+        if (pdfiumPromise) {
+          visualRenderer = (await pdfiumPromise) ?? undefined;
+          if (visualRenderer) installPdfiumPageRendering(document, visualRenderer);
+        }
+        if (controller.signal.aborted) {
+          visualRenderer?.close();
+          return;
+        }
+
         setPdf(document);
         setLoadState("ready");
         onPageChange(1);
@@ -102,6 +140,7 @@ export function PdfViewer({
     void loadPdf();
     return () => {
       controller.abort();
+      visualRenderer?.close();
       void task?.destroy();
       if (!task) void document?.destroy();
     };
@@ -191,7 +230,7 @@ export function PdfViewer({
             style={{ background: option.swatch }}
           />)}
         </div>}
-        <span className="text-[11px] text-[var(--muted)]">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 저장 항목과 질문 문맥에서 함께 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
+        <span className="text-[11px] text-[var(--muted)]">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 PDF와 Study Tray에서 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
       </div>}
 
       {pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
@@ -201,17 +240,17 @@ export function PdfViewer({
       <div className="flex flex-wrap gap-2">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
           <span className="max-w-72 truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
-          <button onClick={() => onDeleteHighlight(highlight.id)} aria-label={`Page ${highlight.page} 주석 삭제`} className="h-5 w-5 rounded-full">×</button>
+          <button onClick={() => onRemoveQuestionHighlight(highlight.id)} aria-label={`Page ${highlight.page} 질문 문맥에서 제외`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
         {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-2 rounded-lg border border-sky-500/50 bg-[#111] py-1 pl-1 pr-1 text-xs">
           <img src={area.imageDataUrl} alt="" className="h-8 w-12 rounded bg-white object-contain"/>
           <span>p.{area.page} · 영역</span>
-          <button onClick={() => onDeleteArea(area.id)} aria-label={`Page ${area.page} 영역 삭제`} className="h-5 w-5 rounded-full">×</button>
+          <button onClick={() => onRemoveQuestionArea(area.id)} aria-label={`Page ${area.page} 질문 문맥에서 제외`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
         <span className="mr-auto text-xs text-[var(--muted)]">주석 {questionHighlights.length}개 · 영역 {questionAreas.length}개를 다음 질문 문맥으로 사용합니다</span>
-        <button onClick={onClearQuestionContext} className="rounded border border-[var(--line)] px-3 py-1 text-xs">목록 전체 삭제</button>
+        <button onClick={onClearQuestionContext} className="rounded border border-[var(--line)] px-3 py-1 text-xs">질문 문맥 비우기</button>
       </div>
     </div>}
 
@@ -243,6 +282,59 @@ export function PdfViewer({
       </div>}
     </div>
   </section>;
+}
+
+function installPdfiumPageRendering(pdf: PDFDocumentProxy, renderer: PdfiumVisualRenderer) {
+  const originalGetPage = pdf.getPage.bind(pdf);
+  const patchedPages = new WeakSet<object>();
+  const documentWithPatchedGetPage = pdf as unknown as {
+    getPage: (pageNumber: number) => Promise<PDFPageProxy>;
+  };
+
+  documentWithPatchedGetPage.getPage = async (pageNumber: number) => {
+    const page = await originalGetPage(pageNumber);
+    if (patchedPages.has(page)) return page;
+    patchedPages.add(page);
+
+    type RenderMethod = PDFPageProxy["render"];
+    const originalRender = page.render.bind(page) as RenderMethod;
+    const pageWithPatchedRender = page as unknown as { render: RenderMethod };
+    pageWithPatchedRender.render = ((parameters: Parameters<RenderMethod>[0]) => {
+      const canvas = parameters.canvas;
+      if (!canvas) return originalRender(parameters);
+
+      let cancelled = false;
+      let fallbackTask: ReturnType<RenderMethod> | undefined;
+      const promise = renderer.renderPage(pageNumber - 1, canvas, () => cancelled)
+        .catch(() => {
+          if (cancelled) throw createRenderingCancelledError();
+          // PDFium is a compatibility renderer, not a single point of failure.
+          // If WASM rendering fails unexpectedly, retain the normal PDF.js path.
+          fallbackTask = originalRender(parameters);
+          if (cancelled) fallbackTask.cancel();
+          return fallbackTask.promise;
+        })
+        .then(() => {
+          if (cancelled) throw createRenderingCancelledError();
+        });
+
+      return {
+        promise,
+        cancel: () => {
+          cancelled = true;
+          fallbackTask?.cancel();
+        },
+      } as unknown as ReturnType<RenderMethod>;
+    }) as RenderMethod;
+
+    return page;
+  };
+}
+
+function createRenderingCancelledError() {
+  const error = new Error("Rendering cancelled");
+  error.name = "RenderingCancelledException";
+  return error;
 }
 
 function ToolButton({ active, onClick, label, title }: { active: boolean; onClick: () => void; label: string; title: string }) {
