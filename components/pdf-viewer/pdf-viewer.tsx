@@ -94,6 +94,10 @@ export function PdfViewer({
         }
 
         const sourceBytes = new Uint8Array(await response.arrayBuffer());
+        // Chromium 138/139 has an upstream CFF FontMatrix regression for the
+        // embedded Type1 math fonts produced by PDF.js. Only those browser
+        // versions use PDFium for visible pixels; PDF.js remains responsible
+        // for text extraction, selection, and annotation geometry.
         const usePdfiumVisualFallback = needsChromiumFontMatrixFallback();
         const pdfiumPromise = usePdfiumVisualFallback
           ? createPdfiumVisualRenderer(sourceBytes).catch(() => null)
