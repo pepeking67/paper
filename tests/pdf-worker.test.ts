@@ -24,7 +24,7 @@ test("PDF viewer keeps normal PDF.js fonts and uses a Chromium 138-139 PDFium vi
   assert.match(fallback, /major >= 138 && major < 140/);
   assert.match(fallback, /FPDF_RenderPageBitmap/);
   assert.match(fallback, /fetch\("\/pdfium\.wasm"\)/);
-  assert.equal(packageJson.dependencies["@embedpdf/pdfium"], "^2.15.0");
+  assert.equal(packageJson.dependencies["@embedpdf/pdfium"], "2.15.0");
 
   assert.match(preparationScript, /Uint8Array\.prototype\.toHex/);
   assert.match(preparationScript, /Map\.prototype\.getOrInsertComputed/);
