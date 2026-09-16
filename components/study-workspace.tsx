@@ -35,6 +35,17 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setChatOpen(storedChat === "true");
   }, []);
 
+  useEffect(() => {
+    if (!chatOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setChatOpen(false);
+      try { localStorage.setItem("paper-study-chat-open", "false"); } catch { /* Keep UI state in memory. */ }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [chatOpen]);
+
   function setLibraryVisibility(open: boolean) {
     setLibraryOpen(open);
     try { localStorage.setItem("paper-study-library-open", String(open)); } catch { /* Keep UI state in memory. */ }
@@ -138,11 +149,18 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       [aria-label="PDF 뷰어"] button[aria-label="논문 목록 닫기"] { display: none !important; }
     `}</style>
 
-    {(libraryOpen || chatOpen) && <button
+    {libraryOpen && !chatOpen && <button
       type="button"
-      aria-label="열린 사이드바 닫기"
+      aria-label="논문 목록 바깥 영역"
       className="fixed inset-0 z-30 bg-black/55 lg:hidden"
-      onClick={() => { setLibraryVisibility(false); setChatVisibility(false); }}
+      onPointerDown={() => setLibraryVisibility(false)}
+    />}
+
+    {chatOpen && <button
+      type="button"
+      aria-label="질의응답 바깥 영역"
+      className="fixed inset-0 z-40 bg-black/30 lg:bg-black/10"
+      onPointerDown={() => setChatVisibility(false)}
     />}
 
     {libraryOpen && <div className="fixed inset-y-0 left-0 z-40 w-[min(88vw,300px)] min-w-0 lg:static lg:z-auto lg:w-auto">
