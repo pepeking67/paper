@@ -3,14 +3,19 @@
 import { type FormEvent, useEffect, useState } from "react";
 import type { ChatTurn, StudyContext } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
-import type { StudyInsight } from "@/lib/study-tray/types";
+import type { StudyArea, StudyHighlight, StudyInsight } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 
 export function StudyChat({
   paper,
   context,
   savedInsights,
+  questionHighlights,
+  questionAreas,
   onSaveInsight,
+  onRemoveQuestionHighlight,
+  onRemoveQuestionArea,
+  onClearQuestionContext,
   onClose,
   onHistoryChange,
   onQuestionContextConsumed,
@@ -18,7 +23,12 @@ export function StudyChat({
   paper: Paper;
   context: StudyContext;
   savedInsights: StudyInsight[];
+  questionHighlights: StudyHighlight[];
+  questionAreas: StudyArea[];
   onSaveInsight: (question: string, answer: string) => void;
+  onRemoveQuestionHighlight: (id: string) => void;
+  onRemoveQuestionArea: (id: string) => void;
+  onClearQuestionContext: () => void;
   onClose: () => void;
   onHistoryChange?: (messages: ChatTurn[]) => void;
   onQuestionContextConsumed?: () => void;
@@ -30,6 +40,7 @@ export function StudyChat({
   const storageKey = `paper-study-chat:${paper.id}`;
   const hasAreas = Boolean(context.selectedAreas?.length);
   const hasAnnotationContext = Boolean(context.selectedText || hasAreas);
+  const contextCount = questionHighlights.length + questionAreas.length;
   const quickPrompts = hasAnnotationContext
     ? ["표시한 내용을 설명해줘", "표시한 주장의 근거를 분석해줘", "표시한 수식이나 영역을 단계별로 설명해줘"]
     : ["현재 페이지의 핵심을 요약해줘", "이 논문의 핵심 기여를 설명해줘", "논문의 가정과 한계를 비판적으로 검토해줘"];
@@ -76,12 +87,34 @@ export function StudyChat({
 
   return <aside className="flex h-full min-h-0 flex-col border-l border-[var(--line)] bg-black" aria-label="학습 대화">
     <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] p-3.5">
-      <div className="min-w-0"><p className="text-[11px] font-semibold tracking-[.12em] text-[var(--accent)]">STUDY CHAT</p><h2 className="mt-0.5 truncate font-medium">논문에 질문하기</h2></div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2"><p className="text-[11px] font-semibold tracking-[.12em] text-[var(--accent)]">STUDY CHAT</p>{contextCount > 0 && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[#8ec5ff]">문맥 {contextCount}</span>}</div>
+        <h2 className="mt-0.5 truncate font-medium">논문에 질문하기</h2>
+      </div>
       <div className="flex shrink-0 items-center gap-2">
         {messages.length > 0 && <button onClick={() => save([])} className="text-xs text-[var(--muted)]">대화 지우기</button>}
         <button type="button" onClick={onClose} aria-label="질의응답 닫기" title="질의응답 닫기" className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:bg-white/[.06] hover:text-white">×</button>
       </div>
     </header>
+
+    {contextCount > 0 && <section className="border-b border-[var(--line)] bg-black/80 px-3.5 py-3" aria-label="질문 문맥">
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="text-xs font-medium text-[#e5e5ea]">질문 문맥</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">다음 질문에만 사용되고 답변 성공 후 자동으로 비워집니다.</p></div>
+        <button type="button" onClick={onClearQuestionContext} className="shrink-0 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--muted)] hover:bg-white/[.06] hover:text-white">전체 비우기</button>
+      </div>
+      <div className="scrollbar mt-2.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto pr-1">
+        {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-white/[.045] py-1 pl-2.5 pr-1 text-[11px]">
+          <span className="max-w-[290px] truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
+          <button type="button" onClick={() => onRemoveQuestionHighlight(highlight.id)} aria-label={`Page ${highlight.page} 질문 문맥에서 제외`} className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-white/[.08] hover:text-white">×</button>
+        </span>)}
+        {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-1.5 rounded-lg border border-sky-500/35 bg-white/[.045] py-1 pl-1 pr-1 text-[11px]">
+          <img src={area.imageDataUrl} alt="" className="h-7 w-10 rounded bg-white object-contain"/>
+          <span>p.{area.page} · 영역</span>
+          <button type="button" onClick={() => onRemoveQuestionArea(area.id)} aria-label={`Page ${area.page} 질문 문맥에서 제외`} className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-white/[.08] hover:text-white">×</button>
+        </span>)}
+      </div>
+    </section>}
+
     <div className="scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
       {messages.length === 0 && <div className="rounded-xl border border-[var(--line)] bg-[#111] p-4 text-sm leading-relaxed text-[#bbb]">Gemini API가 현재 페이지와 형광펜·밑줄·영역으로 표시한 질문 문맥, 최근 대화를 사용해 답합니다. 답변은 Markdown과 수식 문법을 렌더링합니다. 일반 대화는 Study Tray에 자동 저장되지 않으며, 남기고 싶은 답변만 <strong>Save Insight</strong>로 저장합니다.</div>}
       {messages.map((message, index) => {
@@ -103,6 +136,12 @@ export function StudyChat({
       {loading && <p role="status" className="text-sm text-[var(--muted)]">답변을 생성하는 중…</p>}
       {error && <p role="alert" className="rounded-lg border border-[var(--danger)] p-3 text-sm">{error}</p>}
     </div>
-    <form onSubmit={submit} className="border-t border-[var(--line)] p-3.5"><div className="mb-2 flex gap-1 overflow-x-auto pb-1" aria-label="빠른 질문">{quickPrompts.map((prompt) => <button key={prompt} type="button" disabled={loading} onClick={() => void ask(prompt)} className="shrink-0 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[#bbb] hover:bg-white/5 disabled:opacity-40">{prompt}</button>)}</div><label htmlFor="chat" className="sr-only">질문</label><textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/><div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-xs text-[var(--muted)]">문맥: p.{context.page}{context.selectedText ? " · 주석 문장 포함" : ""}{hasAreas ? ` · 영역 ${context.selectedAreas?.length}개 포함` : ""}</span><button disabled={loading || !input.trim()} className="shrink-0 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-40">질문하기</button></div></form>
+
+    <form onSubmit={submit} className="border-t border-[var(--line)] p-3.5">
+      <div className="mb-2 flex gap-1 overflow-x-auto pb-1" aria-label="빠른 질문">{quickPrompts.map((prompt) => <button key={prompt} type="button" disabled={loading} onClick={() => void ask(prompt)} className="shrink-0 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[#bbb] hover:bg-white/5 disabled:opacity-40">{prompt}</button>)}</div>
+      <label htmlFor="chat" className="sr-only">질문</label>
+      <textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/>
+      <div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-xs text-[var(--muted)]">p.{context.page}{contextCount > 0 ? ` · 질문 문맥 ${contextCount}개` : " · 현재 페이지 기준"}</span><button disabled={loading || !input.trim()} className="shrink-0 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-40">질문하기</button></div>
+    </form>
   </aside>;
 }
