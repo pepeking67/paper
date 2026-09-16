@@ -28,7 +28,7 @@ body {
     linear-gradient(180deg, #101012 0%, #09090a 100%);
 }
 
-button, input, textarea { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button, a { transition: transform 160ms cubic-bezier(.2,.8,.2,1), background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, box-shadow 160ms ease; }
 button:not(:disabled):hover, a:hover { filter: none; }
 button:not(:disabled):active, a:active { transform: scale(.975); }
@@ -43,12 +43,15 @@ input, textarea {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.015);
 }
 input::placeholder, textarea::placeholder { color: #7d7d82 !important; }
+select { color-scheme: dark; }
 
 .scrollbar { scrollbar-color: rgba(255,255,255,.22) transparent; scrollbar-width: thin; }
 
-.study-workspace { grid-template-columns: 1fr; background: #0b0b0c !important; }
+.study-workspace { grid-template-columns: minmax(0, 1fr); background: #0b0b0c !important; }
 @media (min-width: 1024px) {
-  .study-workspace { grid-template-columns: var(--library-width, 220px) minmax(360px, 1fr) var(--chat-width, 440px); }
+  .study-workspace[data-library-open="true"][data-chat-open="false"] { grid-template-columns: 280px minmax(0, 1fr); }
+  .study-workspace[data-library-open="false"][data-chat-open="true"] { grid-template-columns: minmax(0, 1fr) 420px; }
+  .study-workspace[data-library-open="true"][data-chat-open="true"] { grid-template-columns: 280px minmax(0, 1fr) 420px; }
 }
 
 /* Apple-like materials and hierarchy */
@@ -57,6 +60,7 @@ input::placeholder, textarea::placeholder { color: #7d7d82 !important; }
   border-color: var(--line) !important;
   backdrop-filter: saturate(180%) blur(28px);
   -webkit-backdrop-filter: saturate(180%) blur(28px);
+  box-shadow: 18px 0 50px rgba(0,0,0,.20);
 }
 
 [aria-label="PDF 뷰어"] {
@@ -76,6 +80,7 @@ input::placeholder, textarea::placeholder { color: #7d7d82 !important; }
   border-color: var(--line) !important;
   backdrop-filter: saturate(180%) blur(24px);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: -18px 0 50px rgba(0,0,0,.20);
 }
 [aria-label="학습 대화"] > header,
 [aria-label="학습 대화"] > form {
@@ -109,17 +114,6 @@ input::placeholder, textarea::placeholder { color: #7d7d82 !important; }
 .study-workspace button:not(:disabled):hover {
   border-color: var(--line-strong);
 }
-
-.workspace-resizer:active { transform: none; }
-.workspace-resizer > span:first-child { background: rgba(255,255,255,.10) !important; }
-.workspace-resizer:hover > span:first-child,
-.workspace-resizer:focus-visible > span:first-child { background: var(--accent) !important; }
-.workspace-resizer > span:last-child {
-  background: rgba(255,255,255,.26) !important;
-  box-shadow: 0 0 0 1px rgba(0,0,0,.32);
-}
-.workspace-resizer:hover > span:last-child,
-.workspace-resizer:focus-visible > span:last-child { background: var(--accent) !important; }
 
 /* Markdown is the shared visual language for AI answers and durable study notes. */
 .markdown-content {
