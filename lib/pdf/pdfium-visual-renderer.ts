@@ -15,6 +15,12 @@ type PdfiumHeapRuntime = WrappedPdfiumModule["pdfium"] & {
 
 let pdfiumModulePromise: Promise<WrappedPdfiumModule> | null = null;
 
+/**
+ * Chromium 138/139 regressed CFF FontMatrix transforms produced by PDF.js for
+ * embedded Type1 fonts (Chromium issue 428482739 / PDF.js issue 20143).
+ * Chromium 140 contains the upstream Fontations fix, so do not pay the WASM
+ * rendering cost outside the affected browser window.
+ */
 export function needsChromiumFontMatrixFallback(userAgent = globalThis.navigator?.userAgent ?? "") {
   const edge = /Edg\/(\d+)/u.exec(userAgent);
   const chrome = /(?:Chrome|Chromium)\/(\d+)/u.exec(userAgent);
