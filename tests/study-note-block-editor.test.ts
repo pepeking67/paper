@@ -58,9 +58,10 @@ test("study note is one live Notion-style editing surface", async () => {
 
   assert.match(editor, /katex\.renderToString/);
   assert.match(editor, /data-inline-math/);
-  assert.match(editor, /\$\(\[\^\$\\n\]\+\)\$/);
+  assert.match(editor, /renderInlineMath\(inner\)/);
   assert.match(editor, /<strong>\$1<\/strong>/);
   assert.match(editor, /<del>\$1<\/del>/);
+  assert.match(editor, /isThematicMarkdown/);
 
   assert.match(markdown, /width=\(\\d\{1,3\}\)/);
   assert.match(markdown, /style=\{\{ width:/);
