@@ -15,6 +15,10 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(workspace, /fixed inset-y-0 right-0 z-50/);
   assert.match(workspace, /header \+ div \+ div:not\(\.scrollbar\)/);
   assert.match(workspace, /PDF 뷰어.*논문 목록 닫기/s);
+  assert.match(workspace, /aria-label="질의응답 바깥 영역"/);
+  assert.match(workspace, /onPointerDown=\{\(\) => setChatVisibility\(false\)\}/);
+  assert.match(workspace, /event\.key !== "Escape"/);
+  assert.match(workspace, /paper-study-chat-open", "false"/);
 
   assert.match(viewer, /onToggleLibrary/);
   assert.match(viewer, /onToggleChat/);
