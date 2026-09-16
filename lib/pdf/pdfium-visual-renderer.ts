@@ -9,6 +9,10 @@ export type PdfiumVisualRenderer = {
   close: () => void;
 };
 
+type PdfiumHeapRuntime = WrappedPdfiumModule["pdfium"] & {
+  HEAPU8: Uint8Array;
+};
+
 let pdfiumModulePromise: Promise<WrappedPdfiumModule> | null = null;
 
 export function needsChromiumFontMatrixFallback(userAgent = globalThis.navigator?.userAgent ?? "") {
@@ -20,10 +24,11 @@ export function needsChromiumFontMatrixFallback(userAgent = globalThis.navigator
 
 export async function createPdfiumVisualRenderer(pdfBytes: Uint8Array): Promise<PdfiumVisualRenderer> {
   const pdfium = await getPdfiumModule();
-  const malloc = pdfium.pdfium.wasmExports.malloc;
-  const free = pdfium.pdfium.wasmExports.free;
+  const runtime = pdfium.pdfium as PdfiumHeapRuntime;
+  const malloc = runtime.wasmExports.malloc;
+  const free = runtime.wasmExports.free;
   const filePtr = malloc(pdfBytes.byteLength);
-  pdfium.pdfium.HEAPU8.set(pdfBytes, filePtr);
+  runtime.HEAPU8.set(pdfBytes, filePtr);
 
   const documentPtr = pdfium.FPDF_LoadMemDocument(filePtr, pdfBytes.byteLength, 0);
   if (!documentPtr) {
@@ -67,8 +72,8 @@ export async function createPdfiumVisualRenderer(pdfBytes: Uint8Array): Promise<
 
           const bufferSize = pixelWidth * pixelHeight * 4;
           const rgba = new Uint8ClampedArray(
-            pdfium.pdfium.HEAPU8.buffer,
-            pdfium.pdfium.HEAPU8.byteOffset + bufferPtr,
+            runtime.HEAPU8.buffer,
+            runtime.HEAPU8.byteOffset + bufferPtr,
             bufferSize,
           ).slice();
           if (isCancelled()) return;
