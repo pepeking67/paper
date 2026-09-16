@@ -29,6 +29,10 @@ type PdfViewerProps = {
   savedAreas: StudyArea[];
   questionHighlights: StudyHighlight[];
   questionAreas: StudyArea[];
+  libraryOpen: boolean;
+  chatOpen: boolean;
+  onToggleLibrary: () => void;
+  onToggleChat: () => void;
 };
 
 type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
@@ -58,6 +62,10 @@ export function PdfViewer({
   savedAreas,
   questionHighlights,
   questionAreas,
+  libraryOpen,
+  chatOpen,
+  onToggleLibrary,
+  onToggleChat,
 }: PdfViewerProps) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -184,26 +192,50 @@ export function PdfViewer({
 
   const contextCount = questionHighlights.length + questionAreas.length;
 
-  return <section className="flex min-h-[620px] flex-col bg-[#111] lg:min-h-0" aria-label="PDF 뷰어">
+  return <section className="flex h-full min-h-0 flex-col bg-[#111]" aria-label="PDF 뷰어">
     <style>{`[aria-label="저장된 PDF 영역"]{pointer-events:none!important}[aria-label="저장된 PDF 영역"]>button{pointer-events:auto!important}`}</style>
-    <header className="border-b border-[var(--line)] px-5 py-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <header className="border-b border-[var(--line)] px-3 py-2.5 sm:px-4">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onToggleLibrary}
+          aria-label={libraryOpen ? "논문 목록 닫기" : "논문 목록 열기"}
+          aria-pressed={libraryOpen}
+          title={libraryOpen ? "논문 목록 닫기" : "논문 목록 열기"}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:bg-white/[.06] hover:text-white"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18"/></svg>
+        </button>
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-[var(--accent)]">{paper.tag} / {paper.id}</p>
-          <h2 className="mt-1 font-medium">{paper.title}</h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="shrink-0 text-[10px] font-semibold tracking-[.08em] text-[var(--accent)]">{paper.tag}</p>
+            <span className="text-[10px] text-[var(--muted)]">{paper.id}</span>
+          </div>
+          <h2 className="mt-0.5 truncate text-sm font-medium sm:text-base">{paper.title}</h2>
+          <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onToggleChat}
+            aria-label={chatOpen ? "질의응답 닫기" : "질의응답 열기"}
+            aria-pressed={chatOpen}
+            title={chatOpen ? "질의응답 닫기" : "질의응답 열기"}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 text-xs text-[#d7d7dc] hover:bg-white/[.06]"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><path d="M5 5.5A3.5 3.5 0 0 1 8.5 2h7A3.5 3.5 0 0 1 19 5.5v7a3.5 3.5 0 0 1-3.5 3.5H11l-4.5 4v-4A3.5 3.5 0 0 1 3 12.5v-7Z"/><path d="M8 8h8M8 11.5h5"/></svg>
+            <span className="hidden sm:inline">질의응답</span>
+          </button>
           <div id="paper-header-actions" className="flex items-center gap-2"/>
-          <a href={paper.notionUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-[#222]">Notion ↗</a>
+          <a href={paper.notionUrl} target="_blank" rel="noreferrer" className="hidden h-8 items-center rounded-lg border border-[var(--line)] px-2.5 text-xs hover:bg-[#222] sm:flex">Notion ↗</a>
         </div>
       </div>
     </header>
 
-    <div className="border-b border-[var(--line)] bg-black px-4 py-2">
+    <div className="border-b border-[var(--line)] bg-black px-3 py-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-[var(--muted)]">{pdf ? `현재 ${page} / ${pdf.numPages} 페이지` : "PDF를 불러오는 중입니다"}</span>
-        {pdf && <div className="flex items-center gap-2 text-xs">
+        <span className="text-[11px] text-[var(--muted)]">{pdf ? `${page} / ${pdf.numPages} 페이지` : "PDF를 불러오는 중입니다"}</span>
+        {pdf && <div className="flex items-center gap-1.5 text-xs">
           <label htmlFor="page-jump" className="sr-only">페이지 이동</label>
           <input id="page-jump" type="number" min={1} max={pdf.numPages} value={page} onChange={(event) => { const target = Math.max(1, Math.min(pdf.numPages, Number(event.target.value))); onPageChange(target); scrollToPage(target); }} className="w-14 rounded border border-[var(--line)] bg-[#111] px-2 py-1 text-center"/>
           <button onClick={() => setZoom((value) => Math.max(75, value - 25))} disabled={zoom <= 75} aria-label="축소" className="rounded border border-[var(--line)] px-2 py-1">−</button>
@@ -212,7 +244,7 @@ export function PdfViewer({
         </div>}
       </div>
 
-      {pdf && <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[#222] pt-2">
+      {pdf && <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-[#222] pt-1.5">
         <div className="flex items-center rounded-lg border border-[var(--line)] bg-[#111] p-0.5" role="group" aria-label="PDF 주석 도구">
           <ToolButton active={tool === "highlight"} onClick={() => setTool("highlight")} label="형광펜" title="드래그하면 형광펜으로 저장되고 다음 질문 문맥에도 추가"/>
           <ToolButton active={tool === "underline"} onClick={() => setTool("underline")} label="밑줄" title="드래그하면 밑줄로 저장되고 다음 질문 문맥에도 추가"/>
@@ -230,13 +262,13 @@ export function PdfViewer({
             style={{ background: option.swatch }}
           />)}
         </div>}
-        <span className="text-[11px] text-[var(--muted)]">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 PDF와 Study Tray에서 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
+        <span className="hidden text-[10px] text-[var(--muted)] xl:inline">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 PDF와 Study Tray에서 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
       </div>}
 
-      {pdf && <div className="mt-2 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
+      {pdf && <div className="mt-1.5 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
     </div>
 
-    {contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-3">
+    {contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-2.5">
       <div className="flex flex-wrap gap-2">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
           <span className="max-w-72 truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
@@ -254,12 +286,12 @@ export function PdfViewer({
       </div>
     </div>}
 
-    <div ref={setScrollRoot} className="scrollbar flex-1 overflow-auto overscroll-contain p-3 touch-pan-y sm:p-5">
+    <div ref={setScrollRoot} className="scrollbar min-h-0 flex-1 overflow-auto overscroll-contain p-2 touch-pan-y sm:p-3">
       {loadState === "loading" && <DocumentLoading />}
       {loadState === "missing" && <EmptyPdf />}
       {loadState === "blob-error" && <LoadError title="Blob에서 PDF를 가져오지 못했습니다" detail={error} />}
       {loadState === "parse-error" && <LoadError title="PDF 파일을 해석하지 못했습니다" detail={error} />}
-      {pdf && <div className="mx-auto flex w-full max-w-[760px] flex-col items-center gap-6">
+      {pdf && <div className="mx-auto flex w-full max-w-[780px] flex-col items-center gap-5">
         {Array.from({ length: pdf.numPages }, (_, index) => <PdfPage
           key={index + 1}
           pdf={pdf}
