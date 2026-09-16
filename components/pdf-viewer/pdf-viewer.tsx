@@ -1,11 +1,16 @@
 "use client";
 
-import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea, StudyHighlight } from "@/lib/study-tray/types";
 import { installPdfJsCompatibility } from "@/lib/pdf/uint8array-to-hex";
+import {
+  createPdfiumVisualRenderer,
+  needsChromiumFontMatrixFallback,
+  type PdfiumVisualRenderer,
+} from "@/lib/pdf/pdfium-visual-renderer";
 import { PdfPage } from "./pdf-page";
 
 type PdfViewerProps = {
@@ -69,6 +74,7 @@ export function PdfViewer({
     const controller = new AbortController();
     let task: PDFDocumentLoadingTask | undefined;
     let document: PDFDocumentProxy | undefined;
+    let visualRenderer: PdfiumVisualRenderer | undefined;
     setPdf(null);
     setLoadState("loading");
     setError("");
@@ -86,23 +92,37 @@ export function PdfViewer({
           setError(message);
           return;
         }
-        const bytes = await response.arrayBuffer();
+
+        const sourceBytes = new Uint8Array(await response.arrayBuffer());
+        const usePdfiumVisualFallback = needsChromiumFontMatrixFallback();
+        const pdfiumPromise = usePdfiumVisualFallback
+          ? createPdfiumVisualRenderer(sourceBytes).catch(() => null)
+          : null;
+
         installPdfJsCompatibility();
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         task = pdfjs.getDocument({
-          data: bytes,
+          // PDF.js transfers typed-array ownership to its worker. Keep the
+          // original bytes alive only when the Chromium/PDFium visual fallback
+          // needs a second copy of the same document.
+          data: usePdfiumVisualFallback ? sourceBytes.slice() : sourceBytes,
           cMapUrl: "/pdfjs/cmaps/",
           cMapPacked: true,
           standardFontDataUrl: "/pdfjs/standard_fonts/",
-          // Chromium can mis-render converted embedded Type1/CFF math fonts.
-          // Force PDF.js to draw glyph outlines itself instead of handing those
-          // fonts to the browser's Font Loading API / canvas font backend.
-          disableFontFace: true,
-          useSystemFonts: false,
         });
         document = await task.promise;
         if (controller.signal.aborted) return;
+
+        if (pdfiumPromise) {
+          visualRenderer = (await pdfiumPromise) ?? undefined;
+          if (visualRenderer) installPdfiumPageRendering(document, visualRenderer);
+        }
+        if (controller.signal.aborted) {
+          visualRenderer?.close();
+          return;
+        }
+
         setPdf(document);
         setLoadState("ready");
         onPageChange(1);
@@ -116,6 +136,7 @@ export function PdfViewer({
     void loadPdf();
     return () => {
       controller.abort();
+      visualRenderer?.close();
       void task?.destroy();
       if (!task) void document?.destroy();
     };
@@ -257,6 +278,59 @@ export function PdfViewer({
       </div>}
     </div>
   </section>;
+}
+
+function installPdfiumPageRendering(pdf: PDFDocumentProxy, renderer: PdfiumVisualRenderer) {
+  const originalGetPage = pdf.getPage.bind(pdf);
+  const patchedPages = new WeakSet<object>();
+  const documentWithPatchedGetPage = pdf as unknown as {
+    getPage: (pageNumber: number) => Promise<PDFPageProxy>;
+  };
+
+  documentWithPatchedGetPage.getPage = async (pageNumber: number) => {
+    const page = await originalGetPage(pageNumber);
+    if (patchedPages.has(page)) return page;
+    patchedPages.add(page);
+
+    type RenderMethod = PDFPageProxy["render"];
+    const originalRender = page.render.bind(page) as RenderMethod;
+    const pageWithPatchedRender = page as unknown as { render: RenderMethod };
+    pageWithPatchedRender.render = ((parameters: Parameters<RenderMethod>[0]) => {
+      const canvas = parameters.canvas;
+      if (!canvas) return originalRender(parameters);
+
+      let cancelled = false;
+      let fallbackTask: ReturnType<RenderMethod> | undefined;
+      const promise = renderer.renderPage(pageNumber - 1, canvas, () => cancelled)
+        .catch(() => {
+          if (cancelled) throw createRenderingCancelledError();
+          // PDFium is a compatibility renderer, not a single point of failure.
+          // If WASM rendering fails unexpectedly, retain the normal PDF.js path.
+          fallbackTask = originalRender(parameters);
+          if (cancelled) fallbackTask.cancel();
+          return fallbackTask.promise;
+        })
+        .then(() => {
+          if (cancelled) throw createRenderingCancelledError();
+        });
+
+      return {
+        promise,
+        cancel: () => {
+          cancelled = true;
+          fallbackTask?.cancel();
+        },
+      } as unknown as ReturnType<RenderMethod>;
+    }) as RenderMethod;
+
+    return page;
+  };
+}
+
+function createRenderingCancelledError() {
+  const error = new Error("Rendering cancelled");
+  error.name = "RenderingCancelledException";
+  return error;
 }
 
 function ToolButton({ active, onClick, label, title }: { active: boolean; onClick: () => void; label: string; title: string }) {
