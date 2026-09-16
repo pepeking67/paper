@@ -20,8 +20,7 @@ The snapshot contains 14 completed entries and BERT. `RL_1 Basic` is excluded be
 2. Set **Framework Preset** to **Next.js** and **Root Directory** to `./`, then deploy.
 3. Open the project, choose **Storage → Create Database → Blob** (the dashboard may label this **Marketplace → Blob**), name it `paper-pdfs`, and select **Private** access.
 4. Connect the store to `paper-study`. Confirm `BLOB_READ_WRITE_TOKEN` appears under **Settings → Environment Variables** for the required environments.
-5. Add `SITE_PASSWORD` under the same menu to enable the built-in minimum personal-site protection. Leave it unset only for local development.
-6. Pull environment variables locally with the Vercel CLI rather than copying token values into chat or files. Set `VERCEL_PROJECT_ID` in the local process before running the uploader.
+5. Pull environment variables locally with the Vercel CLI rather than copying token values into chat or files. Set `VERCEL_PROJECT_ID` in the local process before running the uploader.
 
 ### `No Next.js version detected`
 
@@ -44,3 +43,39 @@ Afterward, report only that the project and private store are connected (plus pr
 Run `npm run process-pdfs -- VLA_4 /temporary/path/OpenVLA.pdf`. It produces `document.json`, page text, and `chunks.jsonl` under `data/processed/VLA_4/`. Generated extraction is ignored by default: review its size and quality flags before deciding whether to version it. The chat provider receives only a paper ID, current page, optional selected text, and selected chunks; it never accepts an entire PDF.
 
 The private-PDF API accepts an allow-listed paper ID only, resolves its pathname exclusively from the manifest, validates the pathname, and streams the private Blob through the server. It deliberately does not expose Blob URLs or listing operations. Whole-file streaming is used initially for reliable PDF.js loading; range forwarding can be added at the Blob adapter boundary after integration testing against the connected store.
+
+## Administrator PDF synchronization
+
+With `BLOB_READ_WRITE_TOKEN` configured, open the deployed site and choose **PDF 관리**
+at the bottom left. **누락된
+PDF 동기화** checks and uploads allow-listed papers with at most two browser requests
+in flight. Excluded entries are displayed but never submitted. The POST API processes
+only one `paperId`; it obtains both source URL and destination pathname from the
+checked-in manifest, enforces same-origin mutation requests, download timeout,
+PDF content/signature and size checks, arXiv identity, and private no-overwrite upload.
+
+The manifest remains an immutable allowlist at runtime. An exact-path match from a
+server-only, prefix-limited Blob `list()` query is the
+source of truth for availability. The MVP returns SHA-256 and size to the administrator
+screen but does not persist them: they are not needed for serving, and adding a database
+or a second metadata Blob would add consistency and lifecycle complexity. A persistence
+adapter can be introduced later without changing `syncPaper()`.
+
+The application no longer implements a site password or HTTP Basic authentication.
+For non-public administration, enable Vercel Deployment Protection or restrict access
+at the hosting layer. Same-origin validation mitigates browser CSRF, but is not a user
+authentication mechanism.
+
+PDF.js runs its worker from the same deployment at `/pdf.worker.min.mjs`. The
+`predev` and `prebuild` scripts copy the version bundled with the installed
+`pdfjs-dist` package into `public/`; the generated worker is intentionally ignored by
+Git so its version cannot drift from the package installed during deployment.
+
+The PDF viewer renders both a canvas and PDF.js text layer, so selected text and
+the extracted current-page text can become question context. Chat uses Google's
+Gemini `generateContent` API from the server and never exposes `GEMINI_API_KEY` to the
+browser. Set both `GEMINI_API_KEY` and `GEMINI_MODEL` in Vercel. The model name is
+required rather than hard-coded because `Gemini 3.8 Flash` could not be verified as a
+published API model identifier in this environment. The request bounds page text,
+selected text, retrieved chunks, question, and recent history instead of sending an
+entire PDF.

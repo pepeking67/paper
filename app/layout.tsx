@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import "pdfjs-dist/web/pdf_viewer.css";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = { title: "Paper Study", description: "A private paper reading workspace" };
