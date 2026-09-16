@@ -49,7 +49,10 @@ test("study note is one live Notion-style editing surface", async () => {
   assert.match(editor, /draggable/);
   assert.match(editor, /블록 빈 영역을 드래그해 이동/);
   assert.doesNotMatch(editor, />⠿<\/button>/);
+  assert.match(editor, /onDragStart/);
+  assert.match(editor, /onDrop/);
   assert.match(editor, /onContextMenu/);
+
   assert.match(editor, /beginResize/);
   assert.match(editor, /pointermove/);
   assert.match(editor, /이미지 오른쪽 크기 조절/);
