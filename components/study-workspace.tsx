@@ -256,8 +256,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     <StudyChat
       paper={initialPaper}
       context={context}
+      savedInsights={tray.insights}
       onQuestionContextConsumed={clearQuestionAnnotations}
-      onSaveInsight={(question, answer) => updateTray((current) => ({ ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] }))}
+      onSaveInsight={(question, answer) => updateTray((current) => {
+        if (current.insights.some((insight) => insight.question === question && insight.answer === answer)) return current;
+        return { ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] };
+      })}
     />
     <PdfSyncPanel papers={papers} />
     <StudyTray

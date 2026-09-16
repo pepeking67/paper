@@ -3,17 +3,20 @@
 import { type FormEvent, useEffect, useState } from "react";
 import type { ChatTurn, StudyContext } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
+import type { StudyInsight } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 
 export function StudyChat({
   paper,
   context,
+  savedInsights,
   onSaveInsight,
   onHistoryChange,
   onQuestionContextConsumed,
 }: {
   paper: Paper;
   context: StudyContext;
+  savedInsights: StudyInsight[];
   onSaveInsight: (question: string, answer: string) => void;
   onHistoryChange?: (messages: ChatTurn[]) => void;
   onQuestionContextConsumed?: () => void;
@@ -73,11 +76,22 @@ export function StudyChat({
     <header className="flex items-center justify-between border-b border-[var(--line)] p-4"><div><p className="text-xs text-[var(--accent)]">STUDY CHAT</p><h2 className="mt-1 font-medium">논문에 질문하기</h2></div>{messages.length > 0 && <button onClick={() => save([])} className="text-xs text-[var(--muted)]">대화 지우기</button>}</header>
     <div className="scrollbar flex-1 space-y-3 overflow-y-auto p-4">
       {messages.length === 0 && <div className="rounded-xl border border-[var(--line)] bg-[#111] p-4 text-sm leading-relaxed text-[#bbb]">Gemini API가 현재 페이지와 형광펜·밑줄·영역으로 표시한 질문 문맥, 최근 대화를 사용해 답합니다. 답변은 Markdown과 수식 문법을 렌더링합니다. 일반 대화는 Study Tray에 자동 저장되지 않으며, 남기고 싶은 답변만 <strong>Save Insight</strong>로 저장합니다.</div>}
-      {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`rounded-2xl p-3.5 text-sm leading-relaxed ${message.role === "user" ? "ml-7 bg-[var(--accent)] text-white" : "mr-7 border border-[var(--line)] bg-[rgba(255,255,255,.045)]"}`}>
-        <p className={`mb-2 text-[10px] uppercase tracking-wider ${message.role === "user" ? "text-white/65" : "text-[var(--muted)]"}`}>{message.role === "user" ? "You" : "Gemini"}</p>
-        {message.role === "assistant" ? <MarkdownContent content={message.content} compact /> : <p className="whitespace-pre-wrap">{message.content}</p>}
-        {message.role === "assistant" && messages[index - 1]?.role === "user" && <button title="이 Q&A를 Study Tray와 학습 노트 재료로 저장" onClick={() => onSaveInsight(messages[index - 1].content, message.content)} className="mt-3 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white/10">Save Insight → Tray</button>}
-      </div>)}
+      {messages.map((message, index) => {
+        const previousQuestion = message.role === "assistant" && messages[index - 1]?.role === "user" ? messages[index - 1].content : null;
+        const insightSaved = Boolean(previousQuestion && savedInsights.some((insight) => insight.question === previousQuestion && insight.answer === message.content));
+        return <div key={`${message.role}-${index}`} className={`rounded-2xl p-3.5 text-sm leading-relaxed ${message.role === "user" ? "ml-7 bg-[var(--accent)] text-white" : "mr-7 border border-[var(--line)] bg-[rgba(255,255,255,.045)]"}`}>
+          <p className={`mb-2 text-[10px] uppercase tracking-wider ${message.role === "user" ? "text-white/65" : "text-[var(--muted)]"}`}>{message.role === "user" ? "You" : "Gemini"}</p>
+          {message.role === "assistant" ? <MarkdownContent content={message.content} compact /> : <p className="whitespace-pre-wrap">{message.content}</p>}
+          {previousQuestion && <button
+            type="button"
+            title={insightSaved ? "이미 Study Tray에 저장된 Q&A입니다" : "이 Q&A를 Study Tray와 학습 노트 재료로 저장"}
+            disabled={insightSaved}
+            data-saved={insightSaved ? "true" : "false"}
+            onClick={() => onSaveInsight(previousQuestion, message.content)}
+            className={`mt-3 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${insightSaved ? "cursor-default border-[#2f6844] bg-[#173522] text-[#a6e3b9] opacity-100" : "border-[var(--line)] text-[#d7d7d7] hover:bg-[rgba(255,255,255,.08)]"}`}
+          >{insightSaved ? "✓ Saved to Tray" : "Save Insight → Tray"}</button>}
+        </div>;
+      })}
       {loading && <p role="status" className="text-sm text-[var(--muted)]">답변을 생성하는 중…</p>}
       {error && <p role="alert" className="rounded-lg border border-[var(--danger)] p-3 text-sm">{error}</p>}
     </div>

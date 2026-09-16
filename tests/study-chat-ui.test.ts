@@ -15,3 +15,14 @@ test("study chat offers annotation-aware prompts and consumes used context", asy
   assert.match(chat, /usedAnnotationContext = hasAnnotationContext/);
   assert.match(chat, /if \(usedAnnotationContext\) onQuestionContextConsumed\?\.\(\)/);
 });
+
+test("saved insights become visibly disabled and duplicate saves are blocked", async () => {
+  const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  assert.match(chat, /savedInsights\.some/);
+  assert.match(chat, /disabled=\{insightSaved\}/);
+  assert.match(chat, /✓ Saved to Tray/);
+  assert.match(chat, /data-saved=\{insightSaved \? "true" : "false"\}/);
+  assert.match(workspace, /savedInsights=\{tray\.insights\}/);
+  assert.match(workspace, /current\.insights\.some\(\(insight\) => insight\.question === question && insight\.answer === answer\)/);
+});
