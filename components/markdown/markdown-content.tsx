@@ -32,13 +32,13 @@ export function MarkdownContent({
       if (segment.kind === "area") {
         const area = areaById.get(segment.id);
         if (!area) {
-          return <div key={`missing-area-${segment.id}-${index}`} className="markdown-pdf-area-missing" role="note">
+          return <div key={`missing-area-${segment.id}-${index}`} className="my-4 rounded-xl border border-dashed border-[var(--line)] bg-white/5 p-3 text-xs text-[var(--muted)]" role="note">
             저장된 PDF 영역을 찾을 수 없습니다. PDF에서 해당 영역이 지워졌다면 노트를 다시 생성하세요.
           </div>;
         }
-        return <figure key={`area-${segment.id}-${index}`} className="markdown-pdf-area">
-          <img src={area.imageDataUrl} alt={`PDF ${area.page}페이지에서 저장한 영역`} />
-          <figcaption>PDF p.{area.page} · 저장한 영역</figcaption>
+        return <figure key={`area-${segment.id}-${index}`} className="my-5 overflow-hidden rounded-2xl border border-[var(--line)] bg-white/5">
+          <img src={area.imageDataUrl} alt={`PDF ${area.page}페이지에서 저장한 영역`} className="block max-h-[70vh] w-full bg-white object-contain" />
+          <figcaption className="border-t border-[var(--line)] px-3 py-2 text-[11px] text-[var(--muted)]">PDF p.{area.page} · 저장한 영역</figcaption>
         </figure>;
       }
 
