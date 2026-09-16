@@ -79,6 +79,10 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setQuestionHighlights((current) => current.filter((item) => item.id !== id));
   }
 
+  function removeQuestionHighlight(id: string) {
+    setQuestionHighlights((current) => current.filter((item) => item.id !== id));
+  }
+
   function createArea(areaPage: number, rect: NormalizedHighlightRect, imageDataUrl: string) {
     const area: StudyArea = { id: crypto.randomUUID(), page: areaPage, rect, imageDataUrl, memo: "", createdAt: new Date().toISOString() };
     updateTray((current) => ({ ...current, areas: [...(current.areas ?? []), area] }));
@@ -91,21 +95,18 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setQuestionAreas((current) => current.filter((item) => item.id !== id));
   }
 
+  function removeQuestionArea(id: string) {
+    setQuestionAreas((current) => current.filter((item) => item.id !== id));
+  }
+
   function clearQuestionAnnotations() {
-    const highlightIds = new Set(questionHighlights.map((item) => item.id));
-    const areaIds = new Set(questionAreas.map((item) => item.id));
-    updateTray((current) => ({
-      ...current,
-      highlights: current.highlights.filter((item) => !highlightIds.has(item.id)),
-      areas: (current.areas ?? []).filter((item) => !areaIds.has(item.id)),
-    }));
     setQuestionHighlights([]);
     setQuestionAreas([]);
   }
 
   function removeTrayItem(kind: keyof StudyTrayData, id: string) {
-    if (kind === "areas") { removeArea(id); return; }
-    if (kind === "highlights") { removeHighlight(id); return; }
+    // PDF annotations are intentionally erased only from the PDF eraser tool.
+    if (kind === "areas" || kind === "highlights") return;
     if (kind === "insights") { updateTray((current) => ({ ...current, insights: current.insights.filter((item) => item.id !== id) })); return; }
     if (kind === "memos") updateTray((current) => ({ ...current, memos: current.memos.filter((item) => item.id !== id) }));
   }
@@ -218,8 +219,10 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       questionAreas={questionAreas}
       onSaveArea={createArea}
       onDeleteArea={removeArea}
+      onRemoveQuestionArea={removeQuestionArea}
       onSaveHighlight={createHighlight}
       onDeleteHighlight={removeHighlight}
+      onRemoveQuestionHighlight={removeQuestionHighlight}
       onClearQuestionContext={clearQuestionAnnotations}
     />
 
@@ -253,6 +256,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     <StudyChat
       paper={initialPaper}
       context={context}
+      onQuestionContextConsumed={clearQuestionAnnotations}
       onSaveInsight={(question, answer) => updateTray((current) => ({ ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] }))}
     />
     <PdfSyncPanel papers={papers} />
