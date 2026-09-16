@@ -65,19 +65,25 @@ export function MarkdownContent({
 }
 
 function splitPdfAreaMarkers(content: string): MarkdownSegment[] {
+  // Gemini is explicitly asked to return the stable marker as plain text, but
+  // normalize common Markdown-image wrappers too so a model formatting slip
+  // cannot leave a broken image icon around an otherwise valid saved area.
+  const normalized = content
+    .replace(/!\[[^\]]*\]\(\s*(\[\[PDF_AREA:[^\]\r\n]+\]\])\s*\)/gu, "$1")
+    .replace(/<img[^>]+(?:src|alt)=["'][^"']*(\[\[PDF_AREA:[^\]\r\n]+\]\])[^"']*["'][^>]*>/gu, "$1");
   const pattern = /\[\[PDF_AREA:([^\]\r\n]+)\]\]/gu;
   const segments: MarkdownSegment[] = [];
   let cursor = 0;
 
-  for (const match of content.matchAll(pattern)) {
+  for (const match of normalized.matchAll(pattern)) {
     const start = match.index ?? 0;
-    if (start > cursor) segments.push({ kind: "markdown", value: content.slice(cursor, start) });
+    if (start > cursor) segments.push({ kind: "markdown", value: normalized.slice(cursor, start) });
     const id = match[1]?.trim();
     if (id) segments.push({ kind: "area", id });
     cursor = start + match[0].length;
   }
 
-  if (cursor < content.length) segments.push({ kind: "markdown", value: content.slice(cursor) });
-  if (!segments.length) segments.push({ kind: "markdown", value: content });
+  if (cursor < normalized.length) segments.push({ kind: "markdown", value: normalized.slice(cursor) });
+  if (!segments.length) segments.push({ kind: "markdown", value: normalized });
   return segments;
 }
