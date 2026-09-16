@@ -223,7 +223,7 @@ export function NotionNoteEditor({ value, areas, onChange }: {
       <button
         type="button"
         onClick={() => insertBlock(blocks.length)}
-        className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--muted)] opacity-0 transition hover:bg-white/[.03] hover:text-white focus:opacity-100 group-hover:opacity-100 sm:opacity-60"
+        className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--muted)] opacity-0 transition hover:bg-white/[.03] hover:text-white focus:opacity-100 sm:opacity-60"
       ><span className="text-lg">+</span><span>새 블록</span></button>
     </div>
   </div>;
@@ -300,7 +300,6 @@ function RichTextBlock({ block, active, onActivate, onChange, onSplit, onEmptyBa
         onSplit(split?.before ?? block.text, split?.after ?? "");
       }}
       className={`min-h-8 w-full cursor-text whitespace-pre-wrap break-words rounded-sm px-2 py-1 text-white outline-none ${block.type === "bullet" || block.type === "number" ? "pl-8" : ""} ${typography}`}
-      dangerouslySetInnerHTML={{ __html: inlineMarkdownToHtml(block.text) }}
     />
   </div>;
 }
@@ -401,7 +400,7 @@ function BlockMenu({ block, onType, onDuplicate, onDelete, onClose }: {
 function SlashMenu({ query, onSelect }: { query: string; onSelect: (type: StudyNoteBlockType) => void }) {
   const filtered = blockOptions.filter((option) => !query || `${option.label} ${option.shortcut} ${option.description}`.toLowerCase().includes(query));
   if (!filtered.length) return null;
-  return <div className="absolute left-4 top-[calc(100%-2px)] z-30 w-72 rounded-xl border border-white/10 bg-[#252527] p-1.5 shadow-2xl">
+  return <div className="absolute left-4 top-full z-30 w-72 rounded-xl border border-white/10 bg-[#252527] p-1.5 shadow-2xl">
     <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-[.08em] text-[var(--muted)]">기본 블록</p>
     <div className="max-h-72 overflow-y-auto">
       {filtered.map((option) => <button key={option.value} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(option.value)} className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-white/[.08]">
