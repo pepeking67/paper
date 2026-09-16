@@ -95,6 +95,11 @@ export function PdfViewer({
           cMapUrl: "/pdfjs/cmaps/",
           cMapPacked: true,
           standardFontDataUrl: "/pdfjs/standard_fonts/",
+          // Chromium can mis-render converted embedded Type1/CFF math fonts.
+          // Force PDF.js to draw glyph outlines itself instead of handing those
+          // fonts to the browser's Font Loading API / canvas font backend.
+          disableFontFace: true,
+          useSystemFonts: false,
         });
         document = await task.promise;
         if (controller.signal.aborted) return;
