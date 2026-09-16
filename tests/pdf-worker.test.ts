@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("PDF viewer uses same-origin worker, CMaps, and standard fonts", async () => {
+test("PDF viewer uses same-origin worker, CMaps, standard fonts, and PDF.js glyph-path rendering", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const layout = await readFile("app/layout.tsx", "utf8");
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
@@ -13,6 +13,8 @@ test("PDF viewer uses same-origin worker, CMaps, and standard fonts", async () =
   assert.match(viewer, /cMapUrl: "\/pdfjs\/cmaps\/"/);
   assert.match(viewer, /cMapPacked: true/);
   assert.match(viewer, /standardFontDataUrl: "\/pdfjs\/standard_fonts\/"/);
+  assert.match(viewer, /disableFontFace: true/);
+  assert.match(viewer, /useSystemFonts: false/);
   assert.match(preparationScript, /Uint8Array\.prototype\.toHex/);
   assert.match(preparationScript, /Map\.prototype\.getOrInsertComputed/);
   assert.match(preparationScript, /path\.join\(packageRoot, "cmaps"\)/);
