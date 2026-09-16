@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
@@ -9,22 +9,14 @@ import type { Paper } from "@/lib/papers/types";
 import { emptyStudyTray, type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 
-const LIBRARY_MIN = 180;
-const LIBRARY_MAX = 360;
-const CHAT_MIN = 360;
-const CHAT_MAX = 720;
-const PDF_MIN = 360;
-
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
   const [tray, setTray] = useState<StudyTrayData>(emptyStudyTray);
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
-  const [libraryWidth, setLibraryWidth] = useState(220);
-  const [chatWidth, setChatWidth] = useState(440);
-  const libraryWidthRef = useRef(220);
-  const chatWidthRef = useRef(440);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const storageKey = `paper-study-tray:${initialPaper.id}`;
 
   useEffect(() => {
@@ -37,17 +29,32 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   }, [storageKey]);
 
   useEffect(() => {
-    const storedLibrary = Number(localStorage.getItem("paper-study-library-width"));
-    if (storedLibrary >= LIBRARY_MIN && storedLibrary <= LIBRARY_MAX) {
-      libraryWidthRef.current = storedLibrary;
-      setLibraryWidth(storedLibrary);
-    }
-    const storedChat = Number(localStorage.getItem("paper-study-chat-width"));
-    if (storedChat >= CHAT_MIN && storedChat <= CHAT_MAX) {
-      chatWidthRef.current = storedChat;
-      setChatWidth(storedChat);
-    }
+    const storedLibrary = localStorage.getItem("paper-study-library-open");
+    const storedChat = localStorage.getItem("paper-study-chat-open");
+    setLibraryOpen(storedLibrary === null ? window.innerWidth >= 1024 : storedLibrary === "true");
+    setChatOpen(storedChat === "true");
   }, []);
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setChatOpen(false);
+      try { localStorage.setItem("paper-study-chat-open", "false"); } catch { /* Keep UI state in memory. */ }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [chatOpen]);
+
+  function setLibraryVisibility(open: boolean) {
+    setLibraryOpen(open);
+    try { localStorage.setItem("paper-study-library-open", String(open)); } catch { /* Keep UI state in memory. */ }
+  }
+
+  function setChatVisibility(open: boolean) {
+    setChatOpen(open);
+    try { localStorage.setItem("paper-study-chat-open", String(open)); } catch { /* Keep UI state in memory. */ }
+  }
 
   function updateTray(updater: (current: StudyTrayData) => StudyTrayData) {
     setTray((current) => {
@@ -116,49 +123,6 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setPage(area.page);
   }
 
-  function libraryMaximum() {
-    if (typeof window === "undefined") return LIBRARY_MAX;
-    return Math.max(LIBRARY_MIN, Math.min(LIBRARY_MAX, window.innerWidth - chatWidthRef.current - PDF_MIN));
-  }
-
-  function chatMaximum() {
-    if (typeof window === "undefined") return CHAT_MAX;
-    return Math.max(CHAT_MIN, Math.min(CHAT_MAX, window.innerWidth - libraryWidthRef.current - PDF_MIN));
-  }
-
-  function resizeLibrary(clientX: number) {
-    const next = Math.max(LIBRARY_MIN, Math.min(libraryMaximum(), clientX));
-    libraryWidthRef.current = next;
-    setLibraryWidth(next);
-  }
-
-  function startLibraryResize(event: React.PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    resizeLibrary(event.clientX);
-  }
-
-  function finishLibraryResize(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    localStorage.setItem("paper-study-library-width", String(libraryWidthRef.current));
-  }
-
-  function resizeChat(clientX: number) {
-    const maximum = chatMaximum();
-    const next = Math.max(CHAT_MIN, Math.min(maximum, window.innerWidth - clientX));
-    chatWidthRef.current = next;
-    setChatWidth(next);
-  }
-
-  function startResize(event: React.PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    resizeChat(event.clientX);
-  }
-
-  function finishResize(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    localStorage.setItem("paper-study-chat-width", String(chatWidthRef.current));
-  }
-
   const selectedText = useMemo(
     () => questionHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
     [questionHighlights],
@@ -172,97 +136,80 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     pageText,
   }), [initialPaper.id, page, selectedText, questionAreas, pageText]);
 
-  const workspaceStyle = {
-    "--library-width": `${libraryWidth}px`,
-    "--chat-width": `${chatWidth}px`,
-  } as React.CSSProperties;
+  return <main
+    className="study-workspace relative grid h-dvh min-h-0 grid-cols-1 overflow-hidden"
+    data-library-open={libraryOpen ? "true" : "false"}
+    data-chat-open="false"
+    data-chat-drawer-open={chatOpen ? "true" : "false"}
+  >
+    <style>{`
+      /* Question-context chips now live inside Study Chat so the PDF keeps its full vertical space. */
+      [aria-label="PDF 뷰어"] > header + div + div:not(.scrollbar) { display: none !important; }
+      /* Only one library toggle is visible at a time: the sidebar's own control while open. */
+      [aria-label="PDF 뷰어"] button[aria-label="논문 목록 닫기"] { display: none !important; }
+    `}</style>
 
-  return <main className="study-workspace relative grid min-h-dvh grid-cols-1 lg:h-dvh lg:overflow-hidden" style={workspaceStyle}>
-    <PaperList papers={papers} activeId={initialPaper.id} />
+    {libraryOpen && !chatOpen && <button
+      type="button"
+      aria-label="논문 목록 바깥 영역"
+      className="fixed inset-0 z-30 bg-black/55 lg:hidden"
+      onPointerDown={() => setLibraryVisibility(false)}
+    />}
 
-    <div
-      role="separator"
-      aria-label="논문 목록과 PDF 영역 너비 조절"
-      aria-orientation="vertical"
-      aria-valuemin={LIBRARY_MIN}
-      aria-valuemax={LIBRARY_MAX}
-      aria-valuenow={libraryWidth}
-      tabIndex={0}
-      className="workspace-resizer group absolute bottom-0 top-0 z-30 hidden w-2 cursor-col-resize touch-none select-none lg:block"
-      style={{ left: libraryWidth - 4 }}
-      onPointerDown={startLibraryResize}
-      onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeLibrary(event.clientX); }}
-      onPointerUp={finishLibraryResize}
-      onPointerCancel={finishLibraryResize}
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        const delta = event.key === "ArrowRight" ? 20 : -20;
-        const next = Math.max(LIBRARY_MIN, Math.min(libraryMaximum(), libraryWidth + delta));
-        libraryWidthRef.current = next;
-        setLibraryWidth(next);
-        localStorage.setItem("paper-study-library-width", String(next));
-      }}
-    >
-      <span className="absolute bottom-0 left-1/2 top-0 w-px transition-colors"/>
-      <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"/>
+    {chatOpen && <button
+      type="button"
+      aria-label="질의응답 바깥 영역"
+      className="fixed inset-0 z-40 bg-black/30 lg:bg-black/10"
+      onPointerDown={() => setChatVisibility(false)}
+    />}
+
+    {libraryOpen && <div className="fixed inset-y-0 left-0 z-40 w-[min(88vw,300px)] min-w-0 lg:static lg:z-auto lg:w-auto">
+      <PaperList papers={papers} activeId={initialPaper.id} onClose={() => setLibraryVisibility(false)} />
+    </div>}
+
+    <div className="min-h-0 min-w-0">
+      <PdfViewer
+        paper={initialPaper}
+        page={page}
+        onPageChange={setPage}
+        onPageTextChange={setPageText}
+        savedHighlights={tray.highlights}
+        savedAreas={tray.areas ?? []}
+        questionHighlights={questionHighlights}
+        questionAreas={questionAreas}
+        onSaveArea={createArea}
+        onDeleteArea={removeArea}
+        onRemoveQuestionArea={removeQuestionArea}
+        onSaveHighlight={createHighlight}
+        onDeleteHighlight={removeHighlight}
+        onRemoveQuestionHighlight={removeQuestionHighlight}
+        onClearQuestionContext={clearQuestionAnnotations}
+        libraryOpen={libraryOpen}
+        chatOpen={chatOpen}
+        onToggleLibrary={() => setLibraryVisibility(!libraryOpen)}
+        onToggleChat={() => setChatVisibility(!chatOpen)}
+      />
     </div>
 
-    <PdfViewer
-      paper={initialPaper}
-      page={page}
-      onPageChange={setPage}
-      onPageTextChange={setPageText}
-      savedHighlights={tray.highlights}
-      savedAreas={tray.areas ?? []}
-      questionHighlights={questionHighlights}
-      questionAreas={questionAreas}
-      onSaveArea={createArea}
-      onDeleteArea={removeArea}
-      onRemoveQuestionArea={removeQuestionArea}
-      onSaveHighlight={createHighlight}
-      onDeleteHighlight={removeHighlight}
-      onRemoveQuestionHighlight={removeQuestionHighlight}
-      onClearQuestionContext={clearQuestionAnnotations}
-    />
+    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,460px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)]">
+      <StudyChat
+        paper={initialPaper}
+        context={context}
+        savedInsights={tray.insights}
+        questionHighlights={questionHighlights}
+        questionAreas={questionAreas}
+        onRemoveQuestionHighlight={removeQuestionHighlight}
+        onRemoveQuestionArea={removeQuestionArea}
+        onClearQuestionContext={clearQuestionAnnotations}
+        onClose={() => setChatVisibility(false)}
+        onQuestionContextConsumed={clearQuestionAnnotations}
+        onSaveInsight={(question, answer) => updateTray((current) => {
+          if (current.insights.some((insight) => insight.question === question && insight.answer === answer)) return current;
+          return { ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] };
+        })}
+      />
+    </div>}
 
-    <div
-      role="separator"
-      aria-label="PDF와 채팅 영역 너비 조절"
-      aria-orientation="vertical"
-      aria-valuemin={CHAT_MIN}
-      aria-valuemax={CHAT_MAX}
-      aria-valuenow={chatWidth}
-      tabIndex={0}
-      className="workspace-resizer group absolute bottom-0 top-0 z-30 hidden w-2 cursor-col-resize touch-none select-none lg:block"
-      style={{ right: chatWidth - 4 }}
-      onPointerDown={startResize}
-      onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeChat(event.clientX); }}
-      onPointerUp={finishResize}
-      onPointerCancel={finishResize}
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        const next = Math.max(CHAT_MIN, Math.min(chatMaximum(), chatWidth + (event.key === "ArrowLeft" ? 24 : -24)));
-        chatWidthRef.current = next;
-        setChatWidth(next);
-        localStorage.setItem("paper-study-chat-width", String(next));
-      }}
-    >
-      <span className="absolute bottom-0 left-1/2 top-0 w-px transition-colors"/>
-      <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"/>
-    </div>
-
-    <StudyChat
-      paper={initialPaper}
-      context={context}
-      savedInsights={tray.insights}
-      onQuestionContextConsumed={clearQuestionAnnotations}
-      onSaveInsight={(question, answer) => updateTray((current) => {
-        if (current.insights.some((insight) => insight.question === question && insight.answer === answer)) return current;
-        return { ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] };
-      })}
-    />
     <PdfSyncPanel papers={papers} />
     <StudyTray
       paper={initialPaper}
