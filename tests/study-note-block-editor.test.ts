@@ -40,21 +40,27 @@ test("study note is one live Notion-style editing surface", async () => {
 
   assert.match(tray, /NotionNoteEditor/);
   assert.doesNotMatch(tray, /noteMode/);
-  assert.doesNotMatch(tray, /미리보기.*블록 편집/s);
   assert.match(tray, /보이는 그대로 편집/);
 
   assert.match(editor, /contentEditable/);
   assert.match(editor, /SlashMenu/);
   assert.match(editor, /\/ 명령/);
-  assert.match(editor, /hover:bg-white\/\[\.035\]/);
+  assert.match(editor, /hover:bg-white\/\[\.045\]/);
   assert.match(editor, /draggable/);
-  assert.match(editor, /블록 메뉴 및 이동/);
+  assert.match(editor, /블록 빈 영역을 드래그해 이동/);
+  assert.doesNotMatch(editor, />⠿<\/button>/);
+  assert.match(editor, /onContextMenu/);
   assert.match(editor, /beginResize/);
   assert.match(editor, /pointermove/);
   assert.match(editor, /이미지 오른쪽 크기 조절/);
   assert.match(editor, /imageAlign/);
   assert.match(editor, /document\.execCommand\("bold"\)/);
-  assert.match(editor, /MarkdownContent content=\{serializeStudyNoteBlocks\(\[block\]\)\}/);
+
+  assert.match(editor, /katex\.renderToString/);
+  assert.match(editor, /data-inline-math/);
+  assert.match(editor, /\$\(\[\^\$\\n\]\+\)\$/);
+  assert.match(editor, /<strong>\$1<\/strong>/);
+  assert.match(editor, /<del>\$1<\/del>/);
 
   assert.match(markdown, /width=\(\\d\{1,3\}\)/);
   assert.match(markdown, /style=\{\{ width:/);
