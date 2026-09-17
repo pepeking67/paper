@@ -12,8 +12,8 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
     [papers, query, tag],
   );
 
-  return <aside className="scrollbar flex h-full min-h-0 flex-col border-r border-[var(--line)] p-4" aria-label="논문 탐색">
-    <header className="mb-4 flex items-start gap-3 px-1 pt-1">
+  return <aside className="scrollbar flex h-full max-h-dvh min-h-0 flex-col overflow-hidden border-r border-[var(--line)] p-4" aria-label="논문 탐색">
+    <header className="mb-4 flex shrink-0 items-start gap-3 px-1 pt-1">
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-semibold tracking-[.16em] text-[var(--accent)]">LIBRARY</p>
         <h1 className="mt-1 text-[22px] font-semibold tracking-[-.02em] text-[var(--ink)]">Paper Study</h1>
@@ -36,10 +36,10 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
       value={query}
       onChange={(event) => setQuery(event.target.value)}
       placeholder="논문 검색"
-      className="w-full rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--accent)]"
+      className="w-full shrink-0 rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--accent)]"
     />
 
-    <div className="my-3">
+    <div className="my-3 shrink-0">
       <label htmlFor="paper-category" className="mb-1.5 block px-1 text-[11px] font-medium text-[var(--muted)]">카테고리</label>
       <div className="relative">
         <select
@@ -54,8 +54,8 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
       </div>
     </div>
 
-    <p className="mb-2 px-1 text-[11px] font-medium text-[var(--muted)]">{visible.length} papers</p>
-    <nav className="scrollbar grid min-h-0 flex-1 content-start gap-1 overflow-y-auto pr-1">
+    <p className="mb-2 shrink-0 px-1 text-[11px] font-medium text-[var(--muted)]">{visible.length} papers</p>
+    <nav className="scrollbar grid h-0 min-h-0 flex-1 touch-pan-y content-start gap-1 overflow-y-auto overscroll-y-contain pr-1" aria-label="논문 목록">
       {visible.map((paper) => {
         const active = activeId === paper.id;
         return <Link
