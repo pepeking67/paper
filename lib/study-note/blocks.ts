@@ -5,6 +5,7 @@ export type StudyNoteBlockType =
   | "heading3"
   | "bullet"
   | "number"
+  | "todo"
   | "quote"
   | "code"
   | "math"
@@ -18,6 +19,7 @@ export type StudyNoteBlock = {
   id: string;
   type: StudyNoteBlockType;
   text: string;
+  checked?: boolean;
   language?: string;
   areaId?: string;
   imageWidth?: number;
@@ -28,7 +30,7 @@ const AREA_MARKER = /^\[\[PDF_AREA:([^|\]\r\n]+)(?:\|width=(\d{1,3}))?(?:\|align
 const TABLE_SEPARATOR = /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/u;
 
 export function createStudyNoteBlock(type: StudyNoteBlockType = "paragraph", text = ""): StudyNoteBlock {
-  return { id: createBlockId(), type, text };
+  return { id: createBlockId(), type, text, ...(type === "todo" ? { checked: false } : {}) };
 }
 
 export function parseStudyNoteMarkdown(markdown: string): StudyNoteBlock[] {
@@ -99,6 +101,13 @@ export function parseStudyNoteMarkdown(markdown: string): StudyNoteBlock[] {
       continue;
     }
 
+    const todo = /^\s*[-*+]\s+\[([ xX])\]\s*(.*)$/u.exec(line);
+    if (todo) {
+      blocks.push({ id: createBlockId(), type: "todo", checked: todo[1]?.toLowerCase() === "x", text: todo[2] ?? "" });
+      index += 1;
+      continue;
+    }
+
     const bullet = /^\s*[-*+]\s+(.+)$/u.exec(line);
     if (bullet) {
       blocks.push({ id: createBlockId(), type: "bullet", text: bullet[1] ?? "" });
@@ -164,6 +173,7 @@ function serializeBlock(block: StudyNoteBlock): string {
     case "heading3": return `### ${block.text}`;
     case "bullet": return `- ${block.text.replace(/\n/gu, "\n  ")}`;
     case "number": return `1. ${block.text.replace(/\n/gu, "\n   ")}`;
+    case "todo": return `- [${block.checked ? "x" : " "}] ${block.text.replace(/\n/gu, "\n  ")}`;
     case "quote": return block.text.split("\n").map((line) => `> ${line}`).join("\n");
     case "code": return `\`\`\`${block.language ?? ""}\n${block.text}\n\`\`\``;
     case "math": return `$$\n${block.text}\n$$`;
@@ -188,6 +198,7 @@ function isBlockStart(line: string, nextLine: string): boolean {
     || trimmed.startsWith("$$")
     || /^(#{1,3})\s+/u.test(line)
     || /^\s*(?:---+|\*\*\*+|___+)\s*$/u.test(line)
+    || /^\s*[-*+]\s+\[[ xX]\]\s*/u.test(line)
     || /^\s*[-*+]\s+/u.test(line)
     || /^\s*\d+\.\s+/u.test(line)
     || /^\s*>/u.test(line)
