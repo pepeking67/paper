@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { parseStudyNoteMarkdown, serializeStudyNoteBlocks } from "../lib/study-note/blocks";
+import { createStudyNoteBlock, parseStudyNoteMarkdown, serializeStudyNoteBlocks } from "../lib/study-note/blocks";
 
 test("study note markdown round-trips through editable blocks", () => {
   const source = [
     "# Overview",
     "",
-    "A paragraph with **bold** text.",
+    "A paragraph with **bold** text and $q_i$ inline math.",
     "",
     "- first point",
     "",
@@ -23,7 +23,19 @@ test("study note markdown round-trips through editable blocks", () => {
   assert.equal(blocks.at(-1)?.areaId, "area-1");
   const serialized = serializeStudyNoteBlocks(blocks);
   assert.match(serialized, /# Overview/);
+  assert.match(serialized, /\$q_i\$/);
   assert.match(serialized, /\[\[PDF_AREA:area-1\|width=100\|align=center\]\]/);
+});
+
+test("code blocks default to Python", () => {
+  const created = createStudyNoteBlock("code");
+  assert.equal(created.language, "python");
+  assert.match(serializeStudyNoteBlocks([created]), /^```python/m);
+
+  const parsed = parseStudyNoteMarkdown("```\nprint('hello')\n```");
+  assert.equal(parsed[0]?.type, "code");
+  assert.equal(parsed[0]?.language, "python");
+  assert.match(serializeStudyNoteBlocks(parsed), /^```python/m);
 });
 
 test("todo blocks preserve checked state through Markdown", () => {
@@ -44,10 +56,12 @@ test("image block presentation metadata survives parsing", () => {
 
 test("study note supports Notion-style live editing shortcuts", async () => {
   const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
-  const editor = await readFile("components/study-note/notion-note-editor.tsx", "utf8");
+  const entry = await readFile("components/study-note/notion-note-editor.tsx", "utf8");
+  const editor = await readFile("components/study-note/notion-note-editor-v2.tsx", "utf8");
   const markdown = await readFile("components/markdown/markdown-content.tsx", "utf8");
 
   assert.match(tray, /NotionNoteEditor/);
+  assert.match(entry, /notion-note-editor-v2/);
   assert.doesNotMatch(tray, /noteMode/);
   assert.match(tray, /보이는 그대로 편집/);
 
@@ -61,15 +75,24 @@ test("study note supports Notion-style live editing shortcuts", async () => {
   assert.match(editor, /"```": "code"/);
   assert.match(editor, /"\$\$": "math"/);
   assert.match(editor, /"---": "divider"/);
+  assert.match(editor, /node\.innerHTML = ""/);
+  assert.match(editor, /onConvert\(shortcutType, ""\)/);
 
   assert.match(editor, /SlashMenu/);
+  assert.match(editor, /detectSlashContext/);
+  assert.match(editor, /\(\?:\^\|\[\\t \]\)\\\/\(\[\^\/\\n\]\*\)\$/);
+  assert.match(editor, /removeSlashCommand/);
   assert.match(editor, /ArrowDown/);
   assert.match(editor, /ArrowUp/);
   assert.match(editor, /findExactSlashOption/);
   assert.match(editor, /shortcut: "code"/);
-  assert.match(editor, /shortcut: "equation"/);
-  assert.match(editor, /shortcut: "todo"/);
-  assert.match(editor, /aliases: \["quote", "blockquote", "callout"/);
+  assert.match(editor, /Python이 기본인 코드 블록/);
+
+  assert.match(editor, /label: "블록 수식"/);
+  assert.match(editor, /id: "inline-math"/);
+  assert.match(editor, /shortcut: "inline-equation"/);
+  assert.match(editor, /InlineMathComposer/);
+  assert.match(editor, /placeCaretAfterInlineMath/);
 
   assert.match(editor, /contentEditable/);
   assert.match(editor, /hasCompletedInlineMarkdown/);
