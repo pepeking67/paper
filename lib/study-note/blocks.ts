@@ -30,7 +30,13 @@ const AREA_MARKER = /^\[\[PDF_AREA:([^|\]\r\n]+)(?:\|width=(\d{1,3}))?(?:\|align
 const TABLE_SEPARATOR = /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/u;
 
 export function createStudyNoteBlock(type: StudyNoteBlockType = "paragraph", text = ""): StudyNoteBlock {
-  return { id: createBlockId(), type, text, ...(type === "todo" ? { checked: false } : {}) };
+  return {
+    id: createBlockId(),
+    type,
+    text,
+    ...(type === "todo" ? { checked: false } : {}),
+    ...(type === "code" ? { language: "python" } : {}),
+  };
 }
 
 export function parseStudyNoteMarkdown(markdown: string): StudyNoteBlock[] {
@@ -58,7 +64,7 @@ export function parseStudyNoteMarkdown(markdown: string): StudyNoteBlock[] {
     }
 
     if (trimmed.startsWith("```")) {
-      const language = trimmed.slice(3).trim();
+      const language = trimmed.slice(3).trim() || "python";
       const body: string[] = [];
       index += 1;
       while (index < lines.length && !(lines[index] ?? "").trim().startsWith("```")) {
@@ -175,7 +181,7 @@ function serializeBlock(block: StudyNoteBlock): string {
     case "number": return `1. ${block.text.replace(/\n/gu, "\n   ")}`;
     case "todo": return `- [${block.checked ? "x" : " "}] ${block.text.replace(/\n/gu, "\n  ")}`;
     case "quote": return block.text.split("\n").map((line) => `> ${line}`).join("\n");
-    case "code": return `\`\`\`${block.language ?? ""}\n${block.text}\n\`\`\``;
+    case "code": return `\`\`\`${block.language?.trim() || "python"}\n${block.text}\n\`\`\``;
     case "math": return `$$\n${block.text}\n$$`;
     case "divider": return "---";
     case "image": {
