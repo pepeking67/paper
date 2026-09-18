@@ -8,6 +8,7 @@ const PAPER_CATEGORY_STORAGE_KEY = "paper-study-library-category";
 export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; activeId: string; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("All");
+  const [categoryHydrated, setCategoryHydrated] = useState(false);
   const activeLinkRef = useRef<HTMLAnchorElement | null>(null);
   const tags = useMemo(() => ["All", ...Array.from(new Set(papers.map((p) => p.tag)))], [papers]);
   const visible = useMemo(
@@ -20,12 +21,14 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
       const storedTag = localStorage.getItem(PAPER_CATEGORY_STORAGE_KEY);
       if (storedTag && tags.includes(storedTag)) setTag(storedTag);
     } catch { /* Keep the default category when storage is unavailable. */ }
+    setCategoryHydrated(true);
   }, [tags]);
 
   useEffect(() => {
+    if (!categoryHydrated) return;
     try { localStorage.setItem(PAPER_CATEGORY_STORAGE_KEY, tag); }
     catch { /* Keep the selected category in memory. */ }
-  }, [tag]);
+  }, [categoryHydrated, tag]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => activeLinkRef.current?.scrollIntoView({ block: "center" }));
