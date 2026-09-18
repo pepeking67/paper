@@ -34,6 +34,18 @@ export function getAiProvider(): AiProvider | null {
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
+export class AiProviderRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string,
+  ) {
+    super(`GEMINI_HTTP_${status}: ${detail}`);
+    this.name = "AiProviderRequestError";
+  }
+}
+
+const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
+
 class GeminiProvider implements AiProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
@@ -63,21 +75,35 @@ class GeminiProvider implements AiProvider {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: "user", parts }],
-          generationConfig: { temperature },
-        }),
-      });
-      if (!response.ok) throw new Error(`GEMINI_HTTP_${response.status}`);
-      const data: unknown = await response.json();
-      const text = extractOutputText(data);
-      if (!text) throw new Error("GEMINI_EMPTY_RESPONSE");
-      return text;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ role: "user", parts }],
+            generationConfig: { temperature, maxOutputTokens: 8_192 },
+          }),
+        });
+
+        if (response.ok) {
+          const data: unknown = await response.json();
+          const text = extractOutputText(data);
+          if (text) return text;
+          throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
+        }
+
+        const detail = await readGeminiError(response);
+        if (!RETRYABLE_GEMINI_STATUSES.has(response.status) || attempt === 2) {
+          throw new AiProviderRequestError(response.status, detail);
+        }
+
+        const retryAfter = readRetryAfterMs(response.headers.get("retry-after"));
+        await wait(Math.min(retryAfter ?? 1_500 * (attempt + 1), 5_000), controller.signal);
+      }
+
+      throw new Error("GEMINI_RETRY_EXHAUSTED");
     } finally {
       clearTimeout(timeout);
     }
@@ -126,4 +152,48 @@ function extractOutputText(value: unknown): string {
   if (!value || typeof value !== "object") return "";
   const response = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }> };
   return (response.candidates ?? []).flatMap((candidate) => candidate.content?.parts ?? []).filter((part) => typeof part.text === "string").map((part) => part.text as string).join("\n").trim();
+}
+
+
+async function readGeminiError(response: Response): Promise<string> {
+  const raw = await response.text().catch(() => "");
+  if (!raw) return response.statusText || "Gemini request failed";
+  try {
+    const parsed = JSON.parse(raw) as { error?: { message?: unknown; status?: unknown } };
+    const message = typeof parsed.error?.message === "string" ? parsed.error.message : "";
+    const status = typeof parsed.error?.status === "string" ? parsed.error.status : "";
+    return [status, message].filter(Boolean).join(": ").slice(0, 1_000) || raw.slice(0, 1_000);
+  } catch {
+    return raw.slice(0, 1_000);
+  }
+}
+
+function describeEmptyResponse(value: unknown): string {
+  if (!value || typeof value !== "object") return "no candidate text";
+  const response = value as {
+    promptFeedback?: { blockReason?: unknown };
+    candidates?: Array<{ finishReason?: unknown }>;
+  };
+  const blockReason = typeof response.promptFeedback?.blockReason === "string" ? response.promptFeedback.blockReason : "";
+  const finishReason = typeof response.candidates?.[0]?.finishReason === "string" ? response.candidates[0].finishReason : "";
+  return [blockReason && `block=${blockReason}`, finishReason && `finish=${finishReason}`].filter(Boolean).join(", ") || "no candidate text";
+}
+
+function readRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+  const date = Date.parse(value);
+  if (Number.isNaN(date)) return null;
+  return Math.max(0, date - Date.now());
+}
+
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
 }
