@@ -1,10 +1,10 @@
-# CV_4. Denoising Diffusion Implicit Models
+# Diffusion_2. Denoising Diffusion Implicit Models
 
 > This file mirrors lightweight metadata from Notion. The study note itself remains authoritative in Notion.
 
 - **Authors:** Song et al.
 - **Year:** 2020
-- **Tag:** CV
+- **Tag:** Diffusion
 - **Status:** Not completed
 - **Keys:** P0-02, DDIM
 - **Paper:** [Source](https://arxiv.org/abs/2010.02502)

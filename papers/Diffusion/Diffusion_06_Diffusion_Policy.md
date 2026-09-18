@@ -1,10 +1,10 @@
-# VLA_13. Diffusion Policy: Visuomotor Policy Learning via Action Diffusion
+# Diffusion_6. Diffusion Policy: Visuomotor Policy Learning via Action Diffusion
 
 > This file mirrors lightweight metadata from Notion. The study note itself remains authoritative in Notion.
 
 - **Authors:** Chi et al.
 - **Year:** 2023
-- **Tag:** VLA
+- **Tag:** Diffusion
 - **Status:** Not completed
 - **Keys:** P0-06, Diffusion Policy
 - **Paper:** [Source](https://arxiv.org/abs/2303.04137)
