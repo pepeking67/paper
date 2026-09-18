@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
+import { NotionNoteEditor } from "@/components/study-note/notion-note-editor";
 import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
@@ -26,7 +27,6 @@ export function StudyTray({
   const [copied, setCopied] = useState(false);
   const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteMode, setNoteMode] = useState<"preview" | "edit">("preview");
   const [noteMarkdown, setNoteMarkdown] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteError, setNoteError] = useState("");
@@ -41,7 +41,6 @@ export function StudyTray({
     try { setNoteMarkdown(localStorage.getItem(noteStorageKey) ?? ""); }
     catch { setNoteMarkdown(""); }
     setNoteOpen(false);
-    setNoteMode("preview");
     setNoteError("");
   }, [noteStorageKey]);
 
@@ -84,7 +83,6 @@ export function StudyTray({
       if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "학습 노트 생성 실패"}`);
       if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("빈 학습 노트가 반환되었습니다.");
       persistNote(data.markdown.trim());
-      setNoteMode("preview");
       setNoteOpen(true);
     } catch (caught) {
       setNoteError(caught instanceof Error ? caught.message : "학습 노트 생성 실패");
@@ -115,7 +113,7 @@ export function StudyTray({
         <section className="mt-5 rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,.045)] p-4">
           <div className="flex items-start justify-between gap-4">
             <div><p className="text-xs font-semibold text-[var(--accent)]">STUDY NOTE</p><h3 className="mt-1 font-semibold">논문 순서대로 학습 노트 정리</h3><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">형광펜·밑줄, 메모, 영역 이미지와 직접 Save Insight 한 Q&A만 사용해 Introduction → Model/Architecture → Experiments → Limitations 등 논문 흐름대로 재구성합니다.</p></div>
-            {noteMarkdown && <button type="button" onClick={() => { setNoteMode("preview"); setNoteOpen(true); }} className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">노트 열기</button>}
+            {noteMarkdown && <button type="button" onClick={() => setNoteOpen(true)} className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">노트 열기</button>}
           </div>
           <button disabled={!total || noteLoading} type="button" onClick={() => void generateStudyNote()} className="mt-4 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-40">{noteLoading ? "학습 노트 생성 중…" : noteMarkdown ? "학습 노트 다시 생성" : "학습 노트 생성"}</button>
           {noteError && <p role="alert" className="mt-3 rounded-lg border border-[var(--danger)]/60 bg-[rgba(255,69,58,.08)] p-2.5 text-xs">{noteError}</p>}
@@ -160,20 +158,17 @@ export function StudyTray({
     </div>}
 
     {noteOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="study-note-title" onPointerDown={(event) => { if (event.target === event.currentTarget) setNoteOpen(false); }}>
-      <section className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border border-[var(--line-strong)] bg-[rgba(28,28,30,.98)] shadow-2xl">
+      <section className="flex h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-[24px] border border-[var(--line-strong)] bg-[rgba(28,28,30,.98)] shadow-2xl">
         <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-4 py-3 sm:px-5">
           <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[.12em] text-[var(--accent)]">STUDY NOTE</p><h2 id="study-note-title" className="truncate text-base font-semibold">{paper.title}</h2></div>
-          <div className="flex rounded-lg bg-black/20 p-0.5" role="group" aria-label="학습 노트 보기 방식">
-            <button type="button" onClick={() => setNoteMode("preview")} aria-pressed={noteMode === "preview"} className={`rounded-md px-3 py-1.5 text-xs ${noteMode === "preview" ? "bg-white/12 text-white" : "text-[var(--muted)]"}`}>미리보기</button>
-            <button type="button" onClick={() => setNoteMode("edit")} aria-pressed={noteMode === "edit"} className={`rounded-md px-3 py-1.5 text-xs ${noteMode === "edit" ? "bg-white/12 text-white" : "text-[var(--muted)]"}`}>Markdown 편집</button>
-          </div>
+          <span className="hidden items-center gap-1.5 rounded-lg bg-white/[.04] px-2.5 py-1.5 text-[10px] text-[var(--muted)] sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-[#30d158]"/>보이는 그대로 편집 · 자동 저장</span>
           <button type="button" onClick={() => void copyNote()} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-white/5">{noteCopied ? "복사됨" : "Markdown 복사"}</button>
           <button type="button" onClick={() => setNoteOpen(false)} aria-label="학습 노트 닫기" className="h-8 w-8 rounded-full text-xl text-[var(--muted)] hover:bg-white/5">×</button>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          {noteMode === "preview" ? <article className="scrollbar h-full overflow-y-auto px-5 py-7 sm:px-10 lg:px-16"><div className="mx-auto max-w-3xl"><MarkdownContent content={noteMarkdown} areas={areas} /></div></article> : <div className="h-full p-3 sm:p-4"><label htmlFor="study-note-editor" className="sr-only">학습 노트 Markdown 편집</label><textarea id="study-note-editor" value={noteMarkdown} onChange={(event) => persistNote(event.target.value)} spellCheck={false} className="scrollbar h-full w-full resize-none rounded-2xl border border-[var(--line)] bg-[#111] p-5 font-mono text-[13px] leading-6 outline-none"/></div>}
+          <NotionNoteEditor value={noteMarkdown} areas={areas} onChange={persistNote} />
         </div>
-        <footer className="flex items-center justify-between border-t border-[var(--line)] px-4 py-2.5 text-[11px] text-[var(--muted)]"><span>편집 내용은 이 브라우저에 자동 저장됩니다.</span><button disabled={noteLoading} type="button" onClick={() => void generateStudyNote()} className="rounded-lg px-2.5 py-1.5 text-[var(--accent)] hover:bg-[var(--accent-soft)]">{noteLoading ? "재생성 중…" : "자료에서 다시 생성"}</button></footer>
+        <footer className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-4 py-2.5 text-[11px] text-[var(--muted)]"><span>블록을 클릭하면 그 자리에서 바로 수정됩니다. 이미지도 화면에서 직접 크기를 조절할 수 있습니다.</span><button disabled={noteLoading} type="button" onClick={() => void generateStudyNote()} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[var(--accent)] hover:bg-[var(--accent-soft)]">{noteLoading ? "재생성 중…" : "자료에서 다시 생성"}</button></footer>
       </section>
     </div>}
   </>;
