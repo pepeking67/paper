@@ -23,6 +23,11 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(viewer, /onToggleLibrary/);
   assert.match(viewer, /onToggleChat/);
   assert.match(viewer, /질의응답 열기/);
+  assert.match(viewer, /표시된 PDF 다운로드/);
+  assert.match(viewer, /표시 모두 지우기/);
+  assert.match(viewer, /downloadAnnotatedPdf/);
+  assert.match(workspace, /clearPdfAnnotations/);
+  assert.match(workspace, /highlights: \[\], areas: \[\]/);
 
   assert.match(library, /<select/);
   assert.match(library, /전체 카테고리/);
