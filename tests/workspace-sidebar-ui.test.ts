@@ -8,6 +8,7 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   const library = await readFile("components/paper-list/paper-list.tsx", "utf8");
   const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
   const pdfPage = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
+  const accountPanel = await readFile("components/account/account-sync-panel.tsx", "utf8");
 
   assert.match(workspace, /data-library-open/);
   assert.match(workspace, /data-chat-drawer-open/);
@@ -23,6 +24,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(workspace, /cursor-col-resize/);
   assert.match(workspace, /beginChatResize/);
   assert.match(workspace, /--chat-width/);
+  assert.match(workspace, /AccountSyncPanel/);
+  assert.match(accountPanel, /여러 기기에서 공부 이어하기/);
 
   assert.match(viewer, /onToggleLibrary/);
   assert.match(viewer, /onToggleChat/);
