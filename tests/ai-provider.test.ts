@@ -16,10 +16,10 @@ test("Gemini prompt uses bounded current-page, selection, chunks and recent hist
 test("Gemini model candidates keep the primary model and provide stable fallbacks", () => {
   assert.deepEqual(
     buildGeminiModelCandidates("gemini-primary", "gemini-custom-fallback"),
-    ["gemini-primary", "gemini-custom-fallback", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
+    ["gemini-primary", "gemini-custom-fallback", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"],
   );
   assert.deepEqual(
-    buildGeminiModelCandidates("gemini-2.5-flash", "gemini-2.5-flash"),
-    ["gemini-2.5-flash", "gemini-2.5-flash-lite"],
+    buildGeminiModelCandidates("gemini-3.5-flash-lite", "gemini-3.5-flash-lite"),
+    ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"],
   );
 });
