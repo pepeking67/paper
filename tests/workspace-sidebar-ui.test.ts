@@ -27,6 +27,11 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(library, /<select/);
   assert.match(library, /전체 카테고리/);
   assert.match(library, /논문 목록 닫기/);
+  assert.match(library, /paper-study-library-category/);
+  assert.match(library, /localStorage\.getItem\(PAPER_CATEGORY_STORAGE_KEY\)/);
+  assert.match(library, /localStorage\.setItem\(PAPER_CATEGORY_STORAGE_KEY, tag\)/);
+  assert.match(library, /activeLinkRef/);
+  assert.match(library, /scrollIntoView\(\{ block: "center" \}\)/);
 
   assert.match(chat, /aria-label="질문 문맥"/);
   assert.match(chat, /questionHighlights/);
