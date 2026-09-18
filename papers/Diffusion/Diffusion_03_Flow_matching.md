@@ -1,10 +1,10 @@
-# CV_5. Flow Matching for Generative Modeling
+# Diffusion_3. Flow Matching for Generative Modeling
 
 > This file mirrors lightweight metadata from Notion. The study note itself remains authoritative in Notion.
 
 - **Authors:** Lipman et al.
 - **Year:** 2022
-- **Tag:** CV
+- **Tag:** Diffusion
 - **Status:** Not completed
 - **Keys:** P0-03, Flow matching
 - **Paper:** [Source](https://arxiv.org/abs/2210.02747)

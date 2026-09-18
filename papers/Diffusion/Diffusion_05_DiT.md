@@ -1,10 +1,10 @@
-# CV_7. Scalable Diffusion Models with Transformers
+# Diffusion_5. Scalable Diffusion Models with Transformers
 
 > This file mirrors lightweight metadata from Notion. The study note itself remains authoritative in Notion.
 
 - **Authors:** Peebles & Xie
 - **Year:** 2022
-- **Tag:** CV
+- **Tag:** Diffusion
 - **Status:** Not completed
 - **Keys:** P0-05, DiT
 - **Paper:** [Source](https://arxiv.org/abs/2212.09748)

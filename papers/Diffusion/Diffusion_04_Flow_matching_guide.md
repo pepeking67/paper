@@ -1,10 +1,10 @@
-# CV_6. Flow Matching Guide and Code
+# Diffusion_4. Flow Matching Guide and Code
 
 > This file mirrors lightweight metadata from Notion. The study note itself remains authoritative in Notion.
 
 - **Authors:** Lipman et al.
 - **Year:** 2024
-- **Tag:** CV
+- **Tag:** Diffusion
 - **Status:** Not completed
 - **Keys:** P0-04, Flow matching guide
 - **Paper:** [Source](https://arxiv.org/abs/2412.06264)

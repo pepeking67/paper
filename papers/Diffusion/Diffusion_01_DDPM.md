@@ -1,10 +1,10 @@
-# CV_3. Denoising Diffusion Probabilistic Models
+# Diffusion_1. Denoising Diffusion Probabilistic Models
 
 > This file mirrors lightweight metadata from Notion. The study note itself remains authoritative in Notion.
 
 - **Authors:** Ho et al.
 - **Year:** 2020
-- **Tag:** CV
+- **Tag:** Diffusion
 - **Status:** Not completed
 - **Keys:** P0-01, DDPM
 - **Paper:** [Source](https://arxiv.org/abs/2006.11239)
