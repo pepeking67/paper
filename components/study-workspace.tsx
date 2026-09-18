@@ -83,7 +83,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   }, [paperId, accountSession?.user.id, syncConfigured]);
 
   useEffect(() => {
-    if (!syncConfigured || !accountSession) return;
+    if (!syncConfigured || !sessionRef.current) return;
     void reconcileAccountState("auto");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperId, accountSession?.user.id, syncConfigured]);
