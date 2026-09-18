@@ -17,15 +17,15 @@ export function projectNormalizedRectToPdf(
   pageWidth: number,
   pageHeight: number,
 ): PdfRect {
-  const width = Math.max(0, rect.width * pageWidth);
-  const height = Math.max(0, rect.height * pageHeight);
-  const x = Math.max(0, Math.min(pageWidth, rect.x * pageWidth));
-  const yFromTop = Math.max(0, Math.min(pageHeight, rect.y * pageHeight));
+  const left = Math.max(0, Math.min(1, rect.x));
+  const top = Math.max(0, Math.min(1, rect.y));
+  const right = Math.max(left, Math.min(1, rect.x + rect.width));
+  const bottom = Math.max(top, Math.min(1, rect.y + rect.height));
   return {
-    x,
-    y: Math.max(0, pageHeight - yFromTop - height),
-    width: Math.min(width, Math.max(0, pageWidth - x)),
-    height: Math.min(height, Math.max(0, pageHeight - (pageHeight - yFromTop - height))),
+    x: left * pageWidth,
+    y: (1 - bottom) * pageHeight,
+    width: (right - left) * pageWidth,
+    height: (bottom - top) * pageHeight,
   };
 }
 
