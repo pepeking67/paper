@@ -351,7 +351,6 @@ export function PdfViewer({
             .filter((selection) => selection.page === index + 1)
             .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow" }))}
           savedAreas={savedAreas.filter((area) => area.page === index + 1)}
-          activeAreaIds={new Set(questionAreas.filter((area) => area.page === index + 1).map((area) => area.id))}
           scrollRoot={scrollRoot}
           onText={handlePageText}
           onSelection={captureSelection}
