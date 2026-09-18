@@ -7,6 +7,7 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const library = await readFile("components/paper-list/paper-list.tsx", "utf8");
   const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
+  const pdfPage = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
 
   assert.match(workspace, /data-library-open/);
   assert.match(workspace, /data-chat-drawer-open/);
@@ -28,7 +29,11 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(viewer, /질의응답 열기/);
   assert.match(viewer, /표시된 PDF 다운로드/);
   assert.match(viewer, /표시 모두 지우기/);
-  assert.match(viewer, /downloadAnnotatedPdf/);
+  assert.match(viewer, /downloadAnnotatedPdf\(paper\.id, savedHighlights/);
+  assert.match(viewer, /다운로드 PDF에는 포함되지 않습니다/);
+  assert.match(pdfPage, /aria-label="저장된 PDF 영역"/);
+  assert.match(pdfPage, /deleteMode \? "pointer-events-auto" : "pointer-events-none"/);
+  assert.match(pdfPage, /border-dashed border-sky-500\/75/);
   assert.match(workspace, /clearPdfAnnotations/);
   assert.match(workspace, /highlights: \[\], areas: \[\]/);
 
