@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findPaper } from "@/lib/papers/catalog";
-import { getAiProvider, type ChatTurn, type StudyAreaContext, type StudyContext } from "@/lib/ai/provider";
+import { AiProviderRequestError, getAiProvider, type ChatTurn, type StudyAreaContext, type StudyContext } from "@/lib/ai/provider";
 
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
@@ -11,8 +11,29 @@ export async function POST(request: Request) {
     const message = await provider.answer(body.message, sanitizeContext(body.context), sanitizeHistory(body.history));
     return NextResponse.json({ message });
   } catch (error) {
-    const timeout = error instanceof Error && error.name === "AbortError";
-    return NextResponse.json({ error: timeout ? "AI response timed out" : "AI response failed", code: timeout ? "AI_TIMEOUT" : "AI_PROVIDER_ERROR" }, { status: timeout ? 504 : 502 });
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json({ error: "AI 응답 시간이 초과되었습니다. 잠시 후 다시 시도하세요.", code: "AI_TIMEOUT" }, { status: 504 });
+    }
+
+    if (error instanceof AiProviderRequestError) {
+      console.error("[chat] Gemini request failed", { model: error.model, status: error.status, detail: error.detail });
+      if (error.status === 429) {
+        return NextResponse.json({ error: "Gemini 사용량 제한에 도달했습니다. 다른 모델 fallback도 사용할 수 없었습니다.", code: "AI_RATE_LIMIT" }, { status: 429 });
+      }
+      if ([500, 502, 503, 504].includes(error.status)) {
+        return NextResponse.json({ error: "Gemini 서비스가 일시적으로 응답하지 않습니다. fallback 모델까지 시도했지만 실패했습니다.", code: "AI_PROVIDER_UNAVAILABLE" }, { status: 503 });
+      }
+      if (error.status === 404) {
+        return NextResponse.json({ error: "현재 Gemini 모델을 이 API 프로젝트에서 사용할 수 없습니다.", code: "AI_MODEL_UNAVAILABLE" }, { status: 502 });
+      }
+      if (error.status === 400 || error.status === 413) {
+        return NextResponse.json({ error: "현재 질문 자료를 Gemini가 처리하지 못했습니다. 선택 영역이나 문맥 크기를 줄여 다시 시도하세요.", code: "AI_REQUEST_REJECTED" }, { status: 400 });
+      }
+      return NextResponse.json({ error: "Gemini 요청이 실패했습니다.", code: "AI_PROVIDER_ERROR" }, { status: 502 });
+    }
+
+    console.error("[chat] Unexpected generation failure", error);
+    return NextResponse.json({ error: "AI 응답 생성에 실패했습니다.", code: "AI_PROVIDER_ERROR" }, { status: 502 });
   }
 }
 

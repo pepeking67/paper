@@ -48,10 +48,18 @@ select { color-scheme: dark; }
 .scrollbar { scrollbar-color: rgba(255,255,255,.22) transparent; scrollbar-width: thin; }
 
 .study-workspace { grid-template-columns: minmax(0, 1fr); background: #0b0b0c !important; }
+@media (min-width: 768px) {
+  .study-workspace[data-chat-drawer-open="true"] {
+    grid-template-columns: minmax(0, 1fr) var(--chat-width, 420px);
+  }
+}
 @media (min-width: 1024px) {
-  .study-workspace[data-library-open="true"][data-chat-open="false"] { grid-template-columns: 280px minmax(0, 1fr); }
-  .study-workspace[data-library-open="false"][data-chat-open="true"] { grid-template-columns: minmax(0, 1fr) 420px; }
-  .study-workspace[data-library-open="true"][data-chat-open="true"] { grid-template-columns: 280px minmax(0, 1fr) 420px; }
+  .study-workspace[data-library-open="true"][data-chat-drawer-open="false"] {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+  .study-workspace[data-library-open="true"][data-chat-drawer-open="true"] {
+    grid-template-columns: 280px minmax(0, 1fr) var(--chat-width, 420px);
+  }
 }
 
 /* Apple-like materials and hierarchy */

@@ -34,6 +34,26 @@ export function getAiProvider(): AiProvider | null {
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
+export class AiProviderRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string,
+    public readonly model?: string,
+  ) {
+    super(`GEMINI_HTTP_${status}: ${detail}`);
+    this.name = "AiProviderRequestError";
+  }
+}
+
+const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
+const FALLBACK_GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
+
+export function buildGeminiModelCandidates(primary: string, configuredFallback = process.env.GEMINI_FALLBACK_MODEL): string[] {
+  return [primary, configuredFallback?.trim(), ...FALLBACK_GEMINI_MODELS]
+    .filter((model): model is string => Boolean(model))
+    .filter((model, index, models) => models.indexOf(model) === index);
+}
+
 class GeminiProvider implements AiProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
@@ -49,12 +69,12 @@ class GeminiProvider implements AiProvider {
 
   async composeStudyNote(material: string, areas: StudyAreaContext[] = []): Promise<string> {
     const parts: GeminiPart[] = [{
-      text: `Create a polished paper study note from the following deliberately saved study material. The learner's preferred Notion style follows the paper itself: Introduction first, then the paper's Model / Architecture / Method in mechanism order, then Experiments and their subsections, then Limitations or Conclusion only when supported. Saved Insights are deliberate important Q&A and must be integrated into the relevant paper section rather than copied into a separate Q&A section. Preserve page references, uncertainty, equations, and the learner's priorities. Do not invent unsupported sections or claims. PDF area images have stable markers in the form [[PDF_AREA:<id>]]. When an area image is useful in the note, place its exact marker on its own line near the explanation. Never invent a URL and never use normal Markdown image syntax for an attached PDF area.\n\n${material.slice(0, 60_000)}`,
+      text: `Create a polished paper study note from the following deliberately saved study material. Use the paper's natural section order only as the document skeleton. The actual content must be selected primarily from the learner's underlines, highlights, selected PDF areas, and attached memos. Do not turn this into a generic full-paper summary just because a section exists in the paper. Reorganize the learner-marked evidence into the most appropriate paper sections and preserve the paper's conceptual/mechanism flow. Saved Insights are deliberate Q&A about places where the learner had questions; use them only as supplemental clarification inside the relevant section, not as a separate Q&A section and not as a new primary topic disconnected from marked evidence. Prefer paper annotations and inspected PDF-area images over Q&A answers when they conflict. Preserve useful page references, uncertainty, equations, and the learner's priorities. PDF area images have stable markers in the form [[PDF_AREA:<id>]]. When an area image is useful in the note, place its exact marker on its own line near the explanation. Never invent a URL and never use normal Markdown image syntax for an attached PDF area.\n\n${material.slice(0, 60_000)}`,
     }];
     appendAreaImages(parts, areas);
     return this.generate(
       parts,
-      "You turn paper-reading records into a durable personal paper note that resembles a concise Notion research page. Return only the note itself in clean GitHub-flavored Markdown, with no preamble. Structure the document by the paper's natural section order, not by question chronology. Start with # Introduction when supported. Then choose the paper's own natural top-level heading such as # Model, # Architecture, or # Method; do not create duplicate synonym sections. Inside it, use ## / ### headings for components in actual processing or conceptual order. Follow with # Training / # Data only if relevant, then # Experiments with paper-order experiment subsections such as main results, generalization, robustness, analysis, or ablation. Add # Limitations and # Conclusion only when the supplied evidence supports them. Do not create a general Q&A, Saved Insights, checklist, or annotation-dump section. Instead, integrate each explicitly saved insight into the section whose concept it explains. Keep prose concise and direct like research notes, emphasize key concepts with bold, keep useful page references, and place equations close to their explanations using $...$ and $$...$$. Use tables or lists only when they improve clarity. When an attached PDF area contains an equation, figure, or table, inspect it directly and, when it belongs in the final note, put the exact supplied [[PDF_AREA:<id>]] marker on a standalone line immediately beside the relevant explanation. Do not output ![...](...) for attached PDF areas and do not invent image URLs. If evidence is insufficient, omit the section or clearly mark uncertainty rather than guessing. Never wrap the entire document in a code fence.",
+      "You turn paper-reading records into a durable personal paper note that resembles a concise Notion research page. Return only the note itself in clean GitHub-flavored Markdown, with no preamble. The paper's natural section order is the skeleton; the learner's annotations are the content-selection signal. Build sections in paper order, but fill them primarily with underlines, highlights, selected PDF areas, and learner memos. Do not produce a generic full-paper summary or fill unmarked sections merely for completeness. Start with # Introduction when supported, then use the paper's own natural top-level heading such as # Model, # Architecture, or # Method, with ## / ### headings in actual processing or conceptual order. Follow with # Training / # Data only if relevant, then # Experiments with paper-order subsections such as setup, main results, generalization, robustness, analysis, or ablation. Add # Limitations and # Conclusion only when supplied evidence supports them. Treat Saved Insights as supplemental clarification for places where the learner had questions: integrate the useful answer into the relevant concept after the marked-paper explanation, never as a general Q&A section, and do not let Q&A introduce a new main topic that is disconnected from annotations. If a Saved Insight conflicts with marked source text or an inspected PDF area, prefer the paper evidence and mark uncertainty briefly. Keep prose concise and direct like research notes, emphasize key concepts with bold, keep useful page references, and place equations close to their explanations using $...$ and $$...$$. Use tables or lists only when they improve clarity. When an attached PDF area contains an equation, figure, or table, inspect it directly and, when it belongs in the final note, put the exact supplied [[PDF_AREA:<id>]] marker on a standalone line immediately beside the relevant explanation. Do not output ![...](...) for attached PDF areas and do not invent image URLs. If evidence is insufficient, omit the section or clearly mark uncertainty rather than guessing. Never wrap the entire document in a code fence.",
       0.15,
     );
   }
@@ -62,22 +82,60 @@ class GeminiProvider implements AiProvider {
   private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
+    const models = buildGeminiModelCandidates(this.model);
+    let lastProviderError: AiProviderRequestError | null = null;
+
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: "user", parts }],
-          generationConfig: { temperature },
-        }),
-      });
-      if (!response.ok) throw new Error(`GEMINI_HTTP_${response.status}`);
-      const data: unknown = await response.json();
-      const text = extractOutputText(data);
-      if (!text) throw new Error("GEMINI_EMPTY_RESPONSE");
-      return text;
+      for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+        const model = models[modelIndex];
+        const attemptsForModel = modelIndex === 0 ? 2 : 1;
+
+        for (let attempt = 0; attempt < attemptsForModel; attempt += 1) {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            signal: controller.signal,
+            headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
+              contents: [{ role: "user", parts }],
+              generationConfig: { temperature, maxOutputTokens: 8_192 },
+            }),
+          });
+
+          if (response.ok) {
+            const data: unknown = await response.json();
+            const text = extractOutputText(data);
+            if (text) {
+              if (model !== this.model) console.info("[gemini] fallback model succeeded", { primary: this.model, fallback: model });
+              return text;
+            }
+            throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
+          }
+
+          const detail = await readGeminiError(response);
+          const providerError = new AiProviderRequestError(response.status, detail, model);
+          lastProviderError = providerError;
+
+          const retrySameModel = RETRYABLE_GEMINI_STATUSES.has(response.status) && attempt + 1 < attemptsForModel;
+          if (retrySameModel) {
+            const retryAfter = readRetryAfterMs(response.headers.get("retry-after"));
+            await wait(Math.min(retryAfter ?? 1_200 * (attempt + 1), 4_000), controller.signal);
+            continue;
+          }
+
+          const canTryAnotherModel = modelIndex + 1 < models.length
+            && (RETRYABLE_GEMINI_STATUSES.has(response.status) || response.status === 403 || response.status === 404);
+          if (canTryAnotherModel) {
+            console.warn("[gemini] switching model after provider failure", { model, status: response.status });
+            break;
+          }
+
+          throw providerError;
+        }
+      }
+
+      if (lastProviderError) throw lastProviderError;
+      throw new Error("GEMINI_RETRY_EXHAUSTED");
     } finally {
       clearTimeout(timeout);
     }
@@ -126,4 +184,48 @@ function extractOutputText(value: unknown): string {
   if (!value || typeof value !== "object") return "";
   const response = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }> };
   return (response.candidates ?? []).flatMap((candidate) => candidate.content?.parts ?? []).filter((part) => typeof part.text === "string").map((part) => part.text as string).join("\n").trim();
+}
+
+
+async function readGeminiError(response: Response): Promise<string> {
+  const raw = await response.text().catch(() => "");
+  if (!raw) return response.statusText || "Gemini request failed";
+  try {
+    const parsed = JSON.parse(raw) as { error?: { message?: unknown; status?: unknown } };
+    const message = typeof parsed.error?.message === "string" ? parsed.error.message : "";
+    const status = typeof parsed.error?.status === "string" ? parsed.error.status : "";
+    return [status, message].filter(Boolean).join(": ").slice(0, 1_000) || raw.slice(0, 1_000);
+  } catch {
+    return raw.slice(0, 1_000);
+  }
+}
+
+function describeEmptyResponse(value: unknown): string {
+  if (!value || typeof value !== "object") return "no candidate text";
+  const response = value as {
+    promptFeedback?: { blockReason?: unknown };
+    candidates?: Array<{ finishReason?: unknown }>;
+  };
+  const blockReason = typeof response.promptFeedback?.blockReason === "string" ? response.promptFeedback.blockReason : "";
+  const finishReason = typeof response.candidates?.[0]?.finishReason === "string" ? response.candidates[0].finishReason : "";
+  return [blockReason && `block=${blockReason}`, finishReason && `finish=${finishReason}`].filter(Boolean).join(", ") || "no candidate text";
+}
+
+function readRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+  const date = Date.parse(value);
+  if (Number.isNaN(date)) return null;
+  return Math.max(0, date - Date.now());
+}
+
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
 }
