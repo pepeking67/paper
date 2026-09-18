@@ -23,6 +23,9 @@ test("buildStudyPacket uses saved insights and paper-section ordering instructio
   assert.match(packet, /Model \/ Architecture \/ Method/);
   assert.match(packet, /Experiments/);
   assert.match(packet, /Limitations/);
-  assert.match(packet, /별도의 Q&A section으로 만들지 않는다/);
+  assert.match(packet, /논문의 전체 구조와 전개 순서는 노트의 \*\*뼈대\*\*/);
+  assert.match(packet, /내용 선택의 1순위는 사용자가 표시한 원문/);
+  assert.match(packet, /Saved Insight Q&A는 보충 자료다/);
+  assert.match(packet, /Q&A는 의문이 생긴 부분의 보충 설명으로만 사용하라/);
   assert.doesNotMatch(packet, /이 논문을 공부하면서 나눈 전체 질문과 답변/);
 });
