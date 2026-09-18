@@ -30,6 +30,25 @@ Notion remains authoritative for study notes, `Keys`, and `Done`. These files pr
 | VLA_11 | Real-Time Execution of Action Chunking Flow Policies | 2025 | In progress | [paper](https://arxiv.org/abs/2506.07339) | [notes](https://app.notion.com/p/f500ad69a5f883db847e015fbaf1b4e2) |
 | VLA_12 | GR00T N1: An Open Foundation Model for Generalist Humanoid Robots | 2025 | In progress | [paper](https://arxiv.org/abs/2503.14734) | [notes](https://app.notion.com/p/83a0ad69a5f88398bbec01c1c8f03d0c) |
 | VLM_1 | FiLM: Visual Reasoning with a General Conditioning Layer | 2017 | In progress | [paper](https://arxiv.org/abs/1709.07871) | [notes](https://app.notion.com/p/7e00ad69a5f8833a926781fdadf238f5) |
+| CV_3 | Denoising Diffusion Probabilistic Models | 2020 | Not completed | [paper](https://arxiv.org/abs/2006.11239) | [notes](https://app.notion.com/p/3df0ad69a5f881439a72fceeea290aef) |
+| CV_4 | Denoising Diffusion Implicit Models | 2020 | Not completed | [paper](https://arxiv.org/abs/2010.02502) | [notes](https://app.notion.com/p/3df0ad69a5f881fb8b23d0fdd8f4246e) |
+| CV_5 | Flow Matching for Generative Modeling | 2022 | Not completed | [paper](https://arxiv.org/abs/2210.02747) | [notes](https://app.notion.com/p/3df0ad69a5f88147a44ede7d3382f9ac) |
+| CV_6 | Flow Matching Guide and Code | 2024 | Not completed | [paper](https://arxiv.org/abs/2412.06264) | [notes](https://app.notion.com/p/3df0ad69a5f88118a4b9ec7c12d93bad) |
+| CV_7 | Scalable Diffusion Models with Transformers | 2022 | Not completed | [paper](https://arxiv.org/abs/2212.09748) | [notes](https://app.notion.com/p/3df0ad69a5f881fea6adf2f7783de608) |
+| VLA_13 | Diffusion Policy: Visuomotor Policy Learning via Action Diffusion | 2023 | Not completed | [paper](https://arxiv.org/abs/2303.04137) | [notes](https://app.notion.com/p/3df0ad69a5f8817297f8d939ca0f5324) |
+| VLA_14 | Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware | 2023 | Not completed | [paper](https://arxiv.org/abs/2304.13705) | [notes](https://app.notion.com/p/3df0ad69a5f8816997c8c3ac4a5a41a9) |
+| VLM_2 | Learning Transferable Visual Models From Natural Language Supervision | 2021 | Not completed | [paper](https://arxiv.org/abs/2103.00020) | [notes](https://app.notion.com/p/3df0ad69a5f88111b22ce244ec3f4836) |
+| VLM_3 | Sigmoid Loss for Language Image Pre-Training | 2023 | Not completed | [paper](https://arxiv.org/abs/2303.15343) | [notes](https://app.notion.com/p/3df0ad69a5f88127a2e4fecd94fc3ef0) |
+| CV_8 | DINOv2: Learning Robust Visual Features without Supervision | 2023 | Not completed | [paper](https://arxiv.org/abs/2304.07193) | [notes](https://app.notion.com/p/3df0ad69a5f88155827dcaecf010613b) |
+| VLM_4 | Prismatic VLMs: Investigating the Design Space of Visually-Conditioned Language Models | 2024 | Not completed | [paper](https://arxiv.org/abs/2402.07865) | [notes](https://app.notion.com/p/3df0ad69a5f88160bffad05ecff5bb66) |
+| VLM_5 | PaliGemma: A versatile 3B VLM for transfer | 2024 | Not completed | [paper](https://arxiv.org/abs/2407.07726) | [notes](https://app.notion.com/p/3df0ad69a5f881e0b043c642f0fc87c0) |
+| Attention_3 | LoRA: Low-Rank Adaptation of Large Language Models | 2021 | Not completed | [paper](https://arxiv.org/abs/2106.09685) | [notes](https://app.notion.com/p/3df0ad69a5f8816fa43fc102c0e12e74) |
+| VLA_15 | Fine-Tuning Vision-Language-Action Models: Optimizing Speed and Success | 2025 | Not completed | [paper](https://arxiv.org/abs/2502.19645) | [notes](https://app.notion.com/p/3df0ad69a5f881a9b4b1e8ee9cc90479) |
+| VLA_16 | FAST: Efficient Action Tokenization for Vision-Language-Action Models | 2025 | Not completed | [paper](https://arxiv.org/abs/2501.09747) | [notes](https://app.notion.com/p/3df0ad69a5f881d9a64cca94e37bcd52) |
+| VLA_17 | SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics | 2025 | Not completed | [paper](https://arxiv.org/abs/2506.01844) | [notes](https://app.notion.com/p/3df0ad69a5f881ec95c5c1fea19ac44a) |
+| VLA_18 | LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning | 2023 | Not completed | [paper](https://arxiv.org/abs/2306.03310) | [notes](https://app.notion.com/p/3df0ad69a5f88125b7dcc558ad486a9a) |
+
+See [the recommended 20-paper reading order](./READING_ROADMAP.md).
 
 ## Adding a paper
 

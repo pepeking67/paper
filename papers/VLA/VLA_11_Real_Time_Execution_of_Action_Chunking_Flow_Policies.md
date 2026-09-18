@@ -6,7 +6,7 @@
 - **Year:** 2025
 - **Tag:** VLA
 - **Status:** In progress
-- **Keys:** Not recorded
+- **Keys:** P0-18, RTC
 - **Paper:** [Source](https://arxiv.org/abs/2506.07339)
 - **Study notes:** [Notion](https://app.notion.com/p/f500ad69a5f883db847e015fbaf1b4e2)
 

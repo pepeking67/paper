@@ -6,7 +6,7 @@
 - **Year:** 2024
 - **Tag:** VLA
 - **Status:** In progress
-- **Keys:** RoboVLMs
+- **Keys:** P0-17, RoboVLMs
 - **Paper:** [Source](https://arxiv.org/abs/2412.14058)
 - **Study notes:** [Notion](https://app.notion.com/p/15f0ad69a5f8832db9520144eef30f79)
 
