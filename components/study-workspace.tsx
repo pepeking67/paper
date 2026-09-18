@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
@@ -17,7 +17,9 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatWidth, setChatWidth] = useState(420);
   const storageKey = `paper-study-tray:${initialPaper.id}`;
+  const chatWidthStorageKey = "paper-study-chat-width";
 
   useEffect(() => {
     try {
@@ -31,20 +33,13 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   useEffect(() => {
     const storedLibrary = localStorage.getItem("paper-study-library-open");
     const storedChat = localStorage.getItem("paper-study-chat-open");
+    const storedChatWidth = Number(localStorage.getItem(chatWidthStorageKey));
     setLibraryOpen(storedLibrary === null ? window.innerWidth >= 1024 : storedLibrary === "true");
     setChatOpen(storedChat === "true");
-  }, []);
-
-  useEffect(() => {
-    if (!chatOpen) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setChatOpen(false);
-      try { localStorage.setItem("paper-study-chat-open", "false"); } catch { /* Keep UI state in memory. */ }
+    if (Number.isFinite(storedChatWidth) && storedChatWidth > 0) {
+      setChatWidth(clampChatWidth(storedChatWidth, window.innerWidth, storedLibrary === "true"));
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [chatOpen]);
+  }, []);
 
   function setLibraryVisibility(open: boolean) {
     setLibraryOpen(open);
@@ -54,6 +49,38 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   function setChatVisibility(open: boolean) {
     setChatOpen(open);
     try { localStorage.setItem("paper-study-chat-open", String(open)); } catch { /* Keep UI state in memory. */ }
+  }
+
+  function beginChatResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (window.innerWidth < 768) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = chatWidth;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      const nextWidth = clampChatWidth(startWidth + startX - moveEvent.clientX, window.innerWidth, libraryOpen);
+      setChatWidth(nextWidth);
+    }
+
+    function stopResize() {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+      setChatWidth((current) => {
+        try { localStorage.setItem(chatWidthStorageKey, String(current)); } catch { /* Keep resized width in memory. */ }
+        return current;
+      });
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize, { once: true });
+    window.addEventListener("pointercancel", stopResize, { once: true });
   }
 
   function updateTray(updater: (current: StudyTrayData) => StudyTrayData) {
@@ -147,6 +174,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     data-library-open={libraryOpen ? "true" : "false"}
     data-chat-open="false"
     data-chat-drawer-open={chatOpen ? "true" : "false"}
+    style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
   >
     <style>{`
       /* Question-context chips now live inside Study Chat so the PDF keeps its full vertical space. */
@@ -160,13 +188,6 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       aria-label="논문 목록 바깥 영역"
       className="fixed inset-0 z-30 bg-black/55 lg:hidden"
       onPointerDown={() => setLibraryVisibility(false)}
-    />}
-
-    {chatOpen && <button
-      type="button"
-      aria-label="질의응답 바깥 영역"
-      className="fixed inset-0 z-40 bg-black/30 lg:bg-black/10"
-      onPointerDown={() => setChatVisibility(false)}
     />}
 
     {libraryOpen && <div className="fixed inset-y-0 left-0 z-40 w-[min(88vw,300px)] min-w-0 lg:static lg:z-auto lg:w-auto">
@@ -198,7 +219,17 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       />
     </div>
 
-    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,460px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)]">
+    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,420px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:static md:z-auto md:w-auto md:max-w-none md:shadow-none">
+      <div
+        role="separator"
+        aria-label="질의응답 패널 크기 조절"
+        aria-orientation="vertical"
+        title="드래그하여 질의응답 패널 너비 조절"
+        onPointerDown={beginChatResize}
+        className="absolute inset-y-0 left-0 z-20 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none md:block"
+      >
+        <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--line)] transition group-hover:bg-[var(--accent)]" />
+      </div>
       <StudyChat
         paper={initialPaper}
         context={context}
@@ -226,4 +257,13 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       onUseArea={useAreaForQuestion}
     />
   </main>;
+}
+
+
+function clampChatWidth(value: number, viewportWidth: number, libraryOpen: boolean) {
+  const minimum = 300;
+  const libraryWidth = libraryOpen && viewportWidth >= 1024 ? 280 : 0;
+  const minimumPdfWidth = 320;
+  const maximum = Math.max(minimum, Math.min(760, viewportWidth - libraryWidth - minimumPdfWidth));
+  return Math.round(Math.max(minimum, Math.min(maximum, value)));
 }
