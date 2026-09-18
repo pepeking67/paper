@@ -6,7 +6,7 @@
 - **Year:** 2020
 - **Tag:** CV
 - **Status:** In progress
-- **Keys:** ViT
+- **Keys:** P0-08, ViT
 - **Paper:** [Source](https://arxiv.org/abs/2010.11929)
 - **Study notes:** [Notion](https://app.notion.com/p/ccf0ad69a5f883a29dbc817c75c568b3)
 
