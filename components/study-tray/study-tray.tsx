@@ -11,12 +11,16 @@ import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
 export function StudyTray({
   paper,
   tray,
+  noteMarkdown,
+  onNoteChange,
   onAddMemo,
   onRemove,
   onUseArea,
 }: {
   paper: Paper;
   tray: StudyTrayData;
+  noteMarkdown: string;
+  onNoteChange: (value: string) => void;
   onAddMemo: (text: string) => void;
   onRemove: (kind: keyof StudyTrayData, id: string) => void;
   onUseArea: (area: StudyArea) => void;
@@ -27,22 +31,18 @@ export function StudyTray({
   const [copied, setCopied] = useState(false);
   const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteMarkdown, setNoteMarkdown] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [noteCopied, setNoteCopied] = useState(false);
   const areas = tray.areas ?? [];
   const total = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
-  const noteStorageKey = `paper-study-note:${paper.id}`;
 
   useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
 
   useEffect(() => {
-    try { setNoteMarkdown(localStorage.getItem(noteStorageKey) ?? ""); }
-    catch { setNoteMarkdown(""); }
     setNoteOpen(false);
     setNoteError("");
-  }, [noteStorageKey]);
+  }, [paper.id]);
 
   useEffect(() => {
     if (!open && !noteOpen) return;
@@ -63,12 +63,6 @@ export function StudyTray({
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  function persistNote(value: string) {
-    setNoteMarkdown(value);
-    try { localStorage.setItem(noteStorageKey, value); }
-    catch { /* Keep the edited note in memory if browser storage is unavailable. */ }
-  }
-
   async function generateStudyNote() {
     if (!total || noteLoading) return;
     setNoteLoading(true);
@@ -82,7 +76,7 @@ export function StudyTray({
       const data = await response.json();
       if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "학습 노트 생성 실패"}`);
       if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("빈 학습 노트가 반환되었습니다.");
-      persistNote(data.markdown.trim());
+      onNoteChange(data.markdown.trim());
       setNoteOpen(true);
     } catch (caught) {
       setNoteError(caught instanceof Error ? caught.message : "학습 노트 생성 실패");
@@ -166,7 +160,7 @@ export function StudyTray({
           <button type="button" onClick={() => setNoteOpen(false)} aria-label="학습 노트 닫기" className="h-8 w-8 rounded-full text-xl text-[var(--muted)] hover:bg-white/5">×</button>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          <NotionNoteEditor value={noteMarkdown} areas={areas} onChange={persistNote} />
+          <NotionNoteEditor value={noteMarkdown} areas={areas} onChange={onNoteChange} />
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-4 py-2.5 text-[11px] text-[var(--muted)]"><span>블록을 클릭하면 그 자리에서 바로 수정됩니다. 이미지도 화면에서 직접 크기를 조절할 수 있습니다.</span><button disabled={noteLoading} type="button" onClick={() => void generateStudyNote()} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[var(--accent)] hover:bg-[var(--accent-soft)]">{noteLoading ? "재생성 중…" : "자료에서 다시 생성"}</button></footer>
       </section>
