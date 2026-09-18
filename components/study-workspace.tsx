@@ -111,6 +111,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     setQuestionAreas([]);
   }
 
+  function clearPdfAnnotations() {
+    updateTray((current) => ({ ...current, highlights: [], areas: [] }));
+    setQuestionHighlights([]);
+    setQuestionAreas([]);
+  }
+
   function removeTrayItem(kind: keyof StudyTrayData, id: string) {
     // PDF annotations are intentionally erased only from the PDF eraser tool.
     if (kind === "areas" || kind === "highlights") return;
@@ -184,6 +190,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
         onDeleteHighlight={removeHighlight}
         onRemoveQuestionHighlight={removeQuestionHighlight}
         onClearQuestionContext={clearQuestionAnnotations}
+        onClearAnnotations={clearPdfAnnotations}
         libraryOpen={libraryOpen}
         chatOpen={chatOpen}
         onToggleLibrary={() => setLibraryVisibility(!libraryOpen)}
