@@ -21,7 +21,6 @@ type Props = {
   deleteMode: boolean;
   capturedSelections: CapturedSelection[];
   savedAreas: StudyArea[];
-  activeAreaIds: Set<string>;
   scrollRoot: HTMLDivElement | null;
   onText: (page: number, text: string) => void;
   onSelection: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
@@ -55,7 +54,6 @@ export function PdfPage({
   deleteMode,
   capturedSelections,
   savedAreas,
-  activeAreaIds,
   scrollRoot,
   onText,
   onSelection,
@@ -348,24 +346,22 @@ export function PdfPage({
           )}
         </div>
 
-        <div className={`absolute inset-0 ${deleteMode ? "pointer-events-auto z-[3]" : "pointer-events-none z-[1]"}`} aria-label="저장된 PDF 영역">
+        {deleteMode && <div className="pointer-events-auto absolute inset-0 z-[3]" aria-label="저장된 PDF 영역">
           {savedAreas.map((area) => {
             const rect = projectHighlightRect(area.rect, surfaceSize.width, surfaceSize.height);
-            const active = activeAreaIds.has(area.id);
-            const style = {
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-              border: active ? "2px solid rgb(56 189 248)" : "1px dashed rgba(14, 165, 233, 0.7)",
-              background: active ? "rgba(14, 165, 233, 0.08)" : "rgba(14, 165, 233, 0.025)",
-            };
-            if (deleteMode) {
-              return <button key={area.id} type="button" title="이 영역 삭제" aria-label={`Page ${area.page} 영역 삭제`} className="absolute cursor-pointer hover:outline hover:outline-2 hover:outline-red-500" style={style} onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onDeleteArea(area.id); }}/>
-            }
-            return <span key={area.id} className="absolute" style={style}/>;
+            return <button
+              key={area.id}
+              type="button"
+              title="이 영역 삭제"
+              aria-label={`Page ${area.page} 영역 삭제`}
+              className="absolute cursor-pointer border border-dashed border-sky-500/70 bg-sky-400/[.03] hover:outline hover:outline-2 hover:outline-red-500"
+              style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={(event) => { event.stopPropagation(); onDeleteArea(area.id); }}
+            />;
           })}
-        </div>
+        </div>}
 
         <div ref={textLayerRef} className={`textLayer z-[2] ${areaMode ? "pointer-events-none" : ""}`} />
 
