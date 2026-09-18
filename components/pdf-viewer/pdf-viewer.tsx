@@ -309,7 +309,7 @@ export function PdfViewer({
             표시 모두 지우기
           </button>
         </div>
-        <span className="hidden text-[10px] text-[var(--muted)] xl:inline">{tool === "area" ? "영역 모드: 선택 정보는 저장되지만 PDF 위에는 계속 표시하지 않습니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역 위치를 클릭해서 삭제합니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
+        <span className="hidden text-[10px] text-[var(--muted)] xl:inline">{tool === "area" ? "영역 모드: 선택한 영역은 공부 중 PDF 위에 계속 표시되며 다운로드 PDF에는 포함되지 않습니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역 위치를 클릭해서 삭제합니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
       </div>}
       {downloadError && <p role="alert" className="mt-1.5 text-xs text-red-300">{downloadError}</p>}
 
