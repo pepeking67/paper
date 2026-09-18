@@ -310,7 +310,7 @@ export function PdfViewer({
           </button>
         </div>
         <span className="hidden text-[10px] text-[var(--muted)] xl:inline">{tool === "area" ? "영역 모드: 선택 정보는 저장되지만 PDF 위에는 계속 표시하지 않습니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역 위치를 클릭해서 삭제합니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
-      </div>
+      </div>}
       {downloadError && <p role="alert" className="mt-1.5 text-xs text-red-300">{downloadError}</p>}
 
       {pdf && <div className="mt-1.5 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
