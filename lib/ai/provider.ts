@@ -46,7 +46,7 @@ export class AiProviderRequestError extends Error {
 }
 
 const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
-const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const FALLBACK_GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
 
 export function buildGeminiModelCandidates(primary: string, configuredFallback = process.env.GEMINI_FALLBACK_MODEL): string[] {
   return [primary, configuredFallback?.trim(), ...FALLBACK_GEMINI_MODELS]
