@@ -6,6 +6,7 @@ import type { Paper } from "@/lib/papers/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea, StudyHighlight } from "@/lib/study-tray/types";
 import { installPdfJsCompatibility } from "@/lib/pdf/uint8array-to-hex";
+import { downloadAnnotatedPdf } from "@/lib/pdf/export-annotated-pdf";
 import {
   createPdfiumVisualRenderer,
   needsChromiumFontMatrixFallback,
@@ -25,6 +26,7 @@ type PdfViewerProps = {
   onDeleteArea: (id: string) => void;
   onRemoveQuestionArea: (id: string) => void;
   onClearQuestionContext: () => void;
+  onClearAnnotations: () => void;
   savedHighlights: StudyHighlight[];
   savedAreas: StudyArea[];
   questionHighlights: StudyHighlight[];
@@ -58,6 +60,7 @@ export function PdfViewer({
   onDeleteArea,
   onRemoveQuestionArea,
   onClearQuestionContext,
+  onClearAnnotations,
   savedHighlights,
   savedAreas,
   questionHighlights,
@@ -73,6 +76,8 @@ export function PdfViewer({
   const [tool, setTool] = useState<AnnotationTool>("highlight");
   const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("yellow");
   const [zoom, setZoom] = useState(100);
+  const [downloadState, setDownloadState] = useState<"idle" | "loading">("idle");
+  const [downloadError, setDownloadError] = useState("");
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const pageTexts = useRef(new Map<number, string>());
   const currentPage = useRef(page);
@@ -190,6 +195,28 @@ export function PdfViewer({
     scrollRoot?.querySelector<HTMLElement>(`[data-page="${pageNumber}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  async function handleDownloadAnnotatedPdf() {
+    if (!savedHighlights.length || downloadState === "loading") return;
+    setDownloadState("loading");
+    setDownloadError("");
+    try {
+      await downloadAnnotatedPdf(paper.id, savedHighlights, `${paper.id}-annotated.pdf`);
+    } catch (caught) {
+      setDownloadError(caught instanceof Error ? caught.message : "주석 PDF 다운로드에 실패했습니다.");
+    } finally {
+      setDownloadState("idle");
+    }
+  }
+
+  function handleClearAnnotations() {
+    const count = savedHighlights.length + savedAreas.length;
+    if (!count) return;
+    const confirmed = window.confirm(
+      `이 논문의 형광펜·밑줄·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A, 메모, 학습 노트는 유지됩니다.`,
+    );
+    if (confirmed) onClearAnnotations();
+  }
+
   const contextCount = questionHighlights.length + questionAreas.length;
 
   return <section className="flex h-full min-h-0 flex-col bg-[#111]" aria-label="PDF 뷰어">
@@ -262,8 +289,29 @@ export function PdfViewer({
             style={{ background: option.swatch }}
           />)}
         </div>}
-        <span className="hidden text-[10px] text-[var(--muted)] xl:inline">{tool === "area" ? "영역 모드: 사각형으로 드래그하면 저장과 동시에 질문 문맥에 들어갑니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역을 직접 클릭하면 PDF와 Study Tray에서 삭제됩니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
-      </div>}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={!savedHighlights.length || downloadState === "loading"}
+            onClick={() => void handleDownloadAnnotatedPdf()}
+            title="저장된 형광펜·밑줄을 원본 PDF에 합성해서 다운로드합니다. 선택 영역은 PDF에 표시하지 않습니다."
+            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs hover:bg-white/[.06] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {downloadState === "loading" ? "PDF 만드는 중…" : "표시된 PDF 다운로드"}
+          </button>
+          <button
+            type="button"
+            disabled={savedHighlights.length + savedAreas.length === 0}
+            onClick={handleClearAnnotations}
+            title="현재 논문의 형광펜·밑줄·선택 영역을 모두 삭제합니다."
+            className="rounded-md border border-red-500/40 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            표시 모두 지우기
+          </button>
+        </div>
+        <span className="hidden text-[10px] text-[var(--muted)] xl:inline">{tool === "area" ? "영역 모드: 선택 정보는 저장되지만 PDF 위에는 계속 표시하지 않습니다." : tool === "erase" ? "지우개 모드: 형광펜·밑줄·영역 위치를 클릭해서 삭제합니다." : `${tool === "highlight" ? "형광펜" : "밑줄"} 모드: 드래그 즉시 저장되고 다음 질문 문맥에도 추가됩니다.`}</span>
+      </div>
+      {downloadError && <p role="alert" className="mt-1.5 text-xs text-red-300">{downloadError}</p>}
 
       {pdf && <div className="mt-1.5 h-0.5 overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
     </div>
