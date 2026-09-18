@@ -38,6 +38,7 @@ export class AiProviderRequestError extends Error {
   constructor(
     public readonly status: number,
     public readonly detail: string,
+    public readonly model?: string,
   ) {
     super(`GEMINI_HTTP_${status}: ${detail}`);
     this.name = "AiProviderRequestError";
@@ -45,6 +46,13 @@ export class AiProviderRequestError extends Error {
 }
 
 const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
+const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+
+export function buildGeminiModelCandidates(primary: string, configuredFallback = process.env.GEMINI_FALLBACK_MODEL): string[] {
+  return [primary, configuredFallback?.trim(), ...FALLBACK_GEMINI_MODELS]
+    .filter((model): model is string => Boolean(model))
+    .filter((model, index, models) => models.indexOf(model) === index);
+}
 
 class GeminiProvider implements AiProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
@@ -74,35 +82,59 @@ class GeminiProvider implements AiProvider {
   private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
+    const models = buildGeminiModelCandidates(this.model);
+    let lastProviderError: AiProviderRequestError | null = null;
+
     try {
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
-          method: "POST",
-          signal: controller.signal,
-          headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents: [{ role: "user", parts }],
-            generationConfig: { temperature, maxOutputTokens: 8_192 },
-          }),
-        });
+      for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+        const model = models[modelIndex];
+        const attemptsForModel = modelIndex === 0 ? 2 : 1;
 
-        if (response.ok) {
-          const data: unknown = await response.json();
-          const text = extractOutputText(data);
-          if (text) return text;
-          throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
+        for (let attempt = 0; attempt < attemptsForModel; attempt += 1) {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            signal: controller.signal,
+            headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
+              contents: [{ role: "user", parts }],
+              generationConfig: { temperature, maxOutputTokens: 8_192 },
+            }),
+          });
+
+          if (response.ok) {
+            const data: unknown = await response.json();
+            const text = extractOutputText(data);
+            if (text) {
+              if (model !== this.model) console.info("[gemini] fallback model succeeded", { primary: this.model, fallback: model });
+              return text;
+            }
+            throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
+          }
+
+          const detail = await readGeminiError(response);
+          const providerError = new AiProviderRequestError(response.status, detail, model);
+          lastProviderError = providerError;
+
+          const retrySameModel = RETRYABLE_GEMINI_STATUSES.has(response.status) && attempt + 1 < attemptsForModel;
+          if (retrySameModel) {
+            const retryAfter = readRetryAfterMs(response.headers.get("retry-after"));
+            await wait(Math.min(retryAfter ?? 1_200 * (attempt + 1), 4_000), controller.signal);
+            continue;
+          }
+
+          const canTryAnotherModel = modelIndex + 1 < models.length
+            && (RETRYABLE_GEMINI_STATUSES.has(response.status) || response.status === 403 || response.status === 404);
+          if (canTryAnotherModel) {
+            console.warn("[gemini] switching model after provider failure", { model, status: response.status });
+            break;
+          }
+
+          throw providerError;
         }
-
-        const detail = await readGeminiError(response);
-        if (!RETRYABLE_GEMINI_STATUSES.has(response.status) || attempt === 2) {
-          throw new AiProviderRequestError(response.status, detail);
-        }
-
-        const retryAfter = readRetryAfterMs(response.headers.get("retry-after"));
-        await wait(Math.min(retryAfter ?? 1_500 * (attempt + 1), 5_000), controller.signal);
       }
 
+      if (lastProviderError) throw lastProviderError;
       throw new Error("GEMINI_RETRY_EXHAUSTED");
     } finally {
       clearTimeout(timeout);
