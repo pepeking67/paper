@@ -346,22 +346,30 @@ export function PdfPage({
           )}
         </div>
 
-        {deleteMode && <div className="pointer-events-auto absolute inset-0 z-[3]" aria-label="저장된 PDF 영역">
+        <div className={`absolute inset-0 z-[3] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`} aria-label="저장된 PDF 영역">
           {savedAreas.map((area) => {
             const rect = projectHighlightRect(area.rect, surfaceSize.width, surfaceSize.height);
-            return <button
+            const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+            if (deleteMode) {
+              return <button
+                key={area.id}
+                type="button"
+                title="이 영역 삭제"
+                aria-label={`Page ${area.page} 영역 삭제`}
+                className="absolute cursor-pointer border-2 border-dashed border-sky-500/85 bg-sky-400/[.06] hover:outline hover:outline-2 hover:outline-red-500"
+                style={style}
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerUp={(event) => event.stopPropagation()}
+                onClick={(event) => { event.stopPropagation(); onDeleteArea(area.id); }}
+              />;
+            }
+            return <span
               key={area.id}
-              type="button"
-              title="이 영역 삭제"
-              aria-label={`Page ${area.page} 영역 삭제`}
-              className="absolute cursor-pointer border border-dashed border-sky-500/70 bg-sky-400/[.03] hover:outline hover:outline-2 hover:outline-red-500"
-              style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
-              onPointerDown={(event) => event.stopPropagation()}
-              onPointerUp={(event) => event.stopPropagation()}
-              onClick={(event) => { event.stopPropagation(); onDeleteArea(area.id); }}
+              className="absolute border-2 border-dashed border-sky-500/75 bg-sky-400/[.045]"
+              style={style}
             />;
           })}
-        </div>}
+        </div>
 
         <div ref={textLayerRef} className={`textLayer z-[2] ${areaMode ? "pointer-events-none" : ""}`} />
 
