@@ -14,3 +14,5 @@ test("manifest preserves completed-paper entries and covers the reading roadmap"
 });
 test("all configured Blob paths are allow-listed and traversal-safe",()=>{for(const entry of pdfManifest)if(entry.blobPathname)assert(isSafeBlobPath(entry.blobPathname));assert.equal(isSafeBlobPath("papers/RL/../secret.pdf"),false);assert.equal(isSafeBlobPath("other/file.pdf"),false);});
 test("non-papers are explicitly excluded",()=>{assert.equal(pdfManifest.find(e=>e.id==="RL_1")?.uploadStatus,"excluded");assert.equal(pdfManifest.find(e=>e.id==="RL_3")?.uploadStatus,"excluded");});
+
+test("diffusion taxonomy mirrors Notion",()=>{const diffusion=papers.filter(p=>p.tag==="Diffusion");assert.deepEqual(diffusion.map(p=>p.id),["Diffusion_1","Diffusion_2","Diffusion_3","Diffusion_4","Diffusion_5","Diffusion_6"]);for(const paper of diffusion)assert(pdfManifest.some(e=>e.id===paper.id),`missing Diffusion manifest entry for ${paper.id}`);});
