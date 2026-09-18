@@ -41,6 +41,15 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     }
   }, []);
 
+  useEffect(() => {
+    function clampToViewport() {
+      setChatWidth((current) => clampChatWidth(current, window.innerWidth, libraryOpen));
+    }
+    clampToViewport();
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
+  }, [libraryOpen]);
+
   function setLibraryVisibility(open: boolean) {
     setLibraryOpen(open);
     try { localStorage.setItem("paper-study-library-open", String(open)); } catch { /* Keep UI state in memory. */ }
@@ -219,7 +228,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       />
     </div>
 
-    {chatOpen && <div className="relative fixed inset-y-0 right-0 z-50 w-[min(92vw,420px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:static md:z-auto md:w-auto md:max-w-none md:shadow-none">
+    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,420px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:shadow-none">
       <div
         role="separator"
         aria-label="질의응답 패널 크기 조절"
