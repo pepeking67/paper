@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAiProvider, type StudyAreaContext } from "@/lib/ai/provider";
+import { AiProviderRequestError, getAiProvider, type StudyAreaContext } from "@/lib/ai/provider";
 import { findPaper } from "@/lib/papers/catalog";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyHighlight, StudyInsight, StudyMemo, StudyTrayData } from "@/lib/study-tray/types";
@@ -24,8 +24,26 @@ export async function POST(request: Request) {
     const markdown = await provider.composeStudyNote(packet, areas);
     return NextResponse.json({ markdown });
   } catch (error) {
-    const timeout = error instanceof Error && error.name === "AbortError";
-    return NextResponse.json({ error: timeout ? "Study note generation timed out" : "Study note generation failed", code: timeout ? "AI_TIMEOUT" : "AI_PROVIDER_ERROR" }, { status: timeout ? 504 : 502 });
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json({ error: "학습 노트 생성 시간이 초과되었습니다. 잠시 후 다시 시도하세요.", code: "AI_TIMEOUT" }, { status: 504 });
+    }
+
+    if (error instanceof AiProviderRequestError) {
+      console.error("[study-note] Gemini request failed", { status: error.status, detail: error.detail });
+      if (error.status === 429) {
+        return NextResponse.json({ error: "Gemini 사용량 제한에 도달했습니다. 잠시 후 다시 시도하세요.", code: "AI_RATE_LIMIT" }, { status: 429 });
+      }
+      if ([500, 502, 503, 504].includes(error.status)) {
+        return NextResponse.json({ error: "Gemini 서비스가 일시적으로 응답하지 않습니다. 자동 재시도 후에도 실패했습니다.", code: "AI_PROVIDER_UNAVAILABLE" }, { status: 503 });
+      }
+      if (error.status === 400 || error.status === 413) {
+        return NextResponse.json({ error: "Gemini가 현재 학습 자료 요청을 처리하지 못했습니다. 선택 영역이나 저장 자료가 너무 큰지 확인하세요.", code: "AI_REQUEST_REJECTED" }, { status: 400 });
+      }
+      return NextResponse.json({ error: "Gemini 요청이 실패했습니다.", code: "AI_PROVIDER_ERROR" }, { status: 502 });
+    }
+
+    console.error("[study-note] Unexpected generation failure", error);
+    return NextResponse.json({ error: "학습 노트 생성에 실패했습니다.", code: "AI_PROVIDER_ERROR" }, { status: 502 });
   }
 }
 
