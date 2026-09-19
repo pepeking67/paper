@@ -5,11 +5,23 @@ import { readFile } from "node:fs/promises";
 test("browser auth restores and refreshes sessions without a service-role key", async () => {
   const client = await readFile("lib/supabase/browser.ts", "utf8");
   const provider = await readFile("components/auth/auth-provider.tsx", "utf8");
+  const control = await readFile("components/auth/account-control.tsx", "utf8");
   assert.match(client, /persistSession: true/);
   assert.match(client, /autoRefreshToken: true/);
   assert.match(provider, /getSession\(\)/);
   assert.match(provider, /onAuthStateChange/);
+  assert.match(provider, /emailRedirectTo: window\.location\.origin/);
+  assert.match(control, /회원가입 인증 메일 발송 한도를 초과했습니다/);
+  assert.match(control, /invalid_credentials/);
   assert.doesNotMatch(`${client}\n${provider}`, /service[_-]?role/i);
+});
+
+test("authenticated workspaces never mix the shared catalog into a personal library", async () => {
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  assert.match(workspace, /papers=\{personalLibrary\.papers\} userMode/);
+  assert.match(workspace, /로그인한 상태에서는 Shared\/Legacy PDF를 표시하지 않습니다/);
+  assert.match(workspace, /!userMode && <PdfSyncPanel papers=\{papers\}/);
+  assert.doesNotMatch(workspace, /combinedPapers/);
 });
 
 test("account edits are local-first and revision conflicts require a choice", async () => {

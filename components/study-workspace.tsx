@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useRouter } from "next/navigation";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
@@ -14,13 +15,38 @@ import { StudySyncStatusView } from "./study-sync/sync-status";
 import { usePersonalLibrary } from "./library/personal-library-provider";
 import { useAuth } from "./auth/auth-provider";
 import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
+import { LibraryManager } from "./library/library-manager";
 
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const personalLibrary = usePersonalLibrary();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [managerOpen, setManagerOpen] = useState(false);
+  const personalPaper = user ? personalLibrary.papers.find((paper) => paper.id === initialPaper.id) : null;
+  const firstPersonalId = personalLibrary.papers[0]?.id;
+
+  useEffect(() => {
+    if (authLoading || personalLibrary.loading) return;
+    if (user && !personalPaper && firstPersonalId) router.replace(`/papers/${firstPersonalId}`);
+    if (!user && initialPaper.library === "personal") router.replace(`/papers/${papers[0].id}`);
+  }, [authLoading, firstPersonalId, initialPaper.library, papers, personalLibrary.loading, personalPaper, router, user]);
+
+  if (authLoading) return <WorkspaceGate message="계정 세션을 확인하는 중…"/>;
+  if (user && personalLibrary.loading) return <WorkspaceGate message="내 논문 라이브러리를 불러오는 중…"/>;
+
+  if (user) {
+    if (personalPaper) return <WorkspaceShell activePaper={personalPaper} papers={personalLibrary.papers} userMode/>;
+    if (firstPersonalId) return <WorkspaceGate message="내 논문 라이브러리로 이동하는 중…"/>;
+    return <PersonalLibraryEmpty email={user.email ?? "내 계정"} managerOpen={managerOpen} onManagerOpen={() => setManagerOpen(true)} onManagerClose={() => setManagerOpen(false)}/>;
+  }
+
+  if (initialPaper.library === "personal") return <WorkspaceGate message="공유 논문 라이브러리로 이동하는 중…"/>;
+  return <WorkspaceShell activePaper={{ ...initialPaper, library: "legacy" }} papers={papers.map((paper) => ({ ...paper, library: "legacy" as const }))} userMode={false}/>;
+}
+
+function WorkspaceShell({ activePaper, papers, userMode }: { activePaper: Paper; papers: Paper[]; userMode: boolean }) {
   const { user } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
-  const combinedPapers = useMemo(() => [...papers.map((paper) => ({ ...paper, library: "legacy" as const })), ...personalLibrary.papers], [papers, personalLibrary.papers]);
-  const activePaper = personalLibrary.papers.find((paper) => paper.id === initialPaper.id) ?? initialPaper;
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
   const studyState = useStudyState(activePaper.id);
@@ -228,7 +254,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     />}
 
     {libraryOpen && <div className="fixed inset-y-0 left-0 z-40 w-[min(88vw,300px)] min-w-0 lg:static lg:z-auto lg:w-auto">
-      <PaperList papers={combinedPapers} activeId={activePaper.id} onClose={() => setLibraryVisibility(false)} />
+      <PaperList papers={papers} activeId={activePaper.id} onClose={() => setLibraryVisibility(false)} />
     </div>}
 
     <div className="min-h-0 min-w-0">
@@ -285,7 +311,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       />
     </div>}
 
-    <PdfSyncPanel papers={papers} />
+    {!userMode && <PdfSyncPanel papers={papers} />}
     <AccountControl />
     <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
@@ -297,6 +323,28 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       noteMarkdown={studyState.noteMarkdown}
       onNoteChange={studyState.updateNote}
     />
+  </main>;
+}
+
+function WorkspaceGate({ message }: { message: string }) {
+  return <main className="grid h-dvh place-items-center bg-[#111] text-white">
+    <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
+    <div className="text-center"><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-[#555] border-t-white"/><p className="mt-4 text-sm text-[var(--muted)]">{message}</p></div>
+    <AccountControl/>
+  </main>;
+}
+
+function PersonalLibraryEmpty({ email, managerOpen, onManagerOpen, onManagerClose }: { email: string; managerOpen: boolean; onManagerOpen: () => void; onManagerClose: () => void }) {
+  return <main className="grid h-dvh place-items-center bg-[#111] p-6 text-white">
+    <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
+    <section className="w-full max-w-lg rounded-3xl border border-[var(--line)] bg-black/35 p-7 text-center shadow-2xl">
+      <p className="text-[11px] font-semibold tracking-[.14em] text-[var(--accent)]">PERSONAL LIBRARY</p>
+      <h1 className="mt-2 text-2xl font-semibold">내 논문 라이브러리가 비어 있습니다</h1>
+      <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]"><span className="break-all text-[#ddd]">{email}</span> 계정에는 아직 등록된 논문이 없습니다. 로그인한 상태에서는 Shared/Legacy PDF를 표시하지 않습니다.</p>
+      <button type="button" onClick={onManagerOpen} className="mt-6 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black">첫 개인 논문과 PDF 추가</button>
+    </section>
+    <AccountControl/>
+    <LibraryManager open={managerOpen} onClose={onManagerClose}/>
   </main>;
 }
 

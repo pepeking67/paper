@@ -56,7 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signUp(email, password) {
       const client = getBrowserSupabase();
       if (!client) return { error: configurationError() };
-      const { data, error } = await client.auth.signUp({ email, password });
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin },
+      });
       return { error, needsEmailConfirmation: !error && !data.session };
     },
     async signOut() {
