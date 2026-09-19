@@ -75,3 +75,21 @@ test("personal files use private Storage paths and transactional deletion", asyn
   assert.match(area, /paper-area-crops/);
   assert.match(area, /image\/webp/);
 });
+
+
+test("personal paper UUID is the only authenticated study-state identity", async () => {
+  const hook = await readFile("lib/study-sync/use-study-state.ts", "utf8");
+  const storage = await readFile("lib/study-sync/storage.ts", "utf8");
+  const migration = await readFile("supabase/migrations/202609200001_canonical_personal_paper_uuid.sql", "utf8");
+  const library = await readFile("components/library/personal-library-provider.tsx", "utf8");
+
+  assert.doesNotMatch(hook, /readLegacyStudyState/);
+  assert.doesNotMatch(hook, /migrationMarkerKey/);
+  assert.match(hook, /personal paper UUID is the only study-state identity/i);
+  assert.doesNotMatch(storage, /paper-study-tray:/);
+  assert.doesNotMatch(storage, /paper-study-note:/);
+  assert.match(migration, /alter column paper_id type uuid/);
+  assert.match(migration, /references public\.user_papers \(user_id, id\)/);
+  assert.match(library, /const id = String\(data\.id\)/);
+  assert.match(library, /updatePaper\(id: string/);
+});

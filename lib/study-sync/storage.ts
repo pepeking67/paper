@@ -27,10 +27,6 @@ export function accountCacheKey(userId: string, paperId: string) {
   return `paper-study-account:${userId}:${paperId}`;
 }
 
-export function migrationMarkerKey(userId: string, paperId: string) {
-  return `paper-study-migrated:${userId}:${paperId}`;
-}
-
 export function readAccountCache(userId: string, paperId: string): AccountStudyCache | null {
   try {
     const parsed = JSON.parse(localStorage.getItem(accountCacheKey(userId, paperId)) ?? "null") as Partial<AccountStudyCache> | null;
@@ -47,19 +43,6 @@ export function readAccountCache(userId: string, paperId: string): AccountStudyC
 
 export function writeAccountCache(userId: string, paperId: string, cache: AccountStudyCache) {
   localStorage.setItem(accountCacheKey(userId, paperId), JSON.stringify(cache));
-}
-
-export function readLegacyStudyState(paperId: string): StudyStateSnapshot {
-  let tray = emptyStudyTray();
-  let noteMarkdown = "";
-  try { tray = normalizeTray(JSON.parse(localStorage.getItem(`paper-study-tray:${paperId}`) ?? "null")); } catch { /* Keep empty tray. */ }
-  try { noteMarkdown = localStorage.getItem(`paper-study-note:${paperId}`) ?? ""; } catch { /* Keep empty note. */ }
-  return { tray, noteMarkdown, revision: 0, updatedAt: new Date().toISOString() };
-}
-
-export function hasStudyContent(snapshot: Pick<StudyStateSnapshot, "tray" | "noteMarkdown">) {
-  const tray = snapshot.tray;
-  return Boolean(snapshot.noteMarkdown.trim() || tray.highlights.length || (tray.areas ?? []).length || tray.insights.length || tray.memos.length);
 }
 
 export function hasRevisionConflict(baseRevision: number, serverRevision: number) {

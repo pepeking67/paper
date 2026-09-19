@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { emptyStudyTray, type StudyTrayData } from "@/lib/study-tray/types";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
-import { hasRevisionConflict, hasStudyContent, migrationMarkerKey, normalizeTray, readAccountCache, readLegacyStudyState, sanitizeTrayForServer, writeAccountCache } from "./storage";
+import { hasRevisionConflict, normalizeTray, readAccountCache, sanitizeTrayForServer, writeAccountCache } from "./storage";
 import type { AccountStudyCache, StudyStateConflict, StudyStateSnapshot, StudySyncStatus } from "./types";
 
 type ServerRow = { tray: unknown; note_markdown: string; revision: number; updated_at: string };
@@ -53,7 +53,6 @@ export function useStudyState(paperId: string) {
         return;
       }
       commitSynced(current, data as ServerRow);
-      try { localStorage.setItem(migrationMarkerKey(userId, paperId), "1"); } catch { /* Marker is an optimization only. */ }
       return;
     }
 
@@ -107,22 +106,21 @@ export function useStudyState(paperId: string) {
     let cancelled = false;
 
     if (!user) {
-      const legacy = readLegacyStudyState(paperId);
       cacheRef.current = null;
-      setTrayState(legacy.tray);
-      setNoteState(legacy.noteMarkdown);
+      setTrayState(emptyStudyTray());
+      setNoteState("");
       setStatus("guest");
       return;
     }
 
+    // The personal paper UUID is the only study-state identity.
+    // Never import legacy/global paper IDs into an authenticated account.
     const cached = readAccountCache(user.id, paperId);
-    const legacy = readLegacyStudyState(paperId);
-    const alreadyMigrated = localStorage.getItem(migrationMarkerKey(user.id, paperId)) === "1";
     const initial = cached ?? {
-      tray: !alreadyMigrated ? legacy.tray : emptyStudyTray(),
-      noteMarkdown: !alreadyMigrated ? legacy.noteMarkdown : "",
+      tray: emptyStudyTray(),
+      noteMarkdown: "",
       baseRevision: 0,
-      dirty: !alreadyMigrated && hasStudyContent(legacy),
+      dirty: false,
       updatedAt: new Date().toISOString(),
     };
     applyCache(initial);
