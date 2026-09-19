@@ -44,7 +44,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     const [categoryResult, paperResult, assetResult] = await Promise.all([
       client.from("paper_categories").select("id,name,display_order").order("display_order").order("created_at"),
       client.from("user_papers").select("id,category_id,legacy_paper_id,title,authors,year,source_url,notion_url,reading_status,aliases,display_order").order("display_order").order("created_at"),
-      client.from("paper_assets").select("id,paper_id,bucket_id,object_path,original_filename,checksum,version,created_at").eq("kind", "pdf").eq("processing_status", "ready").order("version", { ascending: false }).order("created_at", { ascending: false }),
+      client.from("paper_assets").select("id,paper_id,bucket_id,object_path,checksum,version,created_at").eq("kind", "pdf").eq("processing_status", "ready").order("version", { ascending: false }).order("created_at", { ascending: false }),
     ]);
     const firstError = categoryResult.error || paperResult.error || assetResult.error;
     if (firstError) { setError(firstError.message); setLoading(false); return; }
@@ -53,7 +53,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     const assetByPaper = new Map<string, NonNullable<Paper["asset"]>>();
     for (const row of assetResult.data ?? []) {
       const paperId = String(row.paper_id);
-      if (!assetByPaper.has(paperId)) assetByPaper.set(paperId, { id: String(row.id), bucketId: String(row.bucket_id), objectPath: String(row.object_path), originalFilename: row.original_filename ? String(row.original_filename) : null, checksum: row.checksum ? String(row.checksum) : null });
+      if (!assetByPaper.has(paperId)) assetByPaper.set(paperId, { id: String(row.id), bucketId: String(row.bucket_id), objectPath: String(row.object_path), checksum: row.checksum ? String(row.checksum) : null });
     }
     setCategories(nextCategories);
     setPapers((paperResult.data ?? []).map((row) => ({
@@ -148,7 +148,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     const validated = await validatePdfFile(file);
     const duplicate = papers.some((paper) => paper.asset?.checksum === validated.checksum);
     if (duplicate) throw new Error("같은 PDF가 이미 이 계정의 라이브러리에 있습니다.");
-    const path = `${user!.id}/${paperId}/${validated.checksum.slice(0, 12)}-${validated.filename}`;
+    const path = `${user!.id}/${paperId}/${validated.checksum}.pdf`;
     if (!isOwnedStoragePath(path, user!.id, paperId)) throw new Error("잘못된 Storage 경로입니다.");
     const upload = await client.storage.from("paper-pdfs").upload(path, file, { contentType: validated.contentType, upsert: false });
     if (upload.error) throw upload.error;
