@@ -16,7 +16,8 @@ export function sanitizeTrayForServer(tray: StudyTrayData): StudyTrayData {
   return {
     ...tray,
     areas: (tray.areas ?? []).map((area) => {
-      const { imageDataUrl: _pendingLocalImage, ...metadata } = area;
+      const metadata = { ...area };
+      delete metadata.imageDataUrl;
       return metadata as StudyArea;
     }),
   };

@@ -152,7 +152,7 @@ export function PdfViewer({
       void task?.destroy();
       if (!task) void document?.destroy();
     };
-  }, [paper.id, paper.asset?.objectPath, onPageChange, onPageTextChange]);
+  }, [paper, onPageChange, onPageTextChange]);
 
   useEffect(() => { onPageTextChange(pageTexts.current.get(page) ?? ""); }, [page, onPageTextChange]);
 

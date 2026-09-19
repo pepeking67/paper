@@ -22,11 +22,15 @@ export function projectNormalizedRectToPdf(
   const right = Math.max(left, Math.min(1, rect.x + rect.width));
   const bottom = Math.max(top, Math.min(1, rect.y + rect.height));
   return {
-    x: left * pageWidth,
-    y: (1 - bottom) * pageHeight,
-    width: (right - left) * pageWidth,
-    height: (bottom - top) * pageHeight,
+    x: stableCoordinate(left * pageWidth),
+    y: stableCoordinate((1 - bottom) * pageHeight),
+    width: stableCoordinate((right - left) * pageWidth),
+    height: stableCoordinate((bottom - top) * pageHeight),
   };
+}
+
+function stableCoordinate(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 export async function downloadAnnotatedPdf(

@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import type { Paper } from "@/lib/papers/types";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 import { isOwnedStoragePath, validatePdfFile } from "@/lib/library/pdf-file";
+import { flushStorageCleanup, queueStorageCleanup } from "@/lib/library/storage-cleanup";
 
 export type PersonalCategory = { id: string; name: string; displayOrder: number };
 export type PersonalPaperInput = { title: string; authors: string; year: number | null; sourceUrl: string | null; notionUrl: string | null; categoryId: string | null; readingStatus: "unread" | "reading" | "read" | "archived" };
@@ -61,6 +62,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
       sourceUrl: row.source_url ? String(row.source_url) : null, notionUrl: row.notion_url ? String(row.notion_url) : null, library: "personal" as const,
       categoryId: row.category_id ? String(row.category_id) : null, readingStatus: normalizeReadingStatus(row.reading_status), asset: assetByPaper.get(String(row.id)),
     })));
+    void flushStorageCleanup(client, user.id);
     setLoading(false);
   }, [user]);
 
@@ -164,18 +166,14 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
       client.from("paper_area_assets").select("bucket_id,object_path").eq("paper_id", id).eq("user_id", user!.id),
     ]);
     if (assets.error || areas.error) throw assets.error || areas.error;
-    for (const bucket of ["paper-pdfs", "paper-area-crops"] as const) {
-      const paths = [...(assets.data ?? []), ...(areas.data ?? [])].filter((row) => row.bucket_id === bucket && isOwnedStoragePath(String(row.object_path), user!.id, id)).map((row) => String(row.object_path));
-      if (paths.length) { const removal = await client.storage.from(bucket).remove(paths); if (removal.error) throw removal.error; }
-    }
-    const operations = [
-      client.from("paper_area_assets").delete().eq("paper_id", id).eq("user_id", user!.id),
-      client.from("paper_study_states").delete().eq("paper_id", id).eq("user_id", user!.id),
-      client.from("paper_assets").delete().eq("paper_id", id).eq("user_id", user!.id),
-    ];
-    for (const operation of operations) { const result = await operation; if (result.error) throw result.error; }
-    const result = await client.from("user_papers").delete().eq("id", id).eq("user_id", user!.id);
+    const cleanup = ([...(assets.data ?? []), ...(areas.data ?? [])])
+      .filter((row) => (row.bucket_id === "paper-pdfs" || row.bucket_id === "paper-area-crops") && isOwnedStoragePath(String(row.object_path), user!.id, id))
+      .map((row) => ({ bucket: row.bucket_id as "paper-pdfs" | "paper-area-crops", path: String(row.object_path) }));
+    const result = await client.rpc("delete_user_paper", { p_paper_id: id });
     if (result.error) throw result.error;
+    queueStorageCleanup(user!.id, cleanup);
+    const pending = await flushStorageCleanup(client, user!.id);
+    if (pending) setError(`논문은 삭제됐지만 Storage 파일 ${pending}개의 정리를 재시도합니다.`);
     await refresh();
   }
 
@@ -185,7 +183,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     return client;
   }
 
-  const value = useMemo<LibraryContextValue>(() => ({ loading, error, categories, papers, refresh, createCategory, renameCategory, moveCategory, deleteCategory, createPaper, updatePaper, movePaper, deletePaper, uploadPdf }), [loading, error, categories, papers, refresh]);
+  const value: LibraryContextValue = { loading, error, categories, papers, refresh, createCategory, renameCategory, moveCategory, deleteCategory, createPaper, updatePaper, movePaper, deletePaper, uploadPdf };
   return <PersonalLibraryContext.Provider value={value}>{children}</PersonalLibraryContext.Provider>;
 }
 

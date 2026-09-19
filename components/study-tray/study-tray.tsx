@@ -47,9 +47,10 @@ export function StudyTray({
   useEffect(() => {
     if (!open && !noteOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      if (noteOpen) setNoteOpen(false);
-      else setOpen(false);
+      if (event.key === "Escape") {
+        if (noteOpen) setNoteOpen(false);
+        else setOpen(false);
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);

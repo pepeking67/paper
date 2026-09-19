@@ -10,8 +10,8 @@ test("study chat offers annotation-aware prompts and consumes used context", asy
   assert.match(chat, /현재 페이지의 핵심을 요약해줘/);
   assert.match(chat, /논문의 가정과 한계를 비판적으로 검토해줘/);
   assert.match(chat, /ask\(prompt\)/);
-  assert.match(chat, /주석 문장 포함/);
-  assert.match(chat, /영역 \$\{context\.selectedAreas\?\.length\}개 포함/);
+  assert.match(chat, /questionHighlights\.length \+ questionAreas\.length/);
+  assert.match(chat, /aria-label="질문 문맥"/);
   assert.match(chat, /usedAnnotationContext = hasAnnotationContext/);
   assert.match(chat, /if \(usedAnnotationContext\) onQuestionContextConsumed\?\.\(\)/);
 });

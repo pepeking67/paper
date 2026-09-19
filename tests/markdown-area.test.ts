@@ -11,5 +11,6 @@ test("study-note PDF area markers render from saved crop images", async () => {
   assert.match(markdown, /PDF_AREA:/);
   assert.match(markdown, /areaById\.get\(segment\.id\)/);
   assert.match(markdown, /src=\{area\.imageDataUrl\}/);
-  assert.match(tray, /<MarkdownContent content=\{noteMarkdown\} areas=\{areas\}/);
+  assert.match(tray, /useHydratedAreas\(tray\.areas \?\? \[\]\)/);
+  assert.match(tray, /<NotionNoteEditor value=\{noteMarkdown\} areas=\{embeddedAreas\}/);
 });

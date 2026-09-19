@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+
+test("browser auth restores and refreshes sessions without a service-role key", async () => {
+  const client = await readFile("lib/supabase/browser.ts", "utf8");
+  const provider = await readFile("components/auth/auth-provider.tsx", "utf8");
+  assert.match(client, /persistSession: true/);
+  assert.match(client, /autoRefreshToken: true/);
+  assert.match(provider, /getSession\(\)/);
+  assert.match(provider, /onAuthStateChange/);
+  assert.doesNotMatch(`${client}\n${provider}`, /service[_-]?role/i);
+});
+
+test("account edits are local-first and revision conflicts require a choice", async () => {
+  const hook = await readFile("lib/study-sync/use-study-state.ts", "utf8");
+  const status = await readFile("components/study-sync/sync-status.tsx", "utf8");
+  assert.match(hook, /writeAccountCache/);
+  assert.match(hook, /\.eq\("revision", current\.baseRevision\)/);
+  assert.match(hook, /window\.addEventListener\("online"/);
+  assert.match(status, /서버 버전 사용/);
+  assert.match(status, /이 기기 버전 사용/);
+});
+
+test("personal files use private Storage paths and transactional deletion", async () => {
+  const library = await readFile("components/library/personal-library-provider.tsx", "utf8");
+  const area = await readFile("lib/area-assets/area-storage.ts", "utf8");
+  assert.match(library, /`\$\{user!\.id\}\/\$\{paperId\}\//);
+  assert.match(library, /rpc\("delete_user_paper"/);
+  assert.match(area, /paper-area-crops/);
+  assert.match(area, /image\/webp/);
+});

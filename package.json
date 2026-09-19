@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:rls": "node scripts/test-supabase-rls.mjs",
     "process-pdfs": "tsx scripts/process-pdfs/index.ts",
     "upload-papers": "tsx scripts/upload-papers/index.ts"
   },
