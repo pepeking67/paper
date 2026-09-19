@@ -61,12 +61,22 @@ try {
       assert.ifError(deleted.error);
       assert.equal(deleted.data.length, 0, `${table}: cross-account DELETE changed a row`);
     }
-    const forbiddenInsert = await attacker.from("paper_categories").insert({ user_id: owner.user.id, name: marker, display_order: 0 });
-    assert.ok(forbiddenInsert.error, "cross-account INSERT unexpectedly succeeded");
+    const forbiddenInserts = [
+      ["paper_categories", { user_id: owner.user.id, name: marker, display_order: 0 }],
+      ["user_papers", { user_id: owner.user.id, category_id: owner.categoryId, title: marker, reading_status: "unread", display_order: 0 }],
+      ["paper_assets", { user_id: owner.user.id, paper_id: owner.paperId, kind: "pdf", bucket_id: "paper-pdfs", object_path: owner.pdfPath, version: 99, processing_status: "ready" }],
+      ["paper_study_states", { user_id: owner.user.id, paper_id: `${owner.paperId}-foreign`, tray: {}, note_markdown: marker, revision: 1 }],
+      ["paper_area_assets", { user_id: owner.user.id, paper_id: owner.paperId, area_id: `${marker}-foreign`, page: 1, rect: {}, bucket_id: "paper-area-crops", object_path: owner.cropPath }],
+    ];
+    for (const [table, row] of forbiddenInserts) {
+      const result = await attacker.from(table).insert(row);
+      assert.ok(result.error, `${table}: cross-account INSERT unexpectedly succeeded`);
+    }
 
     for (const [bucket, path] of [["paper-pdfs", owner.pdfPath], ["paper-area-crops", owner.cropPath]]) {
       assert.ok((await attacker.storage.from(bucket).download(path)).error, `${bucket}: cross-account download succeeded`);
       assert.ok((await attacker.storage.from(bucket).upload(path.replace(marker, `${marker}-foreign`), new Blob(["x"]))).error, `${bucket}: cross-account upload succeeded`);
+      assert.ok((await attacker.storage.from(bucket).update(path, new Blob(["x"]))).error, `${bucket}: cross-account update succeeded`);
       await attacker.storage.from(bucket).remove([path]);
       const ownerRead = await clients[ownerIndex].storage.from(bucket).download(path);
       assert.ifError(ownerRead.error);
