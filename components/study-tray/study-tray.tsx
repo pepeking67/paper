@@ -40,7 +40,7 @@ export function StudyTray({
   const embeddedAreas = areas.filter((area): area is StudyArea & { imageDataUrl: string } => typeof area.imageDataUrl === "string");
   const total = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
 
-  useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
+  useEffect(() => { setTriggerHost(document.getElementById("study-tray-actions")); }, []);
 
   useEffect(() => { setNoteOpen(false); setNoteError(""); }, [paper.id]);
 

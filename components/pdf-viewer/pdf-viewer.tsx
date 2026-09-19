@@ -218,7 +218,6 @@ export function PdfViewer({
     <style>{`[aria-label="저장된 PDF 영역"]{pointer-events:none!important}[aria-label="저장된 PDF 영역"]>button{pointer-events:auto!important}`}</style>
     <header className="border-b border-[var(--line)] px-3 py-2.5 sm:px-4">
       <div className="flex items-center gap-3">
-        <div id="paper-header-actions" className="flex shrink-0 items-center"/>
         <button
           type="button"
           onClick={onToggleLibrary}
@@ -237,6 +236,7 @@ export function PdfViewer({
           <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
+          <div id="study-tray-actions" className="flex items-center"/>
           <button
             type="button"
             onClick={onToggleChat}

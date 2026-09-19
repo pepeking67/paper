@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
 import { useAuth } from "@/components/auth/auth-provider";
 import { LibraryManager } from "@/components/library/library-manager";
+import { AccountControl } from "@/components/auth/account-control";
 
 const PAPER_CATEGORY_STORAGE_KEY = "paper-study-library-category";
 
@@ -46,6 +47,7 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
         <p className="text-[11px] font-semibold tracking-[.16em] text-[var(--accent)]">LIBRARY</p>
         <h1 className="mt-1 text-[22px] font-semibold tracking-[-.02em] text-[var(--ink)]">Paper Study</h1>
         <p className="mt-1 text-xs text-[var(--muted)]">논문을 읽고, 표시하고, 질문하세요.</p>
+        <div className="mt-2"><AccountControl inline/></div>
       </div>
       <button
         type="button"

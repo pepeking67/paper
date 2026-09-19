@@ -6,7 +6,7 @@ import { useAuth } from "./auth-provider";
 
 type Mode = "signin" | "signup";
 
-export function AccountControl({ initiallyOpen = false, required = false }: { initiallyOpen?: boolean; required?: boolean } = {}) {
+export function AccountControl({ initiallyOpen = false, required = false, inline = false }: { initiallyOpen?: boolean; required?: boolean; inline?: boolean } = {}) {
   const auth = useAuth();
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(initiallyOpen);
@@ -66,7 +66,7 @@ export function AccountControl({ initiallyOpen = false, required = false }: { in
       : <button type="button" onClick={() => setOpen(true)} className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">로그인</button>;
 
   return <>
-    {host && createPortal(button, host)}
+    {inline ? button : host && createPortal(button, host)}
     {open && <div className="fixed inset-0 z-[80] grid place-items-center bg-[#0b0b0c] p-4" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" onPointerDown={(event) => { if (!required && event.target === event.currentTarget) setOpen(false); }}>
       <section className="w-full max-w-sm rounded-2xl border border-[var(--line)] bg-[#111] p-5 text-white shadow-2xl">
         <header className="flex items-start justify-between gap-4">

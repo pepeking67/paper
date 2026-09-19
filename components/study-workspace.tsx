@@ -308,7 +308,6 @@ function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: P
       />
     </div>}
 
-    <AccountControl />
     <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
       paper={activePaper}
