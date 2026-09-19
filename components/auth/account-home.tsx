@@ -24,7 +24,7 @@ export function AccountHome() {
   if (library.error) return <LibraryLoadError message={library.error} onRetry={() => void library.refresh()}/>;
 
   return <main className="grid h-dvh place-items-center bg-[#111] p-6 text-white">
-    <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
+    <div id="paper-header-actions" className="fixed left-4 top-4 flex items-center gap-2"/>
     <section className="w-full max-w-lg rounded-3xl border border-[var(--line)] bg-black/35 p-7 text-center shadow-2xl">
       <p className="text-[11px] font-semibold tracking-[.14em] text-[var(--accent)]">PERSONAL LIBRARY</p>
       <h1 className="mt-2 text-2xl font-semibold">내 논문 라이브러리가 비어 있습니다</h1>
@@ -45,7 +45,7 @@ function LoginScreen() {
 
 function LoadingScreen({ message }: { message: string }) {
   return <main className="grid h-dvh place-items-center bg-[#111] text-white">
-    <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
+    <div id="paper-header-actions" className="fixed left-4 top-4 flex items-center gap-2"/>
     <div className="text-center"><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-[#555] border-t-white"/><p className="mt-4 text-sm text-[var(--muted)]">{message}</p></div>
     <AccountControl/>
   </main>;
@@ -54,7 +54,7 @@ function LoadingScreen({ message }: { message: string }) {
 
 function LibraryLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return <main className="grid h-dvh place-items-center bg-[#111] p-6 text-white">
-    <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
+    <div id="paper-header-actions" className="fixed left-4 top-4 flex items-center gap-2"/>
     <section className="w-full max-w-lg rounded-3xl border border-red-500/35 bg-black/35 p-7 text-center shadow-2xl">
       <h1 className="text-xl font-semibold">개인 라이브러리를 불러오지 못했습니다</h1>
       <p className="mt-3 break-words text-sm leading-relaxed text-red-200">{message}</p>

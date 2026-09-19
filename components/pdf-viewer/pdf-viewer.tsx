@@ -218,6 +218,7 @@ export function PdfViewer({
     <style>{`[aria-label="저장된 PDF 영역"]{pointer-events:none!important}[aria-label="저장된 PDF 영역"]>button{pointer-events:auto!important}`}</style>
     <header className="border-b border-[var(--line)] px-3 py-2.5 sm:px-4">
       <div className="flex items-center gap-3">
+        <div id="paper-header-actions" className="flex shrink-0 items-center"/>
         <button
           type="button"
           onClick={onToggleLibrary}
@@ -231,7 +232,6 @@ export function PdfViewer({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <p className="shrink-0 text-[10px] font-semibold tracking-[.08em] text-[var(--accent)]">{paper.tag}</p>
-            <span className="text-[10px] text-[var(--muted)]">{paper.id}</span>
           </div>
           <h2 className="mt-0.5 truncate text-sm font-medium sm:text-base">{paper.title}</h2>
           <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{paper.authors} · {paper.year ?? "연도 미상"}</p>
@@ -248,7 +248,6 @@ export function PdfViewer({
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><path d="M5 5.5A3.5 3.5 0 0 1 8.5 2h7A3.5 3.5 0 0 1 19 5.5v7a3.5 3.5 0 0 1-3.5 3.5H11l-4.5 4v-4A3.5 3.5 0 0 1 3 12.5v-7Z"/><path d="M8 8h8M8 11.5h5"/></svg>
             <span className="hidden sm:inline">질의응답</span>
           </button>
-          <div id="paper-header-actions" className="flex items-center gap-2"/>
           {paper.notionUrl && <a href={paper.notionUrl} target="_blank" rel="noreferrer" className="hidden h-8 items-center rounded-lg border border-[var(--line)] px-2.5 text-xs hover:bg-[#222] sm:flex">Notion ↗</a>}
         </div>
       </div>

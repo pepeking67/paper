@@ -27,6 +27,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(viewer, /onToggleLibrary/);
   assert.match(viewer, /onToggleChat/);
   assert.match(viewer, /질의응답 열기/);
+  assert.match(viewer, /id="paper-header-actions"/);
+  assert.doesNotMatch(viewer, />\{paper\.id\}</);
   assert.match(viewer, /표시된 PDF 다운로드/);
   assert.match(viewer, /표시 모두 지우기/);
   assert.match(viewer, /downloadAnnotatedPdf\(paper\.id, savedHighlights/);
@@ -45,6 +47,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(library, /localStorage\.setItem\(PAPER_CATEGORY_STORAGE_KEY, tag\)/);
   assert.match(library, /activeLinkRef/);
   assert.match(library, /scrollIntoView\(\{ block: "center" \}\)/);
+  assert.match(library, /논문 추가/);
+  assert.match(library, />\s*편집\s*</);
 
   assert.match(chat, /aria-label="질문 문맥"/);
   assert.match(chat, /questionHighlights/);
@@ -53,4 +57,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(chat, /onRemoveQuestionArea/);
   assert.match(chat, /전체 비우기/);
   assert.match(chat, /질의응답 닫기/);
+  assert.match(chat, /grid grid-cols-3 gap-1/);
+  assert.doesNotMatch(chat, /overflow-x-auto/);
+  assert.match(chat, /페이지 요약/);
+  assert.match(chat, /수식·영역 풀이/);
 });

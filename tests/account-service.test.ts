@@ -43,6 +43,7 @@ test("personal PDF controls and paper UI do not expose uploaded filenames or int
   const paperList = await readFile("components/paper-list/paper-list.tsx", "utf8");
   const provider = await readFile("components/library/personal-library-provider.tsx", "utf8");
   const paperTypes = await readFile("lib/papers/types.ts", "utf8");
+  const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
 
   assert.match(manager, /className="sr-only"/);
   assert.match(manager, /PDF 선택됨/);
@@ -53,6 +54,7 @@ test("personal PDF controls and paper UI do not expose uploaded filenames or int
   assert.doesNotMatch(provider, /originalFilename/);
   assert.match(provider, /\$\{validated\.checksum\}\.pdf/);
   assert.doesNotMatch(paperTypes, /originalFilename/);
+  assert.doesNotMatch(viewer, />\{paper\.id\}</);
 });
 
 test("account edits are local-first and revision conflicts require a choice", async () => {

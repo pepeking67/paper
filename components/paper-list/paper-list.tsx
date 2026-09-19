@@ -67,7 +67,27 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
       className="w-full shrink-0 rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--accent)]"
     />
 
-    {user && <div className="mt-3 grid shrink-0 grid-cols-2 gap-2"><button type="button" onClick={() => { setManagerPaperId(undefined); setManagerOpen(true); }} className="rounded-xl border border-[var(--line)] px-2 py-2 text-xs hover:bg-white/5">+ 개인 논문</button><button type="button" disabled={!papers.some((paper) => paper.id === activeId && paper.library === "personal")} onClick={() => { setManagerPaperId(activeId); setManagerOpen(true); }} className="rounded-xl border border-[var(--line)] px-2 py-2 text-xs hover:bg-white/5 disabled:opacity-30">현재 논문 편집</button></div>}
+    {user && <div className="mt-3 flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => { setManagerPaperId(undefined); setManagerOpen(true); }}
+        className="inline-flex h-7 items-center gap-1 rounded-lg border border-[var(--line)] bg-white/[.035] px-2 text-[10px] font-medium text-[#d7d7dc] transition hover:border-white/20 hover:bg-white/[.07]"
+        title="개인 논문 추가"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3 w-3 fill-none stroke-current" strokeWidth="1.8"><path d="M10 4v12M4 10h12"/></svg>
+        논문 추가
+      </button>
+      <button
+        type="button"
+        disabled={!papers.some((paper) => paper.id === activeId && paper.library === "personal")}
+        onClick={() => { setManagerPaperId(activeId); setManagerOpen(true); }}
+        className="inline-flex h-7 items-center gap-1 rounded-lg border border-transparent px-2 text-[10px] font-medium text-[var(--muted)] transition hover:border-[var(--line)] hover:bg-white/[.05] hover:text-white disabled:opacity-30"
+        title="현재 논문 편집"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3 w-3 fill-none stroke-current" strokeWidth="1.7"><path d="m5 14 1-3 7-7 3 3-7 7-4 1Z"/><path d="m12 5 3 3"/></svg>
+        편집
+      </button>
+    </div>}
 
     <div className="my-3 shrink-0">
       <label htmlFor="paper-category" className="mb-1.5 block px-1 text-[11px] font-medium text-[var(--muted)]">카테고리</label>

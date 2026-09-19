@@ -62,7 +62,7 @@ export function AccountControl({ initiallyOpen = false, required = false }: { in
   const button = auth.loading
     ? <button disabled className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs opacity-60">계정 확인 중…</button>
     : auth.user
-      ? <button type="button" onClick={() => setOpen(true)} className="max-w-44 truncate rounded-xl border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">{auth.user.email ?? "내 계정"}</button>
+      ? <button type="button" onClick={() => setOpen(true)} title={auth.user.email ?? "내 계정"} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white/[.035] px-2.5 text-[11px] text-[#d7d7dc] hover:bg-white/[.07]"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="1.7"><circle cx="10" cy="7" r="3"/><path d="M4.5 16c.7-3 2.5-4.5 5.5-4.5s4.8 1.5 5.5 4.5"/></svg><span>계정</span></button>
       : <button type="button" onClick={() => setOpen(true)} className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">로그인</button>;
 
   return <>
