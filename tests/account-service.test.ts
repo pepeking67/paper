@@ -16,28 +16,43 @@ test("browser auth restores and refreshes sessions without a service-role key", 
   assert.doesNotMatch(`${client}\n${provider}`, /service[_-]?role/i);
 });
 
-test("the workspace requires login and never mixes the shared catalog into a personal library", async () => {
+test("the app opens on account auth and never renders the shared GitHub catalog", async () => {
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
   const home = await readFile("app/page.tsx", "utf8");
   const accountHome = await readFile("components/auth/account-home.tsx", "utf8");
-  assert.match(workspace, /papers=\{personalLibrary\.papers\} userMode/);
+  const paperRoute = await readFile("app/papers/[paperId]/page.tsx", "utf8");
+
+  assert.match(workspace, /papers=\{personalLibrary\.papers\}/);
   assert.match(workspace, /<AccountControl initiallyOpen required\/>/);
   assert.match(workspace, /return <LoginScreen\/>/);
-  assert.match(workspace, /!userMode && <PdfSyncPanel papers=\{papers\}/);
+  assert.doesNotMatch(workspace, /PdfSyncPanel/);
+  assert.doesNotMatch(workspace, /userMode/);
   assert.doesNotMatch(workspace, /combinedPapers/);
-  assert.doesNotMatch(workspace, /activePaper=\{\{ \.\.\.initialPaper, library: "legacy" \}\}/);
+
   assert.match(home, /<AccountHome\/>/);
   assert.doesNotMatch(home, /papers\/catalog/);
   assert.match(accountHome, /<AccountControl initiallyOpen required\/>/);
+
+  assert.doesNotMatch(paperRoute, /papers\/catalog/);
+  assert.doesNotMatch(paperRoute, /generateStaticParams/);
+  assert.match(paperRoute, /library: "personal"/);
 });
 
-test("personal PDF controls and paper lists do not expose filenames or internal IDs", async () => {
+test("personal PDF controls and paper UI do not expose uploaded filenames or internal IDs", async () => {
   const manager = await readFile("components/library/library-manager.tsx", "utf8");
   const paperList = await readFile("components/paper-list/paper-list.tsx", "utf8");
+  const provider = await readFile("components/library/personal-library-provider.tsx", "utf8");
+  const paperTypes = await readFile("lib/papers/types.ts", "utf8");
+
   assert.match(manager, /className="sr-only"/);
   assert.match(manager, /PDF 선택됨/);
   assert.doesNotMatch(manager, /\{pdf\?\.name\}/);
   assert.doesNotMatch(paperList, /\{paper\.id\} ·/);
+
+  assert.doesNotMatch(provider, /select\("[^"]*original_filename/);
+  assert.doesNotMatch(provider, /originalFilename/);
+  assert.match(provider, /\$\{validated\.checksum\}\.pdf/);
+  assert.doesNotMatch(paperTypes, /originalFilename/);
 });
 
 test("account edits are local-first and revision conflicts require a choice", async () => {
