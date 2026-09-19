@@ -4,7 +4,7 @@ export type Paper = {
   library?: "legacy" | "personal";
   categoryId?: string | null;
   readingStatus?: "unread" | "reading" | "read" | "archived";
-  asset?: { id: string; bucketId: string; objectPath: string; originalFilename: string | null; checksum: string | null };
+  asset?: { id: string; bucketId: string; objectPath: string; checksum: string | null };
 };
 export type PdfManifestEntry = {
   id: string; title: string; sourceUrl: string | null; pdfSourceUrl: string | null;
