@@ -30,15 +30,16 @@ type LibraryContextValue = {
 const PersonalLibraryContext = createContext<LibraryContextValue | null>(null);
 
 export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [categories, setCategories] = useState<PersonalCategory[]>([]);
   const [papers, setPapers] = useState<Paper[]>([]);
 
   const refresh = useCallback(async () => {
     const client = getBrowserSupabase();
-    if (!client || !user) { setCategories([]); setPapers([]); setLoading(false); return; }
+    if (authLoading) { setLoading(true); return; }
+    if (!client || !user) { setCategories([]); setPapers([]); setError(""); setLoading(false); return; }
     setLoading(true);
     setError("");
     const [categoryResult, paperResult, assetResult] = await Promise.all([
@@ -64,7 +65,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     })));
     void flushStorageCleanup(client, user.id);
     setLoading(false);
-  }, [user]);
+  }, [authLoading, user]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
