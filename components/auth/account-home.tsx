@@ -21,6 +21,7 @@ export function AccountHome() {
   if (authLoading) return <LoadingScreen message="계정 세션을 확인하는 중…"/>;
   if (!user) return <LoginScreen/>;
   if (library.loading || firstPaperId) return <LoadingScreen message={library.loading ? "내 논문 라이브러리를 불러오는 중…" : "내 논문으로 이동하는 중…"}/>;
+  if (library.error) return <LibraryLoadError message={library.error} onRetry={() => void library.refresh()}/>;
 
   return <main className="grid h-dvh place-items-center bg-[#111] p-6 text-white">
     <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
@@ -46,6 +47,19 @@ function LoadingScreen({ message }: { message: string }) {
   return <main className="grid h-dvh place-items-center bg-[#111] text-white">
     <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
     <div className="text-center"><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-[#555] border-t-white"/><p className="mt-4 text-sm text-[var(--muted)]">{message}</p></div>
+    <AccountControl/>
+  </main>;
+}
+
+
+function LibraryLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return <main className="grid h-dvh place-items-center bg-[#111] p-6 text-white">
+    <div id="paper-header-actions" className="fixed right-4 top-4 flex items-center gap-2"/>
+    <section className="w-full max-w-lg rounded-3xl border border-red-500/35 bg-black/35 p-7 text-center shadow-2xl">
+      <h1 className="text-xl font-semibold">개인 라이브러리를 불러오지 못했습니다</h1>
+      <p className="mt-3 break-words text-sm leading-relaxed text-red-200">{message}</p>
+      <button type="button" onClick={onRetry} className="mt-5 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-black">다시 불러오기</button>
+    </section>
     <AccountControl/>
   </main>;
 }
