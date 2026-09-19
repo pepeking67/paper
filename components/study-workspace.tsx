@@ -8,6 +8,7 @@ import { StudyTray } from "./study-tray/study-tray";
 import type { Paper } from "@/lib/papers/types";
 import { emptyStudyTray, type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { AccountControl } from "./auth/account-control";
 
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const [page, setPage] = useState(1);
@@ -258,6 +259,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     </div>}
 
     <PdfSyncPanel papers={papers} />
+    <AccountControl />
     <StudyTray
       paper={initialPaper}
       tray={tray}
