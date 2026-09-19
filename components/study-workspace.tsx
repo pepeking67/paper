@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
-import { PdfSyncPanel } from "./pdf-sync/pdf-sync-panel";
 import { StudyTray } from "./study-tray/study-tray";
 import type { Paper } from "@/lib/papers/types";
 import { type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
@@ -17,7 +16,7 @@ import { useAuth } from "./auth/auth-provider";
 import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
 import { LibraryManager } from "./library/library-manager";
 
-export function StudyWorkspace({ initialPaper }: { initialPaper: Paper; papers: Paper[] }) {
+export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const personalLibrary = usePersonalLibrary();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -34,7 +33,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper; papers: 
   if (user && personalLibrary.loading) return <WorkspaceGate message="내 논문 라이브러리를 불러오는 중…"/>;
 
   if (user) {
-    if (personalPaper) return <WorkspaceShell activePaper={personalPaper} papers={personalLibrary.papers} userMode/>;
+    if (personalPaper) return <WorkspaceShell activePaper={personalPaper} papers={personalLibrary.papers}/>;
     if (firstPersonalId) return <WorkspaceGate message="내 논문 라이브러리로 이동하는 중…"/>;
     return <PersonalLibraryEmpty email={user.email ?? "내 계정"} managerOpen={managerOpen} onManagerOpen={() => setManagerOpen(true)} onManagerClose={() => setManagerOpen(false)}/>;
   }
@@ -42,7 +41,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper; papers: 
   return <LoginScreen/>;
 }
 
-function WorkspaceShell({ activePaper, papers, userMode }: { activePaper: Paper; papers: Paper[]; userMode: boolean }) {
+function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: Paper[] }) {
   const { user } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
@@ -309,7 +308,6 @@ function WorkspaceShell({ activePaper, papers, userMode }: { activePaper: Paper;
       />
     </div>}
 
-    {!userMode && <PdfSyncPanel papers={papers} />}
     <AccountControl />
     <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
