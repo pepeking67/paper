@@ -57,22 +57,19 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /setProperty\("--scale-factor", String\(viewport\.scale\)\)/);
   assert.match(page, /capturedSelections/);
   assert.match(viewer, /setZoom/);
-  assert.match(viewer, /현재.*pdf\.numPages.*페이지/);
+  assert.match(viewer, /\$\{page\} \/ \$\{pdf\.numPages\} 페이지/);
   assert.match(viewer, /paper-header-actions/);
   assert.match(viewer, /다음 질문 문맥으로 사용합니다/);
   assert.doesNotMatch(route, /privateBlobExists/);
   assert.match(route, /"Accept-Ranges":"none"/);
 });
 
-test("workspace exposes persistent keyboard-accessible PDF side resizers", async () => {
+test("workspace exposes a persistent keyboard-accessible Study Chat resizer", async () => {
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
   const styles = await readFile("app/globals.css", "utf8");
   assert.match(workspace, /role="separator"/);
-  assert.match(workspace, /setPointerCapture/);
-  assert.match(workspace, /paper-study-library-width/);
   assert.match(workspace, /paper-study-chat-width/);
-  assert.match(workspace, /--library-width/);
   assert.match(workspace, /--chat-width/);
-  assert.match(styles, /var\(--library-width, 220px\)/);
-  assert.match(styles, /var\(--chat-width, 440px\)/);
+  assert.match(workspace, /aria-label="질의응답 패널 크기 조절"/);
+  assert.match(styles, /var\(--chat-width, 420px\)/);
 });

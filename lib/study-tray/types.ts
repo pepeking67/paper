@@ -20,7 +20,9 @@ export type StudyArea = {
   id: string;
   page: number;
   rect: NormalizedHighlightRect;
-  imageDataUrl: string;
+  /** Legacy/pending local crop. New synced records use storagePath instead. */
+  imageDataUrl?: string;
+  storagePath?: string;
   memo: string;
   createdAt: string;
 };

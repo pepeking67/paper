@@ -22,29 +22,37 @@ export function projectNormalizedRectToPdf(
   const right = Math.max(left, Math.min(1, rect.x + rect.width));
   const bottom = Math.max(top, Math.min(1, rect.y + rect.height));
   return {
-    x: left * pageWidth,
-    y: (1 - bottom) * pageHeight,
-    width: (right - left) * pageWidth,
-    height: (bottom - top) * pageHeight,
+    x: stableCoordinate(left * pageWidth),
+    y: stableCoordinate((1 - bottom) * pageHeight),
+    width: stableCoordinate((right - left) * pageWidth),
+    height: stableCoordinate((bottom - top) * pageHeight),
   };
+}
+
+function stableCoordinate(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 export async function downloadAnnotatedPdf(
   paperId: string,
   highlights: StudyHighlight[],
   fileName = `${paperId}-annotated.pdf`,
+  sourceBytes?: Uint8Array,
 ): Promise<void> {
-  const response = await fetch(`/api/pdf/${encodeURIComponent(paperId)}`);
-  if (!response.ok) {
-    let message = "원본 PDF를 불러오지 못했습니다.";
-    try {
-      const data = await response.json() as { error?: unknown };
-      if (typeof data.error === "string") message = data.error;
-    } catch { /* Keep the generic message for non-JSON responses. */ }
-    throw new Error(message);
+  let source: ArrayBuffer;
+  if (sourceBytes) source = sourceBytes.buffer.slice(sourceBytes.byteOffset, sourceBytes.byteOffset + sourceBytes.byteLength) as ArrayBuffer;
+  else {
+    const response = await fetch(`/api/pdf/${encodeURIComponent(paperId)}`);
+    if (!response.ok) {
+      let message = "원본 PDF를 불러오지 못했습니다.";
+      try {
+        const data = await response.json() as { error?: unknown };
+        if (typeof data.error === "string") message = data.error;
+      } catch { /* Keep the generic message for non-JSON responses. */ }
+      throw new Error(message);
+    }
+    source = await response.arrayBuffer();
   }
-
-  const source = await response.arrayBuffer();
   const { PDFDocument, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.load(source, { ignoreEncryption: true });
   const pages = pdf.getPages();

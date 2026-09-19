@@ -2,6 +2,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { LibraryManager } from "@/components/library/library-manager";
+import { AccountControl } from "@/components/auth/account-control";
 
 const PAPER_CATEGORY_STORAGE_KEY = "paper-study-library-category";
 
@@ -9,6 +12,9 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("All");
   const [categoryHydrated, setCategoryHydrated] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerPaperId, setManagerPaperId] = useState<string | undefined>();
+  const { user } = useAuth();
   const activeLinkRef = useRef<HTMLAnchorElement | null>(null);
   const tags = useMemo(() => ["All", ...Array.from(new Set(papers.map((p) => p.tag)))], [papers]);
   const visible = useMemo(
@@ -41,6 +47,7 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
         <p className="text-[11px] font-semibold tracking-[.16em] text-[var(--accent)]">LIBRARY</p>
         <h1 className="mt-1 text-[22px] font-semibold tracking-[-.02em] text-[var(--ink)]">Paper Study</h1>
         <p className="mt-1 text-xs text-[var(--muted)]">논문을 읽고, 표시하고, 질문하세요.</p>
+        <div className="mt-2"><AccountControl inline/></div>
       </div>
       <button
         type="button"
@@ -61,6 +68,28 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
       placeholder="논문 검색"
       className="w-full shrink-0 rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--accent)]"
     />
+
+    {user && <div className="mt-3 flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => { setManagerPaperId(undefined); setManagerOpen(true); }}
+        className="inline-flex h-7 items-center gap-1 rounded-lg border border-[var(--line)] bg-white/[.035] px-2 text-[10px] font-medium text-[#d7d7dc] transition hover:border-white/20 hover:bg-white/[.07]"
+        title="개인 논문 추가"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3 w-3 fill-none stroke-current" strokeWidth="1.8"><path d="M10 4v12M4 10h12"/></svg>
+        논문 추가
+      </button>
+      <button
+        type="button"
+        disabled={!papers.some((paper) => paper.id === activeId && paper.library === "personal")}
+        onClick={() => { setManagerPaperId(activeId); setManagerOpen(true); }}
+        className="inline-flex h-7 items-center gap-1 rounded-lg border border-transparent px-2 text-[10px] font-medium text-[var(--muted)] transition hover:border-[var(--line)] hover:bg-white/[.05] hover:text-white disabled:opacity-30"
+        title="현재 논문 편집"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3 w-3 fill-none stroke-current" strokeWidth="1.7"><path d="m5 14 1-3 7-7 3 3-7 7-4 1Z"/><path d="m12 5 3 3"/></svg>
+        편집
+      </button>
+    </div>}
 
     <div className="my-3 shrink-0">
       <label htmlFor="paper-category" className="mb-1.5 block px-1 text-[11px] font-medium text-[var(--muted)]">카테고리</label>
@@ -91,9 +120,10 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${paper.done ? "bg-[#30d158]" : "border border-[#8e8e93]"}`} aria-label={paper.done ? "완료" : "진행 중"}/>
             <span className={`text-sm leading-snug tracking-[-.01em] ${active ? "font-medium text-white" : "text-[#e5e5ea]"}`}>{paper.title}</span>
           </div>
-          <p className="mt-2 pl-[18px] text-[11px] text-[var(--muted)]">{paper.id} · {paper.year ?? "연도 미상"}</p>
+          <p className="mt-2 pl-[18px] text-[11px] text-[var(--muted)]">{paper.year ?? "연도 미상"}{paper.authors ? ` · ${paper.authors}` : ""}</p>
         </Link>;
       })}
     </nav>
+    <LibraryManager open={managerOpen} onClose={() => setManagerOpen(false)} initialPaperId={managerPaperId}/>
   </aside>;
 }

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
   const tray = sanitizeTray(candidate.tray);
   const packet = buildStudyPacket(paper, tray);
-  const areas: StudyAreaContext[] = (tray.areas ?? []).slice(0, 4).map((area) => ({ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }));
+  const areas: StudyAreaContext[] = (tray.areas ?? []).flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []).slice(0, 4);
 
   try {
     const markdown = await provider.composeStudyNote(packet, areas);

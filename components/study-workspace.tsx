@@ -1,34 +1,61 @@
 "use client";
-import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useRouter } from "next/navigation";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
-import { PdfSyncPanel } from "./pdf-sync/pdf-sync-panel";
 import { StudyTray } from "./study-tray/study-tray";
 import type { Paper } from "@/lib/papers/types";
-import { emptyStudyTray, type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
+import { type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { AccountControl } from "./auth/account-control";
+import { useStudyState } from "@/lib/study-sync/use-study-state";
+import { StudySyncStatusView } from "./study-sync/sync-status";
+import { usePersonalLibrary } from "./library/personal-library-provider";
+import { useAuth } from "./auth/auth-provider";
+import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
+import { LibraryManager } from "./library/library-manager";
 
-export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
+export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
+  const personalLibrary = usePersonalLibrary();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [managerOpen, setManagerOpen] = useState(false);
+  const personalPaper = user ? personalLibrary.papers.find((paper) => paper.id === initialPaper.id) : null;
+  const firstPersonalId = personalLibrary.papers[0]?.id;
+
+  useEffect(() => {
+    if (authLoading || personalLibrary.loading) return;
+    if (user && !personalPaper && firstPersonalId) router.replace(`/papers/${firstPersonalId}`);
+  }, [authLoading, firstPersonalId, personalLibrary.loading, personalPaper, router, user]);
+
+  if (authLoading) return <WorkspaceGate message="계정 세션을 확인하는 중…"/>;
+  if (user && personalLibrary.loading) return <WorkspaceGate message="내 논문 라이브러리를 불러오는 중…"/>;
+
+  if (user) {
+    if (personalPaper) return <WorkspaceShell activePaper={personalPaper} papers={personalLibrary.papers}/>;
+    if (firstPersonalId) return <WorkspaceGate message="내 논문 라이브러리로 이동하는 중…"/>;
+    return <PersonalLibraryEmpty email={user.email ?? "내 계정"} managerOpen={managerOpen} onManagerOpen={() => setManagerOpen(true)} onManagerClose={() => setManagerOpen(false)}/>;
+  }
+
+  return <LoginScreen/>;
+}
+
+function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: Paper[] }) {
+  const { user } = useAuth();
+  const uploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
-  const [tray, setTray] = useState<StudyTrayData>(emptyStudyTray);
+  const studyState = useStudyState(activePaper.id);
+  const { tray } = studyState;
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
-  const storageKey = `paper-study-tray:${initialPaper.id}`;
   const chatWidthStorageKey = "paper-study-chat-width";
 
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as Partial<StudyTrayData> | null;
-      setTray(stored ? { ...emptyStudyTray(), ...stored, areas: Array.isArray(stored.areas) ? stored.areas : [] } : emptyStudyTray());
-    } catch { setTray(emptyStudyTray()); }
-    setQuestionHighlights([]);
-    setQuestionAreas([]);
-  }, [storageKey]);
+  useEffect(() => { setQuestionHighlights([]); setQuestionAreas([]); }, [activePaper.id]);
 
   useEffect(() => {
     const storedLibrary = localStorage.getItem("paper-study-library-open");
@@ -93,12 +120,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   }
 
   function updateTray(updater: (current: StudyTrayData) => StudyTrayData) {
-    setTray((current) => {
-      const next = updater(current);
-      try { localStorage.setItem(storageKey, JSON.stringify(next)); }
-      catch { /* Keep the in-memory annotation even if browser storage quota is full. */ }
-      return next;
-    });
+    studyState.updateTray(updater);
   }
 
   function createHighlight(text: string, highlightPage: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) {
@@ -131,9 +153,15 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     updateTray((current) => ({ ...current, areas: [...(current.areas ?? []), area] }));
     setQuestionAreas((current) => [...current.filter((item) => item.id !== area.id), area].slice(-4));
     setPage(areaPage);
+    if (user) void persistArea(area);
   }
 
   function removeArea(id: string) {
+    const area = (tray.areas ?? []).find((item) => item.id === id);
+    if (user && area) {
+      try { queueAreaDeletion(user.id, activePaper.id, area); } catch { /* Local removal remains authoritative. */ }
+      void flushAreaDeletionQueue(user.id);
+    }
     updateTray((current) => ({ ...current, areas: (current.areas ?? []).filter((item) => item.id !== id) }));
     setQuestionAreas((current) => current.filter((item) => item.id !== id));
   }
@@ -160,10 +188,33 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     if (kind === "memos") updateTray((current) => ({ ...current, memos: current.memos.filter((item) => item.id !== id) }));
   }
 
-  function useAreaForQuestion(area: StudyArea) {
-    setQuestionAreas((current) => [...current.filter((item) => item.id !== area.id), area].slice(-4));
-    setPage(area.page);
+  async function useAreaForQuestion(area: StudyArea) {
+    let hydrated = area;
+    if (!hydrated.imageDataUrl && hydrated.storagePath) {
+      try { hydrated = { ...hydrated, imageDataUrl: await loadAreaDataUrl(hydrated.storagePath) }; }
+      catch { return; }
+    }
+    setQuestionAreas((current) => [...current.filter((item) => item.id !== hydrated.id), hydrated].slice(-4));
+    setPage(hydrated.page);
   }
+
+  async function persistArea(area: StudyArea) {
+    if (!user || !area.imageDataUrl || area.storagePath || uploadingAreas.current.has(area.id)) return;
+    uploadingAreas.current.add(area.id);
+    try {
+      const storagePath = await uploadAreaCrop(user.id, activePaper.id, area);
+      updateTray((current) => ({ ...current, areas: (current.areas ?? []).map((item) => item.id === area.id ? { ...item, storagePath, imageDataUrl: undefined } : item) }));
+    } catch { /* Pending base64 stays only in local cache and is retried after reconnect. */ }
+    finally { uploadingAreas.current.delete(area.id); }
+  }
+
+  useEffect(() => {
+    if (!user || studyState.status === "offline") return;
+    for (const area of tray.areas ?? []) if (area.imageDataUrl && !area.storagePath) void persistArea(area);
+    void flushAreaDeletionQueue(user.id);
+  // Area uploads are keyed by their stable IDs and retried when sync/network status changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, activePaper.id, studyState.status, (tray.areas ?? []).map((area) => `${area.id}:${area.storagePath ?? "pending"}`).join("|")]);
 
   const selectedText = useMemo(
     () => questionHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
@@ -171,12 +222,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   );
 
   const context = useMemo(() => ({
-    paperId: initialPaper.id,
+    paperId: activePaper.id,
     page,
     selectedText,
-    selectedAreas: questionAreas.map((area) => ({ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl })),
+    selectedAreas: questionAreas.flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []),
     pageText,
-  }), [initialPaper.id, page, selectedText, questionAreas, pageText]);
+  }), [activePaper.id, page, selectedText, questionAreas, pageText]);
 
   return <main
     className="study-workspace relative grid h-dvh min-h-0 grid-cols-1 overflow-hidden"
@@ -200,12 +251,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     />}
 
     {libraryOpen && <div className="fixed inset-y-0 left-0 z-40 w-[min(88vw,300px)] min-w-0 lg:static lg:z-auto lg:w-auto">
-      <PaperList papers={papers} activeId={initialPaper.id} onClose={() => setLibraryVisibility(false)} />
+      <PaperList papers={papers} activeId={activePaper.id} onClose={() => setLibraryVisibility(false)} />
     </div>}
 
     <div className="min-h-0 min-w-0">
       <PdfViewer
-        paper={initialPaper}
+        paper={activePaper}
         page={page}
         onPageChange={setPage}
         onPageTextChange={setPageText}
@@ -240,7 +291,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
         <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--line)] transition group-hover:bg-[var(--accent)]" />
       </div>
       <StudyChat
-        paper={initialPaper}
+        paper={activePaper}
         context={context}
         savedInsights={tray.insights}
         questionHighlights={questionHighlights}
@@ -257,14 +308,45 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
       />
     </div>}
 
-    <PdfSyncPanel papers={papers} />
+    <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
-      paper={initialPaper}
+      paper={activePaper}
       tray={tray}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}
       onUseArea={useAreaForQuestion}
+      noteMarkdown={studyState.noteMarkdown}
+      onNoteChange={studyState.updateNote}
     />
+  </main>;
+}
+
+function WorkspaceGate({ message }: { message: string }) {
+  return <main className="grid h-dvh place-items-center bg-[#111] text-white">
+    <div id="paper-header-actions" className="fixed left-4 top-4 flex items-center gap-2"/>
+    <div className="text-center"><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-[#555] border-t-white"/><p className="mt-4 text-sm text-[var(--muted)]">{message}</p></div>
+    <AccountControl/>
+  </main>;
+}
+
+function LoginScreen() {
+  return <main className="grid h-dvh place-items-center bg-[#0b0b0c] text-white">
+    <div id="paper-header-actions" className="hidden"/>
+    <AccountControl initiallyOpen required/>
+  </main>;
+}
+
+function PersonalLibraryEmpty({ email, managerOpen, onManagerOpen, onManagerClose }: { email: string; managerOpen: boolean; onManagerOpen: () => void; onManagerClose: () => void }) {
+  return <main className="grid h-dvh place-items-center bg-[#111] p-6 text-white">
+    <div id="paper-header-actions" className="fixed left-4 top-4 flex items-center gap-2"/>
+    <section className="w-full max-w-lg rounded-3xl border border-[var(--line)] bg-black/35 p-7 text-center shadow-2xl">
+      <p className="text-[11px] font-semibold tracking-[.14em] text-[var(--accent)]">PERSONAL LIBRARY</p>
+      <h1 className="mt-2 text-2xl font-semibold">내 논문 라이브러리가 비어 있습니다</h1>
+      <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]"><span className="break-all text-[#ddd]">{email}</span> 계정에는 아직 등록된 논문이 없습니다.</p>
+      <button type="button" onClick={onManagerOpen} className="mt-6 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black">첫 개인 논문과 PDF 추가</button>
+    </section>
+    <AccountControl/>
+    <LibraryManager open={managerOpen} onClose={onManagerClose}/>
   </main>;
 }
 

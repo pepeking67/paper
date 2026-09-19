@@ -1,10 +1,19 @@
-import { notFound } from "next/navigation";
 import { StudyWorkspace } from "@/components/study-workspace";
-import { findPaper, papers } from "@/lib/papers/catalog";
+import type { Paper } from "@/lib/papers/types";
 
-export function generateStaticParams() { return papers.map(({ id }) => ({ paperId: id })); }
 export default async function PaperPage({ params }: { params: Promise<{ paperId: string }> }) {
-  const paper = findPaper((await params).paperId);
-  if (!paper) notFound();
-  return <StudyWorkspace initialPaper={paper} papers={papers} />;
+  const paperId = (await params).paperId;
+  const placeholder: Paper = {
+    id: paperId,
+    title: "내 논문 불러오는 중…",
+    authors: "",
+    year: null,
+    tag: "Personal",
+    done: false,
+    keys: [],
+    sourceUrl: null,
+    notionUrl: null,
+    library: "personal",
+  };
+  return <StudyWorkspace initialPaper={placeholder} />;
 }

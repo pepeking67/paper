@@ -12,22 +12,24 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:rls": "node scripts/test-supabase-rls.mjs",
     "process-pdfs": "tsx scripts/process-pdfs/index.ts",
     "upload-papers": "tsx scripts/upload-papers/index.ts"
   },
   "dependencies": {
     "@embedpdf/pdfium": "2.15.0",
+    "@supabase/supabase-js": "^2.57.4",
     "@vercel/blob": "^2.0.0",
     "katex": "^0.16.22",
     "next": "^15.5.0",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0",
-    "pdf-lib": "^1.17.1"
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.0",
