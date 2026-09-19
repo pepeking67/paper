@@ -7,6 +7,7 @@ import { NotionNoteEditor } from "@/components/study-note/notion-note-editor";
 import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
+import { useHydratedAreas } from "@/lib/area-assets/use-hydrated-areas";
 
 export function StudyTray({
   paper,
@@ -34,7 +35,8 @@ export function StudyTray({
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [noteCopied, setNoteCopied] = useState(false);
-  const areas = tray.areas ?? [];
+  const areas = useHydratedAreas(tray.areas ?? []);
+  const hydratedTray = { ...tray, areas };
   const embeddedAreas = areas.filter((area): area is StudyArea & { imageDataUrl: string } => typeof area.imageDataUrl === "string");
   const total = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
 
@@ -54,7 +56,7 @@ export function StudyTray({
   }, [open, noteOpen]);
 
   async function copyPacket() {
-    const value = buildStudyPacket(paper, tray);
+    const value = buildStudyPacket(paper, hydratedTray);
     setPacket(value);
     await navigator.clipboard.writeText(value);
     setCopied(true);
@@ -73,7 +75,7 @@ export function StudyTray({
       const response = await fetch("/api/study-note", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ paperId: paper.id, tray }),
+        body: JSON.stringify({ paperId: paper.id, tray: hydratedTray }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "학습 노트 생성 실패"}`);

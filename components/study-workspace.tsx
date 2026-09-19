@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
 import { StudyChat } from "./study-chat/study-chat";
@@ -12,9 +12,13 @@ import { AccountControl } from "./auth/account-control";
 import { useStudyState } from "@/lib/study-sync/use-study-state";
 import { StudySyncStatusView } from "./study-sync/sync-status";
 import { usePersonalLibrary } from "./library/personal-library-provider";
+import { useAuth } from "./auth/auth-provider";
+import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
 
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const personalLibrary = usePersonalLibrary();
+  const { user } = useAuth();
+  const uploadingAreas = useRef(new Set<string>());
   const combinedPapers = useMemo(() => [...papers.map((paper) => ({ ...paper, library: "legacy" as const })), ...personalLibrary.papers], [papers, personalLibrary.papers]);
   const activePaper = personalLibrary.papers.find((paper) => paper.id === initialPaper.id) ?? initialPaper;
   const [page, setPage] = useState(1);
@@ -126,9 +130,15 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     updateTray((current) => ({ ...current, areas: [...(current.areas ?? []), area] }));
     setQuestionAreas((current) => [...current.filter((item) => item.id !== area.id), area].slice(-4));
     setPage(areaPage);
+    if (user) void persistArea(area);
   }
 
   function removeArea(id: string) {
+    const area = (tray.areas ?? []).find((item) => item.id === id);
+    if (user && area) {
+      try { queueAreaDeletion(user.id, activePaper.id, area); } catch { /* Local removal remains authoritative. */ }
+      void flushAreaDeletionQueue(user.id);
+    }
     updateTray((current) => ({ ...current, areas: (current.areas ?? []).filter((item) => item.id !== id) }));
     setQuestionAreas((current) => current.filter((item) => item.id !== id));
   }
@@ -155,10 +165,33 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     if (kind === "memos") updateTray((current) => ({ ...current, memos: current.memos.filter((item) => item.id !== id) }));
   }
 
-  function useAreaForQuestion(area: StudyArea) {
-    setQuestionAreas((current) => [...current.filter((item) => item.id !== area.id), area].slice(-4));
-    setPage(area.page);
+  async function useAreaForQuestion(area: StudyArea) {
+    let hydrated = area;
+    if (!hydrated.imageDataUrl && hydrated.storagePath) {
+      try { hydrated = { ...hydrated, imageDataUrl: await loadAreaDataUrl(hydrated.storagePath) }; }
+      catch { return; }
+    }
+    setQuestionAreas((current) => [...current.filter((item) => item.id !== hydrated.id), hydrated].slice(-4));
+    setPage(hydrated.page);
   }
+
+  async function persistArea(area: StudyArea) {
+    if (!user || !area.imageDataUrl || area.storagePath || uploadingAreas.current.has(area.id)) return;
+    uploadingAreas.current.add(area.id);
+    try {
+      const storagePath = await uploadAreaCrop(user.id, activePaper.id, area);
+      updateTray((current) => ({ ...current, areas: (current.areas ?? []).map((item) => item.id === area.id ? { ...item, storagePath, imageDataUrl: undefined } : item) }));
+    } catch { /* Pending base64 stays only in local cache and is retried after reconnect. */ }
+    finally { uploadingAreas.current.delete(area.id); }
+  }
+
+  useEffect(() => {
+    if (!user || studyState.status === "offline") return;
+    for (const area of tray.areas ?? []) if (area.imageDataUrl && !area.storagePath) void persistArea(area);
+    void flushAreaDeletionQueue(user.id);
+  // Area uploads are keyed by their stable IDs and retried when sync/network status changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, activePaper.id, studyState.status, (tray.areas ?? []).map((area) => `${area.id}:${area.storagePath ?? "pending"}`).join("|")]);
 
   const selectedText = useMemo(
     () => questionHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
