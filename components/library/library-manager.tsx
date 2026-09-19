@@ -105,7 +105,10 @@ export function LibraryManager({ open, onClose, initialPaperId }: { open: boolea
             <Field label="읽기 상태"><select value={input.readingStatus} onChange={(event) => setInput({ ...input, readingStatus: event.target.value as PersonalPaperInput["readingStatus"] })} className="input"><option value="unread">읽지 않음</option><option value="reading">읽는 중</option><option value="read">완료</option><option value="archived">보관</option></select></Field>
             <Field label="원문 URL"><input type="url" value={input.sourceUrl ?? ""} onChange={(event) => setInput({ ...input, sourceUrl: event.target.value || null })} className="input"/></Field>
             <Field label="Notion URL"><input type="url" value={input.notionUrl ?? ""} onChange={(event) => setInput({ ...input, notionUrl: event.target.value || null })} className="input"/></Field>
-            <Field label="PDF (최대 50MB)"><input type="file" accept="application/pdf,.pdf" onChange={(event) => setPdf(event.target.files?.[0] ?? null)} className="block w-full text-xs text-[var(--muted)] file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-black"/></Field>
+            <Field label="PDF (최대 50MB)">
+              <input id="personal-paper-pdf" type="file" accept="application/pdf,.pdf" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => setPdf(event.target.files?.[0] ?? null)} className="sr-only"/>
+              <div className="flex items-center gap-3"><label htmlFor="personal-paper-pdf" className="cursor-pointer rounded-lg bg-white px-3 py-2 text-xs font-semibold text-black">PDF 선택</label><span className="text-xs text-[var(--muted)]">{pdf ? "PDF 선택됨" : editingId && library.papers.find((paper) => paper.id === editingId)?.asset ? "등록된 PDF 있음" : "선택된 PDF 없음"}</span></div>
+            </Field>
           </div>
           <button disabled={busy} className="mt-4 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-40">{busy ? "저장 중…" : editingId ? "변경 저장" : "논문 추가"}</button>
         </form>

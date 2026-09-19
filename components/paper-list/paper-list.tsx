@@ -98,7 +98,7 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${paper.done ? "bg-[#30d158]" : "border border-[#8e8e93]"}`} aria-label={paper.done ? "완료" : "진행 중"}/>
             <span className={`text-sm leading-snug tracking-[-.01em] ${active ? "font-medium text-white" : "text-[#e5e5ea]"}`}>{paper.title}</span>
           </div>
-          <p className="mt-2 pl-[18px] text-[11px] text-[var(--muted)]">{paper.id} · {paper.year ?? "연도 미상"}</p>
+          <p className="mt-2 pl-[18px] text-[11px] text-[var(--muted)]">{paper.year ?? "연도 미상"}{paper.authors ? ` · ${paper.authors}` : ""}</p>
         </Link>;
       })}
     </nav>

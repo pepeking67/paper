@@ -6,10 +6,10 @@ import { useAuth } from "./auth-provider";
 
 type Mode = "signin" | "signup";
 
-export function AccountControl() {
+export function AccountControl({ initiallyOpen = false, required = false }: { initiallyOpen?: boolean; required?: boolean } = {}) {
   const auth = useAuth();
   const [host, setHost] = useState<HTMLElement | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,11 +67,11 @@ export function AccountControl() {
 
   return <>
     {host && createPortal(button, host)}
-    {open && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+    {open && <div className="fixed inset-0 z-[80] grid place-items-center bg-[#0b0b0c] p-4" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" onPointerDown={(event) => { if (!required && event.target === event.currentTarget) setOpen(false); }}>
       <section className="w-full max-w-sm rounded-2xl border border-[var(--line)] bg-[#111] p-5 text-white shadow-2xl">
         <header className="flex items-start justify-between gap-4">
-          <div><p className="text-[11px] font-semibold tracking-[.14em] text-[var(--accent)]">ACCOUNT</p><h2 id="account-dialog-title" className="mt-1 text-xl font-semibold">{auth.user ? "계정" : mode === "signin" ? "로그인" : "회원가입"}</h2></div>
-          <button type="button" onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl text-[var(--muted)]">×</button>
+          <div><p className="text-[11px] font-semibold tracking-[.14em] text-[var(--accent)]">PAPER STUDY</p><h2 id="account-dialog-title" className="mt-1 text-xl font-semibold">{auth.user ? "계정" : mode === "signin" ? "로그인" : "회원가입"}</h2>{!auth.user && required && <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">로그인하면 내 논문과 학습 기록을 불러옵니다.</p>}</div>
+          {!required && <button type="button" onClick={() => setOpen(false)} aria-label="닫기" className="text-2xl text-[var(--muted)]">×</button>}
         </header>
 
         {!auth.configured && <p role="alert" className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">Supabase Preview 환경 변수가 필요합니다.</p>}

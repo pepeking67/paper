@@ -16,12 +16,28 @@ test("browser auth restores and refreshes sessions without a service-role key", 
   assert.doesNotMatch(`${client}\n${provider}`, /service[_-]?role/i);
 });
 
-test("authenticated workspaces never mix the shared catalog into a personal library", async () => {
+test("the workspace requires login and never mixes the shared catalog into a personal library", async () => {
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  const home = await readFile("app/page.tsx", "utf8");
+  const accountHome = await readFile("components/auth/account-home.tsx", "utf8");
   assert.match(workspace, /papers=\{personalLibrary\.papers\} userMode/);
-  assert.match(workspace, /로그인한 상태에서는 Shared\/Legacy PDF를 표시하지 않습니다/);
+  assert.match(workspace, /<AccountControl initiallyOpen required\/>/);
+  assert.match(workspace, /return <LoginScreen\/>/);
   assert.match(workspace, /!userMode && <PdfSyncPanel papers=\{papers\}/);
   assert.doesNotMatch(workspace, /combinedPapers/);
+  assert.doesNotMatch(workspace, /activePaper=\{\{ \.\.\.initialPaper, library: "legacy" \}\}/);
+  assert.match(home, /<AccountHome\/>/);
+  assert.doesNotMatch(home, /papers\/catalog/);
+  assert.match(accountHome, /<AccountControl initiallyOpen required\/>/);
+});
+
+test("personal PDF controls and paper lists do not expose filenames or internal IDs", async () => {
+  const manager = await readFile("components/library/library-manager.tsx", "utf8");
+  const paperList = await readFile("components/paper-list/paper-list.tsx", "utf8");
+  assert.match(manager, /className="sr-only"/);
+  assert.match(manager, /PDF 선택됨/);
+  assert.doesNotMatch(manager, /\{pdf\?\.name\}/);
+  assert.doesNotMatch(paperList, /\{paper\.id\} ·/);
 });
 
 test("account edits are local-first and revision conflicts require a choice", async () => {
