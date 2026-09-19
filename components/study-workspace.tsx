@@ -6,30 +6,25 @@ import { StudyChat } from "./study-chat/study-chat";
 import { PdfSyncPanel } from "./pdf-sync/pdf-sync-panel";
 import { StudyTray } from "./study-tray/study-tray";
 import type { Paper } from "@/lib/papers/types";
-import { emptyStudyTray, type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
+import { type AnnotationColor, type AnnotationKind, type StudyArea, type StudyHighlight, type StudyTrayData } from "@/lib/study-tray/types";
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import { AccountControl } from "./auth/account-control";
+import { useStudyState } from "@/lib/study-sync/use-study-state";
+import { StudySyncStatusView } from "./study-sync/sync-status";
 
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
-  const [tray, setTray] = useState<StudyTrayData>(emptyStudyTray);
+  const studyState = useStudyState(initialPaper.id);
+  const { tray } = studyState;
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
-  const storageKey = `paper-study-tray:${initialPaper.id}`;
   const chatWidthStorageKey = "paper-study-chat-width";
 
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as Partial<StudyTrayData> | null;
-      setTray(stored ? { ...emptyStudyTray(), ...stored, areas: Array.isArray(stored.areas) ? stored.areas : [] } : emptyStudyTray());
-    } catch { setTray(emptyStudyTray()); }
-    setQuestionHighlights([]);
-    setQuestionAreas([]);
-  }, [storageKey]);
+  useEffect(() => { setQuestionHighlights([]); setQuestionAreas([]); }, [initialPaper.id]);
 
   useEffect(() => {
     const storedLibrary = localStorage.getItem("paper-study-library-open");
@@ -94,12 +89,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   }
 
   function updateTray(updater: (current: StudyTrayData) => StudyTrayData) {
-    setTray((current) => {
-      const next = updater(current);
-      try { localStorage.setItem(storageKey, JSON.stringify(next)); }
-      catch { /* Keep the in-memory annotation even if browser storage quota is full. */ }
-      return next;
-    });
+    studyState.updateTray(updater);
   }
 
   function createHighlight(text: string, highlightPage: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) {
@@ -175,7 +165,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     paperId: initialPaper.id,
     page,
     selectedText,
-    selectedAreas: questionAreas.map((area) => ({ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl })),
+    selectedAreas: questionAreas.flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []),
     pageText,
   }), [initialPaper.id, page, selectedText, questionAreas, pageText]);
 
@@ -260,12 +250,15 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
 
     <PdfSyncPanel papers={papers} />
     <AccountControl />
+    <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
       paper={initialPaper}
       tray={tray}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}
       onUseArea={useAreaForQuestion}
+      noteMarkdown={studyState.noteMarkdown}
+      onNoteChange={studyState.updateNote}
     />
   </main>;
 }

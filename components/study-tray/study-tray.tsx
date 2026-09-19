@@ -14,12 +14,16 @@ export function StudyTray({
   onAddMemo,
   onRemove,
   onUseArea,
+  noteMarkdown,
+  onNoteChange,
 }: {
   paper: Paper;
   tray: StudyTrayData;
   onAddMemo: (text: string) => void;
   onRemove: (kind: keyof StudyTrayData, id: string) => void;
   onUseArea: (area: StudyArea) => void;
+  noteMarkdown: string;
+  onNoteChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [memo, setMemo] = useState("");
@@ -27,22 +31,16 @@ export function StudyTray({
   const [copied, setCopied] = useState(false);
   const [triggerHost, setTriggerHost] = useState<HTMLElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteMarkdown, setNoteMarkdown] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [noteCopied, setNoteCopied] = useState(false);
   const areas = tray.areas ?? [];
+  const embeddedAreas = areas.filter((area): area is StudyArea & { imageDataUrl: string } => typeof area.imageDataUrl === "string");
   const total = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
-  const noteStorageKey = `paper-study-note:${paper.id}`;
 
   useEffect(() => { setTriggerHost(document.getElementById("paper-header-actions")); }, []);
 
-  useEffect(() => {
-    try { setNoteMarkdown(localStorage.getItem(noteStorageKey) ?? ""); }
-    catch { setNoteMarkdown(""); }
-    setNoteOpen(false);
-    setNoteError("");
-  }, [noteStorageKey]);
+  useEffect(() => { setNoteOpen(false); setNoteError(""); }, [paper.id]);
 
   useEffect(() => {
     if (!open && !noteOpen) return;
@@ -64,9 +62,7 @@ export function StudyTray({
   }
 
   function persistNote(value: string) {
-    setNoteMarkdown(value);
-    try { localStorage.setItem(noteStorageKey, value); }
-    catch { /* Keep the edited note in memory if browser storage is unavailable. */ }
+    onNoteChange(value);
   }
 
   async function generateStudyNote() {
@@ -134,7 +130,7 @@ export function StudyTray({
           {areas.length === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">수식·그림·표를 `영역` 도구로 사각형 선택하면 여기에 저장됩니다.</p>}
           {areas.map((item) => <TrayItem key={item.id}>
             <p className="text-xs text-[var(--muted)]">Page {item.page} · Area annotation</p>
-            <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded-xl border border-[var(--line)] bg-white object-contain"/>
+            {item.imageDataUrl ? <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded-xl border border-[var(--line)] bg-white object-contain"/> : <div className="mt-2 rounded-xl border border-dashed border-[var(--line)] p-4 text-xs text-[var(--muted)]">영역 이미지를 Storage에서 불러오는 중…</div>}
             {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
             <div className="mt-3 flex items-center justify-between gap-2">
               <button type="button" onClick={() => onUseArea(item)} className="rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white/5">질문에 사용</button>
@@ -166,7 +162,7 @@ export function StudyTray({
           <button type="button" onClick={() => setNoteOpen(false)} aria-label="학습 노트 닫기" className="h-8 w-8 rounded-full text-xl text-[var(--muted)] hover:bg-white/5">×</button>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          <NotionNoteEditor value={noteMarkdown} areas={areas} onChange={persistNote} />
+          <NotionNoteEditor value={noteMarkdown} areas={embeddedAreas} onChange={persistNote} />
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-4 py-2.5 text-[11px] text-[var(--muted)]"><span>블록을 클릭하면 그 자리에서 바로 수정됩니다. 이미지도 화면에서 직접 크기를 조절할 수 있습니다.</span><button disabled={noteLoading} type="button" onClick={() => void generateStudyNote()} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[var(--accent)] hover:bg-[var(--accent-soft)]">{noteLoading ? "재생성 중…" : "자료에서 다시 생성"}</button></footer>
       </section>
