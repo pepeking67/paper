@@ -13,6 +13,7 @@ import {
   type PdfiumVisualRenderer,
 } from "@/lib/pdf/pdfium-visual-renderer";
 import { PdfPage } from "./pdf-page";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 type PdfViewerProps = {
   paper: Paper;
@@ -80,6 +81,7 @@ export function PdfViewer({
   const [downloadError, setDownloadError] = useState("");
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const pageTexts = useRef(new Map<number, string>());
+  const sourceBytesRef = useRef<Uint8Array | null>(null);
   const currentPage = useRef(page);
   currentPage.current = page;
 
@@ -96,17 +98,9 @@ export function PdfViewer({
 
     async function loadPdf() {
       try {
-        const response = await fetch(`/api/pdf/${encodeURIComponent(paper.id)}`, { signal: controller.signal });
-        if (!response.ok) {
-          let message = "PDF를 불러오지 못했습니다.";
-          try { message = (await response.json()).error ?? message; } catch { /* non-JSON response */ }
-          if (response.status === 404) setLoadState("missing");
-          else setLoadState("blob-error");
-          setError(message);
-          return;
-        }
-
-        const sourceBytes = new Uint8Array(await response.arrayBuffer());
+        const sourceBytes = await loadPaperPdfBytes(paper, controller.signal);
+        if (!sourceBytes) { setLoadState("missing"); setError("PDF가 아직 등록되지 않았습니다."); return; }
+        sourceBytesRef.current = sourceBytes.slice();
         // Chromium 138/139 has an upstream CFF FontMatrix regression for the
         // embedded Type1 math fonts produced by PDF.js. Only those browser
         // versions use PDFium for visible pixels; PDF.js remains responsible
@@ -153,11 +147,12 @@ export function PdfViewer({
     void loadPdf();
     return () => {
       controller.abort();
+      sourceBytesRef.current = null;
       visualRenderer?.close();
       void task?.destroy();
       if (!task) void document?.destroy();
     };
-  }, [paper.id, onPageChange, onPageTextChange]);
+  }, [paper.id, paper.asset?.objectPath, onPageChange, onPageTextChange]);
 
   useEffect(() => { onPageTextChange(pageTexts.current.get(page) ?? ""); }, [page, onPageTextChange]);
 
@@ -200,7 +195,7 @@ export function PdfViewer({
     setDownloadState("loading");
     setDownloadError("");
     try {
-      await downloadAnnotatedPdf(paper.id, savedHighlights, `${paper.id}-annotated.pdf`);
+      await downloadAnnotatedPdf(paper.id, savedHighlights, `${paper.id}-annotated.pdf`, sourceBytesRef.current ?? undefined);
     } catch (caught) {
       setDownloadError(caught instanceof Error ? caught.message : "주석 PDF 다운로드에 실패했습니다.");
     } finally {
@@ -254,7 +249,7 @@ export function PdfViewer({
             <span className="hidden sm:inline">질의응답</span>
           </button>
           <div id="paper-header-actions" className="flex items-center gap-2"/>
-          <a href={paper.notionUrl} target="_blank" rel="noreferrer" className="hidden h-8 items-center rounded-lg border border-[var(--line)] px-2.5 text-xs hover:bg-[#222] sm:flex">Notion ↗</a>
+          {paper.notionUrl && <a href={paper.notionUrl} target="_blank" rel="noreferrer" className="hidden h-8 items-center rounded-lg border border-[var(--line)] px-2.5 text-xs hover:bg-[#222] sm:flex">Notion ↗</a>}
         </div>
       </div>
     </header>
@@ -423,3 +418,24 @@ function ToolButton({ active, onClick, label, title }: { active: boolean; onClic
 function DocumentLoading() { return <div className="m-auto flex min-h-80 flex-col items-center justify-center gap-4" role="status"><span className="h-8 w-8 animate-spin rounded-full border-2 border-[#555] border-t-white"/><p className="text-sm text-[var(--muted)]">PDF 불러오는 중…</p></div>; }
 function EmptyPdf() { return <div className="m-auto max-w-sm rounded-xl border border-dashed border-[#555] p-8 text-center"><div className="text-3xl">▱</div><h3 className="mt-3 font-medium">PDF가 아직 등록되지 않았습니다</h3><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">PDF 관리에서 private Blob 동기화를 먼저 실행하세요.</p></div>; }
 function LoadError({ title, detail }: { title: string; detail: string }) { return <div role="alert" className="m-auto max-w-md rounded-xl border border-[#555] p-8 text-center"><h3 className="font-medium">{title}</h3><p className="mt-2 text-sm text-[var(--muted)]">{detail}</p></div>; }
+
+async function loadPaperPdfBytes(paper: Paper, signal: AbortSignal): Promise<Uint8Array | null> {
+  if (paper.library === "personal") {
+    if (!paper.asset) return null;
+    const client = getBrowserSupabase();
+    if (!client) throw new Error("Supabase 연결이 설정되지 않았습니다.");
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const { data, error } = await client.storage.from(paper.asset.bucketId).download(paper.asset.objectPath);
+    if (error) throw error;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    return new Uint8Array(await data.arrayBuffer());
+  }
+  const response = await fetch(`/api/pdf/${encodeURIComponent(paper.id)}`, { signal });
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    let message = "PDF를 불러오지 못했습니다.";
+    try { message = (await response.json()).error ?? message; } catch { /* non-JSON response */ }
+    throw new Error(message);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}

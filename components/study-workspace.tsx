@@ -11,11 +11,15 @@ import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import { AccountControl } from "./auth/account-control";
 import { useStudyState } from "@/lib/study-sync/use-study-state";
 import { StudySyncStatusView } from "./study-sync/sync-status";
+import { usePersonalLibrary } from "./library/personal-library-provider";
 
 export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; papers: Paper[] }) {
+  const personalLibrary = usePersonalLibrary();
+  const combinedPapers = useMemo(() => [...papers.map((paper) => ({ ...paper, library: "legacy" as const })), ...personalLibrary.papers], [papers, personalLibrary.papers]);
+  const activePaper = personalLibrary.papers.find((paper) => paper.id === initialPaper.id) ?? initialPaper;
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
-  const studyState = useStudyState(initialPaper.id);
+  const studyState = useStudyState(activePaper.id);
   const { tray } = studyState;
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
@@ -24,7 +28,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   const [chatWidth, setChatWidth] = useState(420);
   const chatWidthStorageKey = "paper-study-chat-width";
 
-  useEffect(() => { setQuestionHighlights([]); setQuestionAreas([]); }, [initialPaper.id]);
+  useEffect(() => { setQuestionHighlights([]); setQuestionAreas([]); }, [activePaper.id]);
 
   useEffect(() => {
     const storedLibrary = localStorage.getItem("paper-study-library-open");
@@ -162,12 +166,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
   );
 
   const context = useMemo(() => ({
-    paperId: initialPaper.id,
+    paperId: activePaper.id,
     page,
     selectedText,
     selectedAreas: questionAreas.flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []),
     pageText,
-  }), [initialPaper.id, page, selectedText, questionAreas, pageText]);
+  }), [activePaper.id, page, selectedText, questionAreas, pageText]);
 
   return <main
     className="study-workspace relative grid h-dvh min-h-0 grid-cols-1 overflow-hidden"
@@ -191,12 +195,12 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     />}
 
     {libraryOpen && <div className="fixed inset-y-0 left-0 z-40 w-[min(88vw,300px)] min-w-0 lg:static lg:z-auto lg:w-auto">
-      <PaperList papers={papers} activeId={initialPaper.id} onClose={() => setLibraryVisibility(false)} />
+      <PaperList papers={combinedPapers} activeId={activePaper.id} onClose={() => setLibraryVisibility(false)} />
     </div>}
 
     <div className="min-h-0 min-w-0">
       <PdfViewer
-        paper={initialPaper}
+        paper={activePaper}
         page={page}
         onPageChange={setPage}
         onPageTextChange={setPageText}
@@ -231,7 +235,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
         <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--line)] transition group-hover:bg-[var(--accent)]" />
       </div>
       <StudyChat
-        paper={initialPaper}
+        paper={activePaper}
         context={context}
         savedInsights={tray.insights}
         questionHighlights={questionHighlights}
@@ -252,7 +256,7 @@ export function StudyWorkspace({ initialPaper, papers }: { initialPaper: Paper; 
     <AccountControl />
     <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
-      paper={initialPaper}
+      paper={activePaper}
       tray={tray}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}

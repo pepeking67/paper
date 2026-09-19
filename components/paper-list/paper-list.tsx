@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Paper } from "@/lib/papers/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { LibraryManager } from "@/components/library/library-manager";
 
 const PAPER_CATEGORY_STORAGE_KEY = "paper-study-library-category";
 
@@ -9,6 +11,9 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("All");
   const [categoryHydrated, setCategoryHydrated] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerPaperId, setManagerPaperId] = useState<string | undefined>();
+  const { user } = useAuth();
   const activeLinkRef = useRef<HTMLAnchorElement | null>(null);
   const tags = useMemo(() => ["All", ...Array.from(new Set(papers.map((p) => p.tag)))], [papers]);
   const visible = useMemo(
@@ -62,6 +67,8 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
       className="w-full shrink-0 rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--accent)]"
     />
 
+    {user && <div className="mt-3 grid shrink-0 grid-cols-2 gap-2"><button type="button" onClick={() => { setManagerPaperId(undefined); setManagerOpen(true); }} className="rounded-xl border border-[var(--line)] px-2 py-2 text-xs hover:bg-white/5">+ 개인 논문</button><button type="button" disabled={!papers.some((paper) => paper.id === activeId && paper.library === "personal")} onClick={() => { setManagerPaperId(activeId); setManagerOpen(true); }} className="rounded-xl border border-[var(--line)] px-2 py-2 text-xs hover:bg-white/5 disabled:opacity-30">현재 논문 편집</button></div>}
+
     <div className="my-3 shrink-0">
       <label htmlFor="paper-category" className="mb-1.5 block px-1 text-[11px] font-medium text-[var(--muted)]">카테고리</label>
       <div className="relative">
@@ -95,5 +102,6 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
         </Link>;
       })}
     </nav>
+    <LibraryManager open={managerOpen} onClose={() => setManagerOpen(false)} initialPaperId={managerPaperId}/>
   </aside>;
 }

@@ -33,18 +33,22 @@ export async function downloadAnnotatedPdf(
   paperId: string,
   highlights: StudyHighlight[],
   fileName = `${paperId}-annotated.pdf`,
+  sourceBytes?: Uint8Array,
 ): Promise<void> {
-  const response = await fetch(`/api/pdf/${encodeURIComponent(paperId)}`);
-  if (!response.ok) {
-    let message = "원본 PDF를 불러오지 못했습니다.";
-    try {
-      const data = await response.json() as { error?: unknown };
-      if (typeof data.error === "string") message = data.error;
-    } catch { /* Keep the generic message for non-JSON responses. */ }
-    throw new Error(message);
+  let source: ArrayBuffer;
+  if (sourceBytes) source = sourceBytes.buffer.slice(sourceBytes.byteOffset, sourceBytes.byteOffset + sourceBytes.byteLength) as ArrayBuffer;
+  else {
+    const response = await fetch(`/api/pdf/${encodeURIComponent(paperId)}`);
+    if (!response.ok) {
+      let message = "원본 PDF를 불러오지 못했습니다.";
+      try {
+        const data = await response.json() as { error?: unknown };
+        if (typeof data.error === "string") message = data.error;
+      } catch { /* Keep the generic message for non-JSON responses. */ }
+      throw new Error(message);
+    }
+    source = await response.arrayBuffer();
   }
-
-  const source = await response.arrayBuffer();
   const { PDFDocument, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.load(source, { ignoreEncryption: true });
   const pages = pdf.getPages();
