@@ -91,8 +91,10 @@ export function PdfViewer({
   onToggleLibrary,
   onToggleChat,
 }: PdfViewerProps) {
-  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
-  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const pdfCacheKey = getPdfCacheKey(storageScope, paper);
+  const initialCachedResource = recentPdfCache.peek(pdfCacheKey);
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(() => initialCachedResource?.document ?? null);
+  const [loadState, setLoadState] = useState<LoadState>(() => initialCachedResource === null ? "missing" : initialCachedResource ? "ready" : "loading");
   const [error, setError] = useState("");
   const [tool, setTool] = useState<AnnotationTool>("highlight");
   const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("yellow");
@@ -102,14 +104,13 @@ export function PdfViewer({
   const [downloadError, setDownloadError] = useState("");
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const pageTexts = useRef(new Map<number, string>());
-  const sourceBytesRef = useRef<Uint8Array | null>(null);
+  const sourceBytesRef = useRef<Uint8Array | null>(initialCachedResource?.sourceBytes ?? null);
   const paperRef = useRef(paper);
   paperRef.current = paper;
   const restoringPageForPaper = useRef<string | null>(paper.id);
   const currentPage = useRef(page);
   currentPage.current = page;
   const paperUiKey = paperUiStorageKey(storageScope, paper.id);
-  const pdfCacheKey = getPdfCacheKey(storageScope, paper);
   const [restoredViewerUiKey, setRestoredViewerUiKey] = useState("");
 
   useEffect(() => {
@@ -130,8 +131,10 @@ export function PdfViewer({
   useEffect(() => {
     let cancelled = false;
     let cacheHandle: CachedResourceHandle<CachedPdfResource | null> | undefined;
-    setPdf(null);
-    setLoadState("loading");
+    const cachedResource = recentPdfCache.peek(pdfCacheKey);
+    setPdf(cachedResource?.document ?? null);
+    setLoadState(cachedResource === null ? "missing" : cachedResource ? "ready" : "loading");
+    sourceBytesRef.current = cachedResource?.sourceBytes ?? null;
     setError("");
     pageTexts.current.clear();
     onPageTextChange("");

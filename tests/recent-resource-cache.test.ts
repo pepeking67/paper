@@ -11,6 +11,7 @@ test("recent resource cache reuses a released document without loading again", a
 
   assert.equal(second.cacheHit, true);
   assert.equal(second.value, first.value);
+  assert.equal(cache.peek("account:paper-a"), first.value);
   assert.equal(loads, 1);
   second.release();
 });

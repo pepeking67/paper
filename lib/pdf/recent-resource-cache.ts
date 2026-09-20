@@ -75,6 +75,7 @@ export function createRecentResourceCache<T>({ maxEntries, dispose }: { maxEntri
 
   return {
     acquire,
+    peek: (key: string) => entries.get(key)?.value,
     keys: () => [...entries.keys()],
   };
 }
