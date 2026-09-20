@@ -15,7 +15,7 @@ const labels: Record<StudySyncStatus, string> = {
 
 export function StudySyncStatusView({ status, conflict, onUseServer, onUseDevice }: { status: StudySyncStatus; conflict: StudyStateConflict | null; onUseServer: () => void; onUseDevice: () => void }) {
   return <>
-    <span className={`fixed bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-full border px-3 py-1.5 text-[11px] shadow-xl backdrop-blur ${status === "conflict" || status === "error" ? "border-amber-400/50 bg-amber-950/90 text-amber-100" : "border-[var(--line)] bg-black/75 text-[var(--muted)]"}`}>{labels[status]}</span>
+    {status !== "synced" && <span className={`fixed bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-full border px-3 py-1.5 text-[11px] shadow-xl backdrop-blur ${status === "conflict" || status === "error" ? "border-amber-400/50 bg-amber-950/90 text-amber-100" : "border-[var(--line)] bg-black/75 text-[var(--muted)]"}`}>{labels[status]}</span>}
     {conflict && <div className="fixed inset-0 z-[90] grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="sync-conflict-title">
       <section className="w-full max-w-lg rounded-2xl border border-amber-400/40 bg-[#111] p-5 text-white shadow-2xl">
         <p className="text-[11px] font-semibold tracking-[.14em] text-amber-300">SYNC CONFLICT</p>

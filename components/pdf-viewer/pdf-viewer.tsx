@@ -286,7 +286,7 @@ export function PdfViewer({
         <input id="page-jump" type="number" min={1} max={pdf.numPages} value={page} onChange={(event) => { const target = Math.max(1, Math.min(pdf.numPages, Number(event.target.value))); onPageChange(target); scrollToPage(target); }} className="hidden h-7 w-12 rounded border border-[var(--line)] bg-[#111] px-1 text-center text-xs sm:block"/>
         <button onClick={() => setZoom((value) => Math.max(75, value - 25))} disabled={zoom <= 75} aria-label="축소" title="축소" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-[var(--line)] text-sm disabled:opacity-40">−</button>
         <span className="hidden w-9 shrink-0 text-center text-[10px] tabular-nums text-[var(--muted)] sm:inline">{zoom}%</span>
-        <button onClick={() => setZoom((value) => Math.min(150, value + 25))} disabled={zoom >= 150} aria-label="확대" title="확대" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-[var(--line)] text-sm disabled:opacity-40">+</button>
+        <button onClick={() => setZoom((value) => Math.min(250, value + 25))} disabled={zoom >= 250} aria-label="확대" title="확대" className="grid h-7 w-7 shrink-0 place-items-center rounded border border-[var(--line)] text-sm disabled:opacity-40">+</button>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <button

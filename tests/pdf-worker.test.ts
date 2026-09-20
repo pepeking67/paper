@@ -57,6 +57,8 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /setProperty\("--scale-factor", String\(viewport\.scale\)\)/);
   assert.match(page, /capturedSelections/);
   assert.match(viewer, /setZoom/);
+  assert.match(viewer, /Math\.min\(250, value \+ 25\)/);
+  assert.match(viewer, /zoom >= 250/);
   assert.match(viewer, /\{page\}\/\{pdf\.numPages\}/);
   assert.match(viewer, /study-tray-actions/);
   assert.match(viewer, /다음 질문 문맥으로 사용합니다/);
