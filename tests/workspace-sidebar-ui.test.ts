@@ -34,6 +34,15 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.doesNotMatch(viewer, />\{paper\.id\}</);
   assert.match(viewer, /표시된 PDF 다운로드/);
   assert.match(viewer, /표시 모두 지우기/);
+  assert.match(viewer, /aria-label="PDF 주석 도구"/);
+  assert.match(viewer, /label="형광펜"/);
+  assert.match(viewer, /label="밑줄"/);
+  assert.match(viewer, /label="영역 선택"/);
+  assert.match(viewer, /label="지우개"/);
+  assert.match(viewer, /tool === nextTool/);
+  assert.match(viewer, /setColorMenuTool/);
+  assert.match(viewer, /aria-label="주석 색상 선택"/);
+  assert.doesNotMatch(viewer, /className="rounded-md px-2\.5 py-1 text-xs/);
   assert.match(viewer, /downloadAnnotatedPdf\(paper\.id, savedHighlights/);
   assert.match(viewer, /다운로드 PDF에는 포함되지 않습니다/);
   assert.match(pdfPage, /aria-label="저장된 PDF 영역"/);
