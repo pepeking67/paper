@@ -15,6 +15,7 @@ import {
 import { PdfPage } from "./pdf-page";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 import { paperUiStorageKey, readPaperUiState, updatePaperUiState, type AnnotationTool } from "@/lib/workspace-state/local-ui-state";
+import { createRecentResourceCache, type CachedResourceHandle } from "@/lib/pdf/recent-resource-cache";
 
 type PdfViewerProps = {
   paper: Paper;
@@ -49,6 +50,22 @@ const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] 
   { value: "pink", label: "분홍", swatch: "#f472b6" },
   { value: "purple", label: "보라", swatch: "#c084fc" },
 ];
+
+type CachedPdfResource = {
+  document: PDFDocumentProxy;
+  sourceBytes: Uint8Array;
+  loadingTask: PDFDocumentLoadingTask;
+  visualRenderer?: PdfiumVisualRenderer;
+};
+
+const recentPdfCache = createRecentResourceCache<CachedPdfResource | null>({
+  maxEntries: 2,
+  dispose: async (resource) => {
+    if (!resource) return;
+    resource.visualRenderer?.close();
+    await resource.loadingTask.destroy();
+  },
+});
 
 export function PdfViewer({
   paper,
@@ -86,10 +103,13 @@ export function PdfViewer({
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const pageTexts = useRef(new Map<number, string>());
   const sourceBytesRef = useRef<Uint8Array | null>(null);
+  const paperRef = useRef(paper);
+  paperRef.current = paper;
   const restoringPageForPaper = useRef<string | null>(paper.id);
   const currentPage = useRef(page);
   currentPage.current = page;
   const paperUiKey = paperUiStorageKey(storageScope, paper.id);
+  const pdfCacheKey = getPdfCacheKey(storageScope, paper);
   const [restoredViewerUiKey, setRestoredViewerUiKey] = useState("");
 
   useEffect(() => {
@@ -108,10 +128,8 @@ export function PdfViewer({
   }, [annotationColor, paper.id, paperUiKey, restoredViewerUiKey, storageScope, tool, zoom]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let task: PDFDocumentLoadingTask | undefined;
-    let document: PDFDocumentProxy | undefined;
-    let visualRenderer: PdfiumVisualRenderer | undefined;
+    let cancelled = false;
+    let cacheHandle: CachedResourceHandle<CachedPdfResource | null> | undefined;
     setPdf(null);
     setLoadState("loading");
     setError("");
@@ -120,46 +138,15 @@ export function PdfViewer({
 
     async function loadPdf() {
       try {
-        const sourceBytes = await loadPaperPdfBytes(paper, controller.signal);
-        if (!sourceBytes) { setLoadState("missing"); setError("PDF가 아직 등록되지 않았습니다."); return; }
-        sourceBytesRef.current = sourceBytes.slice();
-        // Chromium 138/139 has an upstream CFF FontMatrix regression for the
-        // embedded Type1 math fonts produced by PDF.js. Only those browser
-        // versions use PDFium for visible pixels; PDF.js remains responsible
-        // for text extraction, selection, and annotation geometry.
-        const usePdfiumVisualFallback = needsChromiumFontMatrixFallback();
-        const pdfiumPromise = usePdfiumVisualFallback
-          ? createPdfiumVisualRenderer(sourceBytes).catch(() => null)
-          : null;
-
-        installPdfJsCompatibility();
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-        task = pdfjs.getDocument({
-          // PDF.js transfers typed-array ownership to its worker. Keep the
-          // original bytes alive only when the Chromium/PDFium visual fallback
-          // needs a second copy of the same document.
-          data: usePdfiumVisualFallback ? sourceBytes.slice() : sourceBytes,
-          cMapUrl: "/pdfjs/cmaps/",
-          cMapPacked: true,
-          standardFontDataUrl: "/pdfjs/standard_fonts/",
-        });
-        document = await task.promise;
-        if (controller.signal.aborted) return;
-
-        if (pdfiumPromise) {
-          visualRenderer = (await pdfiumPromise) ?? undefined;
-          if (visualRenderer) installPdfiumPageRendering(document, visualRenderer);
-        }
-        if (controller.signal.aborted) {
-          visualRenderer?.close();
-          return;
-        }
-
-        setPdf(document);
+        cacheHandle = await recentPdfCache.acquire(pdfCacheKey, () => createCachedPdfResource(paperRef.current));
+        if (cancelled) { cacheHandle.release(); return; }
+        const resource = cacheHandle.value;
+        if (!resource) { setLoadState("missing"); setError("PDF가 아직 등록되지 않았습니다."); return; }
+        sourceBytesRef.current = resource.sourceBytes;
+        setPdf(resource.document);
         setLoadState("ready");
       } catch (caught) {
-        if (controller.signal.aborted) return;
+        if (cancelled) return;
         setLoadState("parse-error");
         setError(caught instanceof Error ? caught.message : "PDF 파일을 해석할 수 없습니다.");
       }
@@ -167,13 +154,11 @@ export function PdfViewer({
 
     void loadPdf();
     return () => {
-      controller.abort();
+      cancelled = true;
       sourceBytesRef.current = null;
-      visualRenderer?.close();
-      void task?.destroy();
-      if (!task) void document?.destroy();
+      cacheHandle?.release();
     };
-  }, [paper, onPageChange, onPageTextChange]);
+  }, [pdfCacheKey, onPageTextChange]);
 
   useEffect(() => { onPageTextChange(pageTexts.current.get(page) ?? ""); }, [page, onPageTextChange]);
 
@@ -488,18 +473,59 @@ function DocumentLoading() { return <div className="m-auto flex min-h-80 flex-co
 function EmptyPdf() { return <div className="m-auto max-w-sm rounded-xl border border-dashed border-[#555] p-8 text-center"><div className="text-3xl">▱</div><h3 className="mt-3 font-medium">PDF가 아직 등록되지 않았습니다</h3><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">PDF 관리에서 private Blob 동기화를 먼저 실행하세요.</p></div>; }
 function LoadError({ title, detail }: { title: string; detail: string }) { return <div role="alert" className="m-auto max-w-md rounded-xl border border-[#555] p-8 text-center"><h3 className="font-medium">{title}</h3><p className="mt-2 text-sm text-[var(--muted)]">{detail}</p></div>; }
 
-async function loadPaperPdfBytes(paper: Paper, signal: AbortSignal): Promise<Uint8Array | null> {
+function getPdfCacheKey(storageScope: string, paper: Paper) {
+  const sourceIdentity = paper.library === "personal"
+    ? `${paper.asset?.bucketId ?? "missing"}:${paper.asset?.objectPath ?? "missing"}:${paper.asset?.checksum ?? "no-checksum"}`
+    : paper.id;
+  return `${storageScope}:${paper.library ?? "legacy"}:${paper.id}:${sourceIdentity}`;
+}
+
+async function createCachedPdfResource(paper: Paper): Promise<CachedPdfResource | null> {
+  const sourceBytes = await loadPaperPdfBytes(paper);
+  if (!sourceBytes) return null;
+  const downloadBytes = sourceBytes.slice();
+  const usePdfiumVisualFallback = needsChromiumFontMatrixFallback();
+  let visualRenderer: PdfiumVisualRenderer | undefined;
+  let loadingTask: PDFDocumentLoadingTask | undefined;
+
+  try {
+    const pdfiumPromise = usePdfiumVisualFallback
+      ? createPdfiumVisualRenderer(sourceBytes).catch(() => null)
+      : null;
+    installPdfJsCompatibility();
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    loadingTask = pdfjs.getDocument({
+      // Keep downloadBytes untouched for annotated-PDF export while PDF.js may
+      // transfer ownership of its rendering copy to the worker.
+      data: usePdfiumVisualFallback ? sourceBytes.slice() : sourceBytes,
+      cMapUrl: "/pdfjs/cmaps/",
+      cMapPacked: true,
+      standardFontDataUrl: "/pdfjs/standard_fonts/",
+    });
+    const document = await loadingTask.promise;
+    if (pdfiumPromise) {
+      visualRenderer = (await pdfiumPromise) ?? undefined;
+      if (visualRenderer) installPdfiumPageRendering(document, visualRenderer);
+    }
+    return { document, sourceBytes: downloadBytes, loadingTask, visualRenderer };
+  } catch (error) {
+    visualRenderer?.close();
+    await loadingTask?.destroy();
+    throw error;
+  }
+}
+
+async function loadPaperPdfBytes(paper: Paper): Promise<Uint8Array | null> {
   if (paper.library === "personal") {
     if (!paper.asset) return null;
     const client = getBrowserSupabase();
     if (!client) throw new Error("Supabase 연결이 설정되지 않았습니다.");
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const { data, error } = await client.storage.from(paper.asset.bucketId).download(paper.asset.objectPath);
     if (error) throw error;
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     return new Uint8Array(await data.arrayBuffer());
   }
-  const response = await fetch(`/api/pdf/${encodeURIComponent(paper.id)}`, { signal });
+  const response = await fetch(`/api/pdf/${encodeURIComponent(paper.id)}`);
   if (!response.ok) {
     if (response.status === 404) return null;
     let message = "PDF를 불러오지 못했습니다.";

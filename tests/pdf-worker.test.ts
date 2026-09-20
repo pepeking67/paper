@@ -57,6 +57,10 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /setProperty\("--scale-factor", String\(viewport\.scale\)\)/);
   assert.match(page, /capturedSelections/);
   assert.match(viewer, /setZoom/);
+  assert.match(viewer, /createRecentResourceCache/);
+  assert.match(viewer, /maxEntries: 2/);
+  assert.match(viewer, /recentPdfCache\.acquire/);
+  assert.match(viewer, /loadingTask\.destroy\(\)/);
   assert.match(viewer, /Math\.min\(250, value \+ 25\)/);
   assert.match(viewer, /zoom >= 250/);
   assert.match(viewer, /\{page\}\/\{pdf\.numPages\}/);
