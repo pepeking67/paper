@@ -68,6 +68,19 @@ test("account edits are local-first and revision conflicts require a choice", as
   assert.match(status, /이 기기 버전 사용/);
 });
 
+test("workspace restores per-account paper UI state after navigation", async () => {
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
+  const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
+  assert.match(workspace, /readPaperUiState\(userId, activePaper\.id\)/);
+  assert.match(workspace, /questionHighlightIds/);
+  assert.match(workspace, /questionAreaIds/);
+  assert.match(viewer, /setZoom\(stored\.zoom\)/);
+  assert.match(viewer, /scrollIntoView\(\{ behavior: "auto"/);
+  assert.match(chat, /chatDraft/);
+  assert.match(chat, /chatHistoryStorageKey\(storageScope, paper\.id\)/);
+});
+
 test("personal files use private Storage paths and transactional deletion", async () => {
   const library = await readFile("components/library/personal-library-provider.tsx", "utf8");
   const area = await readFile("lib/area-assets/area-storage.ts", "utf8");
