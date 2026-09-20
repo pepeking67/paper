@@ -63,6 +63,7 @@ test("account edits are local-first and revision conflicts require a choice", as
   assert.match(hook, /writeAccountCache/);
   assert.match(hook, /\.eq\("revision", current\.baseRevision\)/);
   assert.match(hook, /window\.addEventListener\("online"/);
+  assert.match(status, /status !== "synced"/);
   assert.match(status, /서버 버전 사용/);
   assert.match(status, /이 기기 버전 사용/);
 });

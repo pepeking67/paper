@@ -98,7 +98,7 @@ export function StudyTray({
   }
 
   return <>
-    {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs hover:bg-white/5">Study Tray · {total}</button>, triggerHost)}
+    {triggerHost && createPortal(<button onClick={() => setOpen(true)} className="h-7 rounded-md border border-[var(--line)] px-2 text-[11px] hover:bg-white/5">Study Tray · {total}</button>, triggerHost)}
     {open && <div
       className="fixed inset-0 z-40 flex justify-end bg-black/60"
       role="dialog"
