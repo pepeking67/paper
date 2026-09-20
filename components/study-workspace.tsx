@@ -15,6 +15,7 @@ import { usePersonalLibrary } from "./library/personal-library-provider";
 import { useAuth } from "./auth/auth-provider";
 import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
 import { LibraryManager } from "./library/library-manager";
+import { paperUiStorageKey, readPaperUiState, updatePaperUiState } from "@/lib/workspace-state/local-ui-state";
 
 export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const personalLibrary = usePersonalLibrary();
@@ -33,7 +34,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   if (user && personalLibrary.loading) return <WorkspaceGate message="내 논문 라이브러리를 불러오는 중…"/>;
 
   if (user) {
-    if (personalPaper) return <WorkspaceShell activePaper={personalPaper} papers={personalLibrary.papers}/>;
+    if (personalPaper) return <WorkspaceShell activePaper={personalPaper} papers={personalLibrary.papers} userId={user.id}/>;
     if (firstPersonalId) return <WorkspaceGate message="내 논문 라이브러리로 이동하는 중…"/>;
     return <PersonalLibraryEmpty email={user.email ?? "내 계정"} managerOpen={managerOpen} onManagerOpen={() => setManagerOpen(true)} onManagerClose={() => setManagerOpen(false)}/>;
   }
@@ -41,7 +42,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   return <LoginScreen/>;
 }
 
-function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: Paper[] }) {
+function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; papers: Paper[]; userId: string }) {
   const { user } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
@@ -54,8 +55,51 @@ function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: P
   const [chatOpen, setChatOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
   const chatWidthStorageKey = "paper-study-chat-width";
+  const paperUiKey = paperUiStorageKey(userId, activePaper.id);
+  const [restoredPaperUiKey, setRestoredPaperUiKey] = useState("");
 
-  useEffect(() => { setQuestionHighlights([]); setQuestionAreas([]); }, [activePaper.id]);
+  useEffect(() => {
+    setPage(1);
+    setQuestionHighlights([]);
+    setQuestionAreas([]);
+    setRestoredPaperUiKey("");
+  }, [paperUiKey]);
+
+  useEffect(() => {
+    if (studyState.status === "loading" || restoredPaperUiKey === paperUiKey) return;
+    let cancelled = false;
+
+    async function restorePaperUi() {
+      const stored = readPaperUiState(userId, activePaper.id);
+      const highlightsById = new Map(tray.highlights.map((item) => [item.id, item]));
+      const areasById = new Map((tray.areas ?? []).map((item) => [item.id, item]));
+      const restoredHighlights = stored.questionHighlightIds.flatMap((id) => highlightsById.get(id) ?? []);
+      const restoredAreas = await Promise.all(stored.questionAreaIds.map(async (id) => {
+        const area = areasById.get(id);
+        if (!area) return null;
+        if (area.imageDataUrl || !area.storagePath) return area;
+        try { return { ...area, imageDataUrl: await loadAreaDataUrl(area.storagePath) }; }
+        catch { return null; }
+      }));
+      if (cancelled) return;
+      setPage(stored.page);
+      setQuestionHighlights(restoredHighlights);
+      setQuestionAreas(restoredAreas.filter((area): area is StudyArea => area !== null).slice(-4));
+      setRestoredPaperUiKey(paperUiKey);
+    }
+
+    void restorePaperUi();
+    return () => { cancelled = true; };
+  }, [activePaper.id, paperUiKey, restoredPaperUiKey, studyState.status, tray.areas, tray.highlights, userId]);
+
+  useEffect(() => {
+    if (restoredPaperUiKey !== paperUiKey) return;
+    updatePaperUiState(userId, activePaper.id, {
+      page,
+      questionHighlightIds: questionHighlights.map((item) => item.id),
+      questionAreaIds: questionAreas.map((item) => item.id),
+    });
+  }, [activePaper.id, page, paperUiKey, questionAreas, questionHighlights, restoredPaperUiKey, userId]);
 
   useEffect(() => {
     const storedLibrary = localStorage.getItem("paper-study-library-open");
@@ -257,6 +301,8 @@ function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: P
     <div className="min-h-0 min-w-0">
       <PdfViewer
         paper={activePaper}
+        storageScope={userId}
+        positionReady={restoredPaperUiKey === paperUiKey}
         page={page}
         onPageChange={setPage}
         onPageTextChange={setPageText}
@@ -292,6 +338,7 @@ function WorkspaceShell({ activePaper, papers }: { activePaper: Paper; papers: P
       </div>
       <StudyChat
         paper={activePaper}
+        storageScope={userId}
         context={context}
         savedInsights={tray.insights}
         questionHighlights={questionHighlights}

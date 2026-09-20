@@ -14,9 +14,12 @@ import {
 } from "@/lib/pdf/pdfium-visual-renderer";
 import { PdfPage } from "./pdf-page";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
+import { paperUiStorageKey, readPaperUiState, updatePaperUiState, type AnnotationTool } from "@/lib/workspace-state/local-ui-state";
 
 type PdfViewerProps = {
   paper: Paper;
+  storageScope: string;
+  positionReady: boolean;
   page: number;
   onPageChange: (page: number) => void;
   onPageTextChange: (text: string) => void;
@@ -39,8 +42,6 @@ type PdfViewerProps = {
 };
 
 type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
-type AnnotationTool = AnnotationKind | "area" | "erase";
-
 const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] = [
   { value: "yellow", label: "노랑", swatch: "#facc15" },
   { value: "green", label: "초록", swatch: "#4ade80" },
@@ -51,6 +52,8 @@ const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] 
 
 export function PdfViewer({
   paper,
+  storageScope,
+  positionReady,
   page,
   onPageChange,
   onPageTextChange,
@@ -83,8 +86,26 @@ export function PdfViewer({
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const pageTexts = useRef(new Map<number, string>());
   const sourceBytesRef = useRef<Uint8Array | null>(null);
+  const restoringPageForPaper = useRef<string | null>(paper.id);
   const currentPage = useRef(page);
   currentPage.current = page;
+  const paperUiKey = paperUiStorageKey(storageScope, paper.id);
+  const [restoredViewerUiKey, setRestoredViewerUiKey] = useState("");
+
+  useEffect(() => {
+    const stored = readPaperUiState(storageScope, paper.id);
+    setZoom(stored.zoom);
+    setTool(stored.annotationTool);
+    setAnnotationColor(stored.annotationColor);
+    setColorMenuTool(null);
+    setRestoredViewerUiKey(paperUiKey);
+    restoringPageForPaper.current = paper.id;
+  }, [paper.id, paperUiKey, storageScope]);
+
+  useEffect(() => {
+    if (restoredViewerUiKey !== paperUiKey) return;
+    updatePaperUiState(storageScope, paper.id, { zoom, annotationTool: tool, annotationColor });
+  }, [annotationColor, paper.id, paperUiKey, restoredViewerUiKey, storageScope, tool, zoom]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,7 +158,6 @@ export function PdfViewer({
 
         setPdf(document);
         setLoadState("ready");
-        onPageChange(1);
       } catch (caught) {
         if (controller.signal.aborted) return;
         setLoadState("parse-error");
@@ -158,6 +178,22 @@ export function PdfViewer({
   useEffect(() => { onPageTextChange(pageTexts.current.get(page) ?? ""); }, [page, onPageTextChange]);
 
   useEffect(() => {
+    if (!pdf || !scrollRoot || !positionReady || restoringPageForPaper.current !== paper.id) return;
+    const targetPage = Math.max(1, Math.min(currentPage.current, pdf.numPages));
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollRoot.querySelector<HTMLElement>(`[data-page="${targetPage}"]`)?.scrollIntoView({ behavior: "auto", block: "start" });
+      secondFrame = window.requestAnimationFrame(() => {
+        if (restoringPageForPaper.current === paper.id) restoringPageForPaper.current = null;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [page, paper.id, pdf, positionReady, scrollRoot]);
+
+  useEffect(() => {
     if (!pdf || !scrollRoot) return;
     const visibility = new Map<number, number>();
     const observer = new IntersectionObserver((entries) => {
@@ -170,11 +206,11 @@ export function PdfViewer({
           best = ratio;
         }
       }
-      if (best > 0) onPageChange(current);
+      if (best > 0 && restoringPageForPaper.current !== paper.id) onPageChange(current);
     }, { root: scrollRoot, rootMargin: "-25% 0px -25%", threshold: [0, 0.25, 0.5, 0.75, 1] });
     scrollRoot.querySelectorAll<HTMLElement>("[data-page]").forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, [pdf, scrollRoot, onPageChange]);
+  }, [paper.id, pdf, scrollRoot, onPageChange]);
 
   const handlePageText = useCallback((pageNumber: number, text: string) => {
     pageTexts.current.set(pageNumber, text);

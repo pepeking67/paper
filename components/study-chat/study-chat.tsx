@@ -5,9 +5,11 @@ import type { ChatTurn, StudyContext } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import type { StudyArea, StudyHighlight, StudyInsight } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
+import { chatHistoryStorageKey, migrateLegacyChatHistory, readPaperUiState, updatePaperUiState } from "@/lib/workspace-state/local-ui-state";
 
 export function StudyChat({
   paper,
+  storageScope,
   context,
   savedInsights,
   questionHighlights,
@@ -21,6 +23,7 @@ export function StudyChat({
   onQuestionContextConsumed,
 }: {
   paper: Paper;
+  storageScope: string;
   context: StudyContext;
   savedInsights: StudyInsight[];
   questionHighlights: StudyHighlight[];
@@ -37,7 +40,7 @@ export function StudyChat({
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const storageKey = `paper-study-chat:${paper.id}`;
+  const storageKey = chatHistoryStorageKey(storageScope, paper.id);
   const hasAreas = Boolean(context.selectedAreas?.length);
   const hasAnnotationContext = Boolean(context.selectedText || hasAreas);
   const contextCount = questionHighlights.length + questionAreas.length;
@@ -55,20 +58,29 @@ export function StudyChat({
 
   useEffect(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as ChatTurn[];
+      const storedValue = localStorage.getItem(storageKey) ?? migrateLegacyChatHistory(storageScope, paper.id) ?? "[]";
+      const stored = JSON.parse(storedValue) as ChatTurn[];
       setMessages(stored);
+      setInput(readPaperUiState(storageScope, paper.id).chatDraft);
       onHistoryChange?.(stored);
     } catch {
       setMessages([]);
+      setInput("");
       onHistoryChange?.([]);
     }
-  }, [storageKey, onHistoryChange]);
+  }, [onHistoryChange, paper.id, storageKey, storageScope]);
 
   function save(next: ChatTurn[]) {
     const limited = next.slice(-40);
     setMessages(limited);
-    localStorage.setItem(storageKey, JSON.stringify(limited));
+    try { localStorage.setItem(storageKey, JSON.stringify(limited)); }
+    catch { /* Keep the current conversation in memory. */ }
     onHistoryChange?.(limited);
+  }
+
+  function updateInput(value: string) {
+    setInput(value);
+    updatePaperUiState(storageScope, paper.id, { chatDraft: value });
   }
 
   async function ask(value: string) {
@@ -77,7 +89,7 @@ export function StudyChat({
     const previous = messages;
     const usedAnnotationContext = hasAnnotationContext;
     save([...previous, { role: "user", content: question }]);
-    setInput(""); setLoading(true); setError("");
+    updateInput(""); setLoading(true); setError("");
     try {
       const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question, context, history: previous.slice(-8) }) });
       const data = await response.json();
@@ -148,7 +160,7 @@ export function StudyChat({
     <form onSubmit={submit} className="border-t border-[var(--line)] p-3.5">
       <div className="mb-2 grid grid-cols-3 gap-1" aria-label="빠른 질문">{quickPrompts.map((item) => <button key={item.prompt} type="button" title={item.prompt} disabled={loading} onClick={() => void ask(item.prompt)} className="min-w-0 rounded-lg border border-[var(--line)] bg-white/[.025] px-1.5 py-1 text-[10px] leading-tight text-[#bbb] hover:bg-white/[.06] disabled:opacity-40">{item.label}</button>)}</div>
       <label htmlFor="chat" className="sr-only">질문</label>
-      <textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/>
+      <textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => updateInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/>
       <div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-xs text-[var(--muted)]">p.{context.page}{contextCount > 0 ? ` · 질문 문맥 ${contextCount}개` : " · 현재 페이지 기준"}</span><button disabled={loading || !input.trim()} className="shrink-0 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-40">질문하기</button></div>
     </form>
   </aside>;
