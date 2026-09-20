@@ -1,5 +1,5 @@
 import { emptyStudyTray, type StudyArea, type StudyTrayData } from "@/lib/study-tray/types";
-import type { AccountStudyCache, StudyStateSnapshot } from "./types";
+import type { AccountStudyCache } from "./types";
 
 export function normalizeTray(value: unknown): StudyTrayData {
   const input = value && typeof value === "object" ? value as Partial<StudyTrayData> : {};

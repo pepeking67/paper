@@ -58,7 +58,7 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /capturedSelections/);
   assert.match(viewer, /setZoom/);
   assert.match(viewer, /\$\{page\} \/ \$\{pdf\.numPages\} 페이지/);
-  assert.match(viewer, /paper-header-actions/);
+  assert.match(viewer, /study-tray-actions/);
   assert.match(viewer, /다음 질문 문맥으로 사용합니다/);
   assert.doesNotMatch(route, /privateBlobExists/);
   assert.match(route, /"Accept-Ranges":"none"/);
