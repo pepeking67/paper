@@ -47,7 +47,7 @@ npm install
 npm run dev
 ```
 
-The reader intentionally shows a PDF empty state until a private Vercel Blob is connected and an entry is marked ready by the uploader. AI chat is also a provider-neutral placeholder. See [`docs/SETUP.md`](docs/SETUP.md) for the safe Vercel hand-off, upload gate, processing output, and access protection.
+The reader keeps the existing shared catalog while signed-in users receive an RLS-isolated personal library, private PDF uploads, and local-first study-state sync through Supabase. See [`docs/ACCOUNT_SERVICE.md`](docs/ACCOUNT_SERVICE.md) for account setup, Storage paths, security verification, and rollback, and [`docs/SETUP.md`](docs/SETUP.md) for the legacy Vercel Blob pipeline.
 
 ## Paper naming convention
 

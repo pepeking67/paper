@@ -1,3 +1,5 @@
-import { redirect } from "next/navigation";
-import { papers } from "@/lib/papers/catalog";
-export default function Home() { redirect(`/papers/${papers[0].id}`); }
+import { AccountHome } from "@/components/auth/account-home";
+
+export default function Home() {
+  return <AccountHome/>;
+}

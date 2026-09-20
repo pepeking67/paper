@@ -42,8 +42,16 @@ export function StudyChat({
   const hasAnnotationContext = Boolean(context.selectedText || hasAreas);
   const contextCount = questionHighlights.length + questionAreas.length;
   const quickPrompts = hasAnnotationContext
-    ? ["표시한 내용을 설명해줘", "표시한 주장의 근거를 분석해줘", "표시한 수식이나 영역을 단계별로 설명해줘"]
-    : ["현재 페이지의 핵심을 요약해줘", "이 논문의 핵심 기여를 설명해줘", "논문의 가정과 한계를 비판적으로 검토해줘"];
+    ? [
+        { label: "표시 설명", prompt: "표시한 내용을 설명해줘" },
+        { label: "근거 분석", prompt: "표시한 주장의 근거를 분석해줘" },
+        { label: "수식·영역 풀이", prompt: "표시한 수식이나 영역을 단계별로 설명해줘" },
+      ]
+    : [
+        { label: "페이지 요약", prompt: "현재 페이지의 핵심을 요약해줘" },
+        { label: "핵심 기여", prompt: "이 논문의 핵심 기여를 설명해줘" },
+        { label: "가정·한계", prompt: "논문의 가정과 한계를 비판적으로 검토해줘" },
+      ];
 
   useEffect(() => {
     try {
@@ -138,7 +146,7 @@ export function StudyChat({
     </div>
 
     <form onSubmit={submit} className="border-t border-[var(--line)] p-3.5">
-      <div className="mb-2 flex gap-1 overflow-x-auto pb-1" aria-label="빠른 질문">{quickPrompts.map((prompt) => <button key={prompt} type="button" disabled={loading} onClick={() => void ask(prompt)} className="shrink-0 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[#bbb] hover:bg-white/5 disabled:opacity-40">{prompt}</button>)}</div>
+      <div className="mb-2 grid grid-cols-3 gap-1" aria-label="빠른 질문">{quickPrompts.map((item) => <button key={item.prompt} type="button" title={item.prompt} disabled={loading} onClick={() => void ask(item.prompt)} className="min-w-0 rounded-lg border border-[var(--line)] bg-white/[.025] px-1.5 py-1 text-[10px] leading-tight text-[#bbb] hover:bg-white/[.06] disabled:opacity-40">{item.label}</button>)}</div>
       <label htmlFor="chat" className="sr-only">질문</label>
       <textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/>
       <div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-xs text-[var(--muted)]">p.{context.page}{contextCount > 0 ? ` · 질문 문맥 ${contextCount}개` : " · 현재 페이지 기준"}</span><button disabled={loading || !input.trim()} className="shrink-0 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-40">질문하기</button></div>

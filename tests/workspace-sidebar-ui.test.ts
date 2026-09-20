@@ -8,6 +8,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   const library = await readFile("components/paper-list/paper-list.tsx", "utf8");
   const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
   const pdfPage = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
+  const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
+  const account = await readFile("components/auth/account-control.tsx", "utf8");
 
   assert.match(workspace, /data-library-open/);
   assert.match(workspace, /data-chat-drawer-open/);
@@ -27,6 +29,9 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(viewer, /onToggleLibrary/);
   assert.match(viewer, /onToggleChat/);
   assert.match(viewer, /질의응답 열기/);
+  assert.match(viewer, /id="study-tray-actions"/);
+  assert.doesNotMatch(viewer, /id="paper-header-actions"/);
+  assert.doesNotMatch(viewer, />\{paper\.id\}</);
   assert.match(viewer, /표시된 PDF 다운로드/);
   assert.match(viewer, /표시 모두 지우기/);
   assert.match(viewer, /downloadAnnotatedPdf\(paper\.id, savedHighlights/);
@@ -45,6 +50,11 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(library, /localStorage\.setItem\(PAPER_CATEGORY_STORAGE_KEY, tag\)/);
   assert.match(library, /activeLinkRef/);
   assert.match(library, /scrollIntoView\(\{ block: "center" \}\)/);
+  assert.match(library, /<AccountControl inline\/>/);
+  assert.match(account, /inline \? button/);
+  assert.match(tray, /study-tray-actions/);
+  assert.match(library, /논문 추가/);
+  assert.match(library, />\s*편집\s*</);
 
   assert.match(chat, /aria-label="질문 문맥"/);
   assert.match(chat, /questionHighlights/);
@@ -53,4 +63,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(chat, /onRemoveQuestionArea/);
   assert.match(chat, /전체 비우기/);
   assert.match(chat, /질의응답 닫기/);
+  assert.match(chat, /grid grid-cols-3 gap-1/);
+  assert.doesNotMatch(chat, /overflow-x-auto/);
+  assert.match(chat, /페이지 요약/);
+  assert.match(chat, /수식·영역 풀이/);
 });
