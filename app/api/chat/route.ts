@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { findPaper } from "@/lib/papers/catalog";
 import { AiProviderRequestError, getAiProvider, type ChatTurn, type StudyAreaContext, type StudyContext } from "@/lib/ai/provider";
+import { authorizePersonalPaper } from "@/lib/auth/authorize-personal-paper";
 
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
-  if (!isChatRequest(body) || !findPaper(body.context.paperId)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!isChatRequest(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const authorization = await authorizePersonalPaper(request, body.context.paperId);
+  if (!authorization.ok) return NextResponse.json({ error: authorization.error, code: authorization.code }, { status: authorization.status });
   const provider = getAiProvider();
   if (!provider) return NextResponse.json({ error: "Gemini API is not configured", code: "AI_NOT_CONFIGURED" }, { status: 503 });
   try {
