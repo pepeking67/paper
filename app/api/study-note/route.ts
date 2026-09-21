@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AiProviderRequestError, getAiProvider, type StudyAreaContext } from "@/lib/ai/provider";
-import { findPaper } from "@/lib/papers/catalog";
+import { authorizePersonalPaper } from "@/lib/auth/authorize-personal-paper";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyHighlight, StudyInsight, StudyMemo, StudyTrayData } from "@/lib/study-tray/types";
 
@@ -10,8 +10,9 @@ export async function POST(request: Request) {
 
   const candidate = body as { paperId?: unknown; tray?: unknown };
   if (typeof candidate.paperId !== "string") return NextResponse.json({ error: "Invalid paper" }, { status: 400 });
-  const paper = findPaper(candidate.paperId);
-  if (!paper) return NextResponse.json({ error: "Unknown paper" }, { status: 404 });
+  const authorization = await authorizePersonalPaper(request, candidate.paperId);
+  if (!authorization.ok) return NextResponse.json({ error: authorization.error, code: authorization.code }, { status: authorization.status });
+  const paper = authorization.paper;
 
   const provider = getAiProvider();
   if (!provider) return NextResponse.json({ error: "Gemini API is not configured", code: "AI_NOT_CONFIGURED" }, { status: 503 });

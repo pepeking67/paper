@@ -6,6 +6,7 @@ import type { Paper } from "@/lib/papers/types";
 import type { StudyArea, StudyHighlight, StudyInsight } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 import { chatHistoryStorageKey, migrateLegacyChatHistory, readPaperUiState, updatePaperUiState } from "@/lib/workspace-state/local-ui-state";
+import { useAuth } from "@/components/auth/auth-provider";
 
 export function StudyChat({
   paper,
@@ -36,6 +37,7 @@ export function StudyChat({
   onHistoryChange?: (messages: ChatTurn[]) => void;
   onQuestionContextConsumed?: () => void;
 }) {
+  const { session } = useAuth();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,7 +93,8 @@ export function StudyChat({
     save([...previous, { role: "user", content: question }]);
     updateInput(""); setLoading(true); setError("");
     try {
-      const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question, context, history: previous.slice(-8) }) });
+      if (!session?.access_token) throw new Error("로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.");
+      const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: question, context, history: previous.slice(-8) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "AI 응답 실패"}`);
       save([...previous, { role: "user", content: question }, { role: "assistant", content: data.message }]);

@@ -8,6 +8,7 @@ import type { Paper } from "@/lib/papers/types";
 import { buildStudyPacket } from "@/lib/study-tray/build-packet";
 import type { StudyArea, StudyTrayData } from "@/lib/study-tray/types";
 import { useHydratedAreas } from "@/lib/area-assets/use-hydrated-areas";
+import { useAuth } from "@/components/auth/auth-provider";
 
 export function StudyTray({
   paper,
@@ -26,6 +27,7 @@ export function StudyTray({
   noteMarkdown: string;
   onNoteChange: (value: string) => void;
 }) {
+  const { session } = useAuth();
   const [open, setOpen] = useState(false);
   const [memo, setMemo] = useState("");
   const [packet, setPacket] = useState("");
@@ -73,9 +75,10 @@ export function StudyTray({
     setNoteLoading(true);
     setNoteError("");
     try {
+      if (!session?.access_token) throw new Error("로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.");
       const response = await fetch("/api/study-note", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ paperId: paper.id, tray: hydratedTray }),
       });
       const data = await response.json();
