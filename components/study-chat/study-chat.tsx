@@ -90,16 +90,35 @@ export function StudyChat({
     if (!question || loading) return;
     const previous = messages;
     const usedAnnotationContext = hasAnnotationContext;
-    save([...previous, { role: "user", content: question }]);
+    const pending = [...previous, { role: "user" as const, content: question }];
+    save(pending);
     updateInput(""); setLoading(true); setError("");
+    let streamedAnswer = "";
     try {
       if (!session?.access_token) throw new Error("로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.");
       const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: question, context, history: previous.slice(-8) }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "AI 응답 실패"}`);
-      save([...previous, { role: "user", content: question }, { role: "assistant", content: data.message }]);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { code?: string; error?: string } | null;
+        throw new Error(`${data?.code ? `[${data.code}] ` : ""}${data?.error ?? "AI 응답 실패"}`);
+      }
+      if (!response.body) throw new Error("AI 응답 스트림을 시작하지 못했습니다.");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        streamedAnswer += decoder.decode(chunk.value, { stream: true });
+        setMessages([...pending, { role: "assistant", content: streamedAnswer }]);
+      }
+      streamedAnswer += decoder.decode();
+      if (!streamedAnswer.trim()) throw new Error("Gemini가 빈 응답을 반환했습니다. 다시 시도하세요.");
+      save([...pending, { role: "assistant", content: streamedAnswer }]);
       if (usedAnnotationContext) onQuestionContextConsumed?.();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "AI 응답 실패"); }
+    } catch (caught) {
+      if (streamedAnswer.trim()) save([...pending, { role: "assistant", content: streamedAnswer }]);
+      setError(caught instanceof Error ? caught.message : "AI 응답 실패");
+    }
     finally { setLoading(false); }
   }
 

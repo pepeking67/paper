@@ -15,9 +15,14 @@ test("personal AI routes authenticate the account and authorize the paper throug
   assert.match(helper, /\.eq\("user_id", authData\.user\.id\)/);
   assert.doesNotMatch(helper, /service[_-]?role/i);
   assert.match(chatRoute, /authorizePersonalPaper\(request, body\.context\.paperId\)/);
+  assert.match(chatRoute, /provider\.answerStream/);
+  assert.match(chatRoute, /no-cache, no-transform/);
+  assert.match(chatRoute, /maxDuration = 120/);
   assert.match(noteRoute, /authorizePersonalPaper\(request, candidate\.paperId\)/);
   assert.doesNotMatch(`${chatRoute}\n${noteRoute}`, /papers\/catalog|findPaper/);
   assert.match(chat, /authorization: `Bearer \$\{session\.access_token\}`/);
+  assert.match(chat, /response\.body\.getReader\(\)/);
+  assert.match(chat, /setMessages\(\[\.\.\.pending, \{ role: "assistant", content: streamedAnswer \}\]\)/);
   assert.match(tray, /authorization: `Bearer \$\{session\.access_token\}`/);
 });
 

@@ -21,7 +21,7 @@ export type ChatTurn = {
 };
 
 export interface AiProvider {
-  answer(message: string, context: StudyContext, history?: ChatTurn[]): Promise<string>;
+  answerStream(message: string, context: StudyContext, history?: ChatTurn[]): Promise<ReadableStream<Uint8Array>>;
   composeStudyNote(material: string, areas?: StudyAreaContext[]): Promise<string>;
 }
 
@@ -47,6 +47,8 @@ export class AiProviderRequestError extends Error {
 
 const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
+const CHAT_STREAM_TIMEOUT_MS = 110_000;
+export const CHAT_MAX_OUTPUT_TOKENS = 2_048;
 
 export function buildGeminiModelCandidates(primary: string, configuredFallback = process.env.GEMINI_FALLBACK_MODEL): string[] {
   return [primary, configuredFallback?.trim(), ...FALLBACK_GEMINI_MODELS]
@@ -57,12 +59,12 @@ export function buildGeminiModelCandidates(primary: string, configuredFallback =
 class GeminiProvider implements AiProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
-  async answer(message: string, context: StudyContext, history: ChatTurn[] = []): Promise<string> {
+  async answerStream(message: string, context: StudyContext, history: ChatTurn[] = []): Promise<ReadableStream<Uint8Array>> {
     const parts: GeminiPart[] = [{ text: buildStudyPrompt(message, context, history) }];
     appendAreaImages(parts, context.selectedAreas);
-    return this.generate(
+    return this.generateStream(
       parts,
-      "You are a careful paper-study assistant. Use only the supplied paper context and attached PDF-area images for paper-specific claims. When an image contains an equation, figure, table, or diagram, inspect the image directly rather than guessing from nearby text. Clearly label uncertainty and do not invent quotations. Answer naturally in the user's language. Format answers as clean GitHub-flavored Markdown. Use headings only when useful, bullet or numbered lists for structure, Markdown tables when comparison helps, fenced code blocks for code, blockquotes for key quotations, and LaTeX math using $...$ for inline equations or $$...$$ for display equations. Never wrap the entire answer in a Markdown code fence.",
+      "You are a careful paper-study assistant. Use only the supplied paper context and attached PDF-area images for paper-specific claims. When an image contains an equation, figure, table, or diagram, inspect the image directly rather than guessing from nearby text. Clearly label uncertainty and do not invent quotations. Answer naturally in the user's language. Lead with the direct answer, then give only the essential explanation and evidence. Be concise. Avoid generic introductions, repetition, excessive headings, and exhaustive lists unless the user explicitly asks for depth. Format answers as clean GitHub-flavored Markdown. Use headings only when useful, bullet or numbered lists for structure, Markdown tables when comparison helps, fenced code blocks for code, blockquotes for key quotations, and LaTeX math using $...$ for inline equations or $$...$$ for display equations. Never wrap the entire answer in a Markdown code fence.",
       0.2,
     );
   }
@@ -140,6 +142,115 @@ class GeminiProvider implements AiProvider {
       clearTimeout(timeout);
     }
   }
+
+  private async generateStream(parts: GeminiPart[], systemInstruction: string, temperature: number): Promise<ReadableStream<Uint8Array>> {
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), CHAT_STREAM_TIMEOUT_MS);
+    const models = buildGeminiModelCandidates(this.model);
+    let lastProviderError: AiProviderRequestError | null = null;
+
+    try {
+      for (const model of models) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+          method: "POST",
+          signal: abortController.signal,
+          headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ role: "user", parts }],
+            generationConfig: { temperature, maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS },
+          }),
+        });
+
+        if (response.ok && response.body) {
+          if (model !== this.model) console.info("[gemini] fallback stream succeeded", { primary: this.model, fallback: model });
+          return decodeGeminiSseStream(response.body, abortController, timeout);
+        }
+
+        const detail = await readGeminiError(response);
+        const providerError = new AiProviderRequestError(response.status, detail, model);
+        lastProviderError = providerError;
+        const canTryAnotherModel = RETRYABLE_GEMINI_STATUSES.has(response.status) || response.status === 403 || response.status === 404;
+        if (canTryAnotherModel) {
+          console.warn("[gemini] switching streaming model after provider failure", { model, status: response.status });
+          continue;
+        }
+        throw providerError;
+      }
+
+      if (lastProviderError) throw lastProviderError;
+      throw new Error("GEMINI_STREAM_RETRY_EXHAUSTED");
+    } catch (error) {
+      clearTimeout(timeout);
+      throw error;
+    }
+  }
+}
+
+function decodeGeminiSseStream(source: ReadableStream<Uint8Array>, abortController: AbortController, timeout: ReturnType<typeof setTimeout>): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = "";
+  let finished = false;
+
+  function finish() {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timeout);
+  }
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        while (!finished) {
+          const boundary = /\r?\n\r?\n/u.exec(buffer);
+          if (boundary?.index !== undefined) {
+            const event = buffer.slice(0, boundary.index);
+            buffer = buffer.slice(boundary.index + boundary[0].length);
+            const text = extractGeminiSseText(event);
+            if (text) {
+              controller.enqueue(encoder.encode(text));
+              return;
+            }
+            continue;
+          }
+
+          const chunk = await reader.read();
+          if (!chunk.done) {
+            buffer += decoder.decode(chunk.value, { stream: true });
+            continue;
+          }
+
+          buffer += decoder.decode();
+          const finalText = extractGeminiSseText(buffer);
+          finish();
+          if (finalText) controller.enqueue(encoder.encode(finalText));
+          controller.close();
+          return;
+        }
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      finish();
+      abortController.abort();
+      await reader.cancel(reason).catch(() => undefined);
+    },
+  });
+}
+
+export function extractGeminiSseText(event: string): string {
+  const data = event.split(/\r?\n/u)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n")
+    .trim();
+  if (!data || data === "[DONE]") return "";
+  try { return extractOutputText(JSON.parse(data)); }
+  catch { return ""; }
 }
 
 export function buildStudyPrompt(message: string, context: StudyContext, history: ChatTurn[] = []): string {
