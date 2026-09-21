@@ -358,6 +358,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
       paper={activePaper}
+      storageScope={userId}
       tray={tray}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}

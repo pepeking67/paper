@@ -108,6 +108,7 @@ export function PdfViewer({
   const paperRef = useRef(paper);
   paperRef.current = paper;
   const restoringPageForPaper = useRef<string | null>(paper.id);
+  const restoringScrollOffsetRatio = useRef(0);
   const currentPage = useRef(page);
   currentPage.current = page;
   const paperUiKey = paperUiStorageKey(storageScope, paper.id);
@@ -121,6 +122,7 @@ export function PdfViewer({
     setColorMenuTool(null);
     setRestoredViewerUiKey(paperUiKey);
     restoringPageForPaper.current = paper.id;
+    restoringScrollOffsetRatio.current = stored.scrollOffsetRatio;
   }, [paper.id, paperUiKey, storageScope]);
 
   useEffect(() => {
@@ -170,7 +172,11 @@ export function PdfViewer({
     const targetPage = Math.max(1, Math.min(currentPage.current, pdf.numPages));
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
-      scrollRoot.querySelector<HTMLElement>(`[data-page="${targetPage}"]`)?.scrollIntoView({ behavior: "auto", block: "start" });
+      const target = scrollRoot.querySelector<HTMLElement>(`[data-page="${targetPage}"]`);
+      if (target) {
+        const top = target.offsetTop + target.offsetHeight * restoringScrollOffsetRatio.current;
+        scrollRoot.scrollTo({ top, behavior: "auto" });
+      }
       secondFrame = window.requestAnimationFrame(() => {
         if (restoringPageForPaper.current === paper.id) restoringPageForPaper.current = null;
       });
@@ -199,6 +205,48 @@ export function PdfViewer({
     scrollRoot.querySelectorAll<HTMLElement>("[data-page]").forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [paper.id, pdf, scrollRoot, onPageChange]);
+
+  useEffect(() => {
+    if (!pdf || !scrollRoot || !positionReady) return;
+    const root = scrollRoot;
+    let timer = 0;
+
+    function persistScrollAnchor() {
+      if (restoringPageForPaper.current === paper.id) return;
+      const pages = [...root.querySelectorAll<HTMLElement>("[data-page]")];
+      if (!pages.length) return;
+      const anchorY = root.scrollTop + 1;
+      let target = pages[0];
+      for (const candidate of pages) {
+        if (candidate.offsetTop > anchorY) break;
+        target = candidate;
+      }
+      const pageNumber = Number(target.dataset.page);
+      if (!Number.isInteger(pageNumber)) return;
+      const offsetRatio = Math.max(0, Math.min(1, (root.scrollTop - target.offsetTop) / Math.max(1, target.offsetHeight)));
+      updatePaperUiState(storageScope, paper.id, { page: pageNumber, scrollOffsetRatio: offsetRatio });
+    }
+
+    function schedulePersist() {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(persistScrollAnchor, 160);
+    }
+
+    function persistWhenHidden() {
+      if (document.visibilityState === "hidden") persistScrollAnchor();
+    }
+
+    root.addEventListener("scroll", schedulePersist, { passive: true });
+    document.addEventListener("visibilitychange", persistWhenHidden);
+    window.addEventListener("pagehide", persistScrollAnchor);
+    return () => {
+      window.clearTimeout(timer);
+      persistScrollAnchor();
+      root.removeEventListener("scroll", schedulePersist);
+      document.removeEventListener("visibilitychange", persistWhenHidden);
+      window.removeEventListener("pagehide", persistScrollAnchor);
+    };
+  }, [paper.id, pdf, positionReady, scrollRoot, storageScope]);
 
   const handlePageText = useCallback((pageNumber: number, text: string) => {
     pageTexts.current.set(pageNumber, text);
