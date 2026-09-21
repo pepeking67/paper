@@ -325,7 +325,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
       />
     </div>
 
-    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,420px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:shadow-none">
+    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 h-dvh min-h-0 w-[min(92vw,420px)] min-w-0 overflow-hidden shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:relative md:inset-auto md:z-auto md:h-full md:w-auto md:max-w-none md:shadow-none">
       <div
         role="separator"
         aria-label="질의응답 패널 크기 조절"

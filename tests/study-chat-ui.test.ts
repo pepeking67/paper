@@ -26,3 +26,14 @@ test("saved insights become visibly disabled and duplicate saves are blocked", a
   assert.match(workspace, /savedInsights=\{tray\.insights\}/);
   assert.match(workspace, /current\.insights\.some\(\(insight\) => insight\.question === question && insight\.answer === answer\)/);
 });
+
+test("long chat answers scroll while the question form stays visible", async () => {
+  const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+
+  assert.match(chat, /h-full min-h-0 flex-col overflow-hidden/);
+  assert.match(chat, /aria-label="질의응답 대화 내용"/);
+  assert.match(chat, /h-0 min-h-0 flex-1 touch-pan-y[^\"]*overflow-y-auto/);
+  assert.match(chat, /<form onSubmit=\{submit\} className="shrink-0/);
+  assert.match(workspace, /h-dvh min-h-0[^\"]*overflow-hidden[^\"]*md:h-full/);
+});

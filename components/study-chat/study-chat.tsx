@@ -108,8 +108,8 @@ export function StudyChat({
     void ask(input);
   }
 
-  return <aside className="flex h-full min-h-0 flex-col border-l border-[var(--line)] bg-black" aria-label="학습 대화">
-    <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] p-3.5">
+  return <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-[var(--line)] bg-black" aria-label="학습 대화">
+    <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] p-3.5">
       <div className="min-w-0">
         <div className="flex items-center gap-2"><p className="text-[11px] font-semibold tracking-[.12em] text-[var(--accent)]">STUDY CHAT</p>{contextCount > 0 && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[#8ec5ff]">문맥 {contextCount}</span>}</div>
         <h2 className="mt-0.5 truncate font-medium">논문에 질문하기</h2>
@@ -120,7 +120,7 @@ export function StudyChat({
       </div>
     </header>
 
-    {contextCount > 0 && <section className="border-b border-[var(--line)] bg-black/80 px-3.5 py-3" aria-label="질문 문맥">
+    {contextCount > 0 && <section className="shrink-0 border-b border-[var(--line)] bg-black/80 px-3.5 py-3" aria-label="질문 문맥">
       <div className="flex items-center justify-between gap-3">
         <div><p className="text-xs font-medium text-[#e5e5ea]">질문 문맥</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">다음 질문에만 사용되고 답변 성공 후 자동으로 비워집니다.</p></div>
         <button type="button" onClick={onClearQuestionContext} className="shrink-0 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--muted)] hover:bg-white/[.06] hover:text-white">전체 비우기</button>
@@ -138,7 +138,7 @@ export function StudyChat({
       </div>
     </section>}
 
-    <div className="scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+    <div className="scrollbar h-0 min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto overscroll-contain p-4" aria-label="질의응답 대화 내용">
       {messages.length === 0 && <div className="rounded-xl border border-[var(--line)] bg-[#111] p-4 text-sm leading-relaxed text-[#bbb]">Gemini API가 현재 페이지와 형광펜·밑줄·영역으로 표시한 질문 문맥, 최근 대화를 사용해 답합니다. 답변은 Markdown과 수식 문법을 렌더링합니다. 일반 대화는 Study Tray에 자동 저장되지 않으며, 남기고 싶은 답변만 <strong>Save Insight</strong>로 저장합니다.</div>}
       {messages.map((message, index) => {
         const previousQuestion = message.role === "assistant" && messages[index - 1]?.role === "user" ? messages[index - 1].content : null;
@@ -160,7 +160,7 @@ export function StudyChat({
       {error && <p role="alert" className="rounded-lg border border-[var(--danger)] p-3 text-sm">{error}</p>}
     </div>
 
-    <form onSubmit={submit} className="border-t border-[var(--line)] p-3.5">
+    <form onSubmit={submit} className="shrink-0 border-t border-[var(--line)] p-3.5">
       <div className="mb-2 grid grid-cols-3 gap-1" aria-label="빠른 질문">{quickPrompts.map((item) => <button key={item.prompt} type="button" title={item.prompt} disabled={loading} onClick={() => void ask(item.prompt)} className="min-w-0 rounded-lg border border-[var(--line)] bg-white/[.025] px-1.5 py-1 text-[10px] leading-tight text-[#bbb] hover:bg-white/[.06] disabled:opacity-40">{item.label}</button>)}</div>
       <label htmlFor="chat" className="sr-only">질문</label>
       <textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => updateInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/>
