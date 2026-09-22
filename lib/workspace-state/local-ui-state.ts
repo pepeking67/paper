@@ -20,7 +20,7 @@ export type PaperUiState = {
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-const annotationTools = new Set<AnnotationTool>(["highlight", "underline", "area", "erase"]);
+const annotationTools = new Set<AnnotationTool>(["highlight", "underline", "dictionary", "area", "erase"]);
 const annotationColors = new Set<AnnotationColor>(["yellow", "green", "blue", "pink", "purple"]);
 
 export function paperUiStorageKey(userId: string, paperId: string) {

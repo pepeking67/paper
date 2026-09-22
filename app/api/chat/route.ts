@@ -80,5 +80,8 @@ function isSafeAreaContext(value: unknown): value is StudyAreaContext {
 
 function sanitizeHistory(history: ChatTurn[] | undefined): ChatTurn[] {
   if (!Array.isArray(history)) return [];
-  return history.filter((turn) => (turn?.role === "user" || turn?.role === "assistant") && typeof turn.content === "string").slice(-8);
+  return history
+    .filter((turn) => (turn?.role === "user" || turn?.role === "assistant") && typeof turn.content === "string")
+    .slice(-8)
+    .map((turn) => ({ role: turn.role, content: turn.content }));
 }

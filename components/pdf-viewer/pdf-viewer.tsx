@@ -25,6 +25,8 @@ type PdfViewerProps = {
   onPageChange: (page: number) => void;
   onPageTextChange: (text: string) => void;
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
+  onSaveDictionary: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
+  onEditDictionaryMeaning: (id: string, meaning: string) => void;
   onDeleteHighlight: (id: string) => void;
   onRemoveQuestionHighlight: (id: string) => void;
   onSaveArea: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
@@ -75,6 +77,8 @@ export function PdfViewer({
   onPageChange,
   onPageTextChange,
   onSaveHighlight,
+  onSaveDictionary,
+  onEditDictionaryMeaning,
   onDeleteHighlight,
   onRemoveQuestionHighlight,
   onSaveArea,
@@ -256,6 +260,10 @@ export function PdfViewer({
   function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
     if (tool === "erase" || tool === "area") return;
     onPageChange(selectedPage);
+    if (tool === "dictionary") {
+      onSaveDictionary(text, selectedPage, rects);
+      return;
+    }
     onSaveHighlight(text, selectedPage, rects, "", tool, annotationColor);
   }
 
@@ -280,7 +288,7 @@ export function PdfViewer({
     const count = savedHighlights.length + savedAreas.length;
     if (!count) return;
     const confirmed = window.confirm(
-      `이 논문의 형광펜·밑줄·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A, 메모, 학습 노트는 유지됩니다.`,
+      `이 논문의 형광펜·밑줄·사전 뜻·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A, 메모, 학습 노트는 유지됩니다.`,
     );
     if (confirmed) onClearAnnotations();
   }
@@ -349,6 +357,7 @@ export function PdfViewer({
             <ToolButton tool="underline" active={tool === "underline"} color={annotationColor} onClick={() => handleToolClick("underline")} label="밑줄" title={tool === "underline" ? "다시 눌러 색상 변경" : "밑줄 선택"}/>
             {colorMenuTool === "underline" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
+          <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
           <ToolButton tool="area" active={tool === "area"} onClick={() => handleToolClick("area")} label="영역 선택" title="수식·그림·표 영역 선택"/>
           <ToolButton tool="erase" active={tool === "erase"} onClick={() => handleToolClick("erase")} label="지우개" title="저장된 표시를 눌러 삭제"/>
         </div>
@@ -391,7 +400,7 @@ export function PdfViewer({
     {contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-2.5">
       <div className="flex flex-wrap gap-2">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
-          <span className="max-w-72 truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
+          <span className="max-w-72 truncate">p.{highlight.page} · {highlight.kind === "dictionary" ? "사전" : (highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
           <button onClick={() => onRemoveQuestionHighlight(highlight.id)} aria-label={`Page ${highlight.page} 질문 문맥에서 제외`} className="h-5 w-5 rounded-full">×</button>
         </span>)}
         {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-2 rounded-lg border border-sky-500/50 bg-[#111] py-1 pl-1 pr-1 text-xs">
@@ -421,13 +430,14 @@ export function PdfViewer({
           deleteMode={tool === "erase"}
           capturedSelections={savedHighlights
             .filter((selection) => selection.page === index + 1)
-            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow" }))}
+            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow", dictionaryMeaning: selection.dictionaryMeaning }))}
           savedAreas={savedAreas.filter((area) => area.page === index + 1)}
           scrollRoot={scrollRoot}
           onText={handlePageText}
           onSelection={captureSelection}
           onAreaSelection={onSaveArea}
           onDeleteAnnotation={onDeleteHighlight}
+          onEditDictionaryMeaning={onEditDictionaryMeaning}
           onDeleteArea={onDeleteArea}
         />)}
       </div>}
@@ -502,6 +512,7 @@ function ToolIcon({ tool }: { tool: AnnotationTool }) {
   const iconClass = "h-4 w-4 fill-none stroke-current";
   if (tool === "highlight") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="m14.5 4.5 5 5L10 19H5v-5Z"/><path d="m12 7 5 5M4 21h16"/></svg>;
   if (tool === "underline") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M7 4v7a5 5 0 0 0 10 0V4M5 21h14"/></svg>;
+  if (tool === "dictionary") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 20.5Z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H14v18a3 3 0 0 1 3-3h.5a2.5 2.5 0 0 1 2.5 2.5Z"/></svg>;
   if (tool === "area") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>;
   return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="m4 15 9-9 7 7-7 7H8Z"/><path d="m10 9 7 7M13 20h8"/></svg>;
 }

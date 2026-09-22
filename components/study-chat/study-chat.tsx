@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import type { ChatTurn, StudyContext } from "@/lib/ai/provider";
+import type { ChatTurn, QuestionContextSnapshot, StudyContext } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import type { StudyArea, StudyHighlight, StudyInsight } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
@@ -22,6 +22,7 @@ export function StudyChat({
   onClose,
   onHistoryChange,
   onQuestionContextConsumed,
+  onReplayQuestionContext,
 }: {
   paper: Paper;
   storageScope: string;
@@ -36,6 +37,7 @@ export function StudyChat({
   onClose: () => void;
   onHistoryChange?: (messages: ChatTurn[]) => void;
   onQuestionContextConsumed?: () => void;
+  onReplayQuestionContext: (snapshot: QuestionContextSnapshot) => Promise<StudyContext>;
 }) {
   const { session } = useAuth();
   const [input, setInput] = useState("");
@@ -85,18 +87,25 @@ export function StudyChat({
     updatePaperUiState(storageScope, paper.id, { chatDraft: value });
   }
 
-  async function ask(value: string) {
+  async function ask(value: string, replaySnapshot?: QuestionContextSnapshot) {
     const question = value.trim();
     if (!question || loading) return;
     const previous = messages;
-    const usedAnnotationContext = hasAnnotationContext;
-    const pending = [...previous, { role: "user" as const, content: question }];
-    save(pending);
     updateInput(""); setLoading(true); setError("");
     let streamedAnswer = "";
+    let pending: ChatTurn[] | null = null;
     try {
       if (!session?.access_token) throw new Error("로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.");
-      const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: question, context, history: previous.slice(-8) }) });
+      const snapshot = replaySnapshot ?? {
+        page: context.page,
+        highlightIds: questionHighlights.map((item) => item.id),
+        areaIds: questionAreas.map((item) => item.id),
+      };
+      const requestContext = replaySnapshot ? await onReplayQuestionContext(snapshot) : context;
+      const usedAnnotationContext = snapshot.highlightIds.length + snapshot.areaIds.length > 0;
+      pending = [...previous, { role: "user" as const, content: question, sourcePage: snapshot.page, questionContext: snapshot }];
+      save(pending);
+      const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: question, context: requestContext, history: previous.slice(-8) }) });
       if (!response.ok) {
         const data = await response.json().catch(() => null) as { code?: string; error?: string } | null;
         throw new Error(`${data?.code ? `[${data.code}] ` : ""}${data?.error ?? "AI 응답 실패"}`);
@@ -116,7 +125,10 @@ export function StudyChat({
       save([...pending, { role: "assistant", content: streamedAnswer }]);
       if (usedAnnotationContext) onQuestionContextConsumed?.();
     } catch (caught) {
-      if (streamedAnswer.trim()) save([...pending, { role: "assistant", content: streamedAnswer }]);
+      if (streamedAnswer.trim()) {
+        const latest = pending ?? [...previous, { role: "user" as const, content: question }];
+        save([...latest, { role: "assistant", content: streamedAnswer }]);
+      }
       setError(caught instanceof Error ? caught.message : "AI 응답 실패");
     }
     finally { setLoading(false); }
@@ -146,7 +158,7 @@ export function StudyChat({
       </div>
       <div className="scrollbar mt-2.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto pr-1">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-white/[.045] py-1 pl-2.5 pr-1 text-[11px]">
-          <span className="max-w-[290px] truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
+          <span className="max-w-[290px] truncate">p.{highlight.page} · {highlight.kind === "dictionary" ? "사전" : (highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
           <button type="button" onClick={() => onRemoveQuestionHighlight(highlight.id)} aria-label={`Page ${highlight.page} 질문 문맥에서 제외`} className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-white/[.08] hover:text-white">×</button>
         </span>)}
         {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-1.5 rounded-lg border border-sky-500/35 bg-white/[.045] py-1 pl-1 pr-1 text-[11px]">
@@ -165,6 +177,13 @@ export function StudyChat({
         return <div key={`${message.role}-${index}`} className={`rounded-2xl p-3.5 text-sm leading-relaxed ${message.role === "user" ? "ml-7 bg-[var(--accent)] text-white" : "mr-7 border border-[var(--line)] bg-[rgba(255,255,255,.045)]"}`}>
           <p className={`mb-2 text-[10px] uppercase tracking-wider ${message.role === "user" ? "text-white/65" : "text-[var(--muted)]"}`}>{message.role === "user" ? "You" : "Gemini"}</p>
           {message.role === "assistant" ? <MarkdownContent content={message.content} compact /> : <p className="whitespace-pre-wrap">{message.content}</p>}
+          {message.role === "user" && <button
+            type="button"
+            disabled={loading}
+            title="이 질문과 당시 사용한 표시 문맥을 다시 전송"
+            onClick={() => void ask(message.content, message.questionContext ?? { page: message.sourcePage ?? context.page, highlightIds: [], areaIds: [] })}
+            className="mt-3 rounded-lg border border-white/25 px-2.5 py-1.5 text-xs font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+          >다시 질문{message.questionContext && message.questionContext.highlightIds.length + message.questionContext.areaIds.length > 0 ? ` · 표시 ${message.questionContext.highlightIds.length + message.questionContext.areaIds.length}개 포함` : ""}</button>}
           {previousQuestion && <button
             type="button"
             title={insightSaved ? "이미 Study Tray에 저장된 Q&A입니다" : "이 Q&A를 Study Tray와 학습 노트 재료로 저장"}

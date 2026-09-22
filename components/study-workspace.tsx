@@ -16,6 +16,7 @@ import { useAuth } from "./auth/auth-provider";
 import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
 import { LibraryManager } from "./library/library-manager";
 import { paperUiStorageKey, readPaperUiState, updatePaperUiState } from "@/lib/workspace-state/local-ui-state";
+import type { QuestionContextSnapshot, StudyContext } from "@/lib/ai/provider";
 
 export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const personalLibrary = usePersonalLibrary();
@@ -43,7 +44,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
 }
 
 function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; papers: Paper[]; userId: string }) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
@@ -183,6 +184,44 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     setPage(highlightPage);
   }
 
+  async function createDictionaryAnnotation(text: string, annotationPage: number, rects: NormalizedHighlightRect[]) {
+    const annotation: StudyHighlight = {
+      id: crypto.randomUUID(),
+      text: text.trim(),
+      page: annotationPage,
+      rects,
+      memo: "",
+      kind: "dictionary",
+      dictionaryMeaning: "뜻 찾는 중…",
+      createdAt: new Date().toISOString(),
+    };
+    updateTray((current) => ({ ...current, highlights: [...current.highlights, annotation] }));
+    setPage(annotationPage);
+
+    try {
+      if (!session?.access_token) throw new Error("로그인이 필요합니다.");
+      const response = await fetch("/api/dictionary", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ paperId: activePaper.id, term: annotation.text, pageText: annotationPage === page ? pageText : "" }),
+      });
+      const data = await response.json().catch(() => null) as { meaning?: string; error?: string } | null;
+      if (!response.ok || !data?.meaning?.trim()) throw new Error(data?.error ?? "단어 뜻을 불러오지 못했습니다.");
+      editDictionaryMeaning(annotation.id, data.meaning.trim());
+    } catch {
+      editDictionaryMeaning(annotation.id, "뜻을 직접 입력하세요");
+    }
+  }
+
+  function editDictionaryMeaning(id: string, meaning: string) {
+    const clean = meaning.trim().slice(0, 100);
+    if (!clean) return;
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, dictionaryMeaning: clean } : item),
+    }));
+  }
+
   function removeHighlight(id: string) {
     updateTray((current) => ({ ...current, highlights: current.highlights.filter((item) => item.id !== id) }));
     setQuestionHighlights((current) => current.filter((item) => item.id !== id));
@@ -273,6 +312,32 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     pageText,
   }), [activePaper.id, page, selectedText, questionAreas, pageText]);
 
+  async function replayQuestionContext(snapshot: QuestionContextSnapshot): Promise<StudyContext> {
+    const highlightIds = new Set(snapshot.highlightIds);
+    const areaIds = new Set(snapshot.areaIds);
+    const restoredHighlights = tray.highlights.filter((item) => highlightIds.has(item.id));
+    const restoredAreas = (await Promise.all((tray.areas ?? [])
+      .filter((item) => areaIds.has(item.id))
+      .slice(0, 4)
+      .map(async (area) => {
+        if (area.imageDataUrl || !area.storagePath) return area;
+        try { return { ...area, imageDataUrl: await loadAreaDataUrl(area.storagePath) }; }
+        catch { return null; }
+      })))
+      .filter((area): area is StudyArea => area !== null);
+
+    setQuestionHighlights(restoredHighlights);
+    setQuestionAreas(restoredAreas);
+    setPage(snapshot.page);
+    return {
+      paperId: activePaper.id,
+      page: snapshot.page,
+      selectedText: restoredHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
+      selectedAreas: restoredAreas.flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []),
+      pageText: snapshot.page === page ? pageText : undefined,
+    };
+  }
+
   return <main
     className="study-workspace relative grid h-dvh min-h-0 grid-cols-1 overflow-hidden"
     data-library-open={libraryOpen ? "true" : "false"}
@@ -314,6 +379,8 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         onDeleteArea={removeArea}
         onRemoveQuestionArea={removeQuestionArea}
         onSaveHighlight={createHighlight}
+        onSaveDictionary={(text, annotationPage, rects) => void createDictionaryAnnotation(text, annotationPage, rects)}
+        onEditDictionaryMeaning={editDictionaryMeaning}
         onDeleteHighlight={removeHighlight}
         onRemoveQuestionHighlight={removeQuestionHighlight}
         onClearQuestionContext={clearQuestionAnnotations}
@@ -348,6 +415,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         onClearQuestionContext={clearQuestionAnnotations}
         onClose={() => setChatVisibility(false)}
         onQuestionContextConsumed={clearQuestionAnnotations}
+        onReplayQuestionContext={replayQuestionContext}
         onSaveInsight={(question, answer) => updateTray((current) => {
           if (current.insights.some((insight) => insight.question === question && insight.answer === answer)) return current;
           return { ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] };

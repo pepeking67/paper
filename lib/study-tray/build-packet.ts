@@ -6,9 +6,10 @@ export function buildStudyPacket(paper: Paper, tray: StudyTrayData) {
     ? [...tray.highlights]
       .sort((left, right) => left.page - right.page)
       .map((item) => {
-        const kind = (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight";
+        const kind = item.kind === "dictionary" ? "Dictionary" : (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight";
         const priority = kind === "Underline" || item.memo ? "중요도 높음" : "참고";
-        return `### Page ${item.page} · ${kind} · ${item.color ?? "yellow"} · ${priority}\nOriginal:\n${item.text}\n\nMy memo:\n${item.memo || "(없음)"}`;
+        const meaning = item.kind === "dictionary" ? `\n\nMeaning:\n${item.dictionaryMeaning || "(뜻 없음)"}` : "";
+        return `### Page ${item.page} · ${kind} · ${item.kind === "dictionary" ? "black" : item.color ?? "yellow"} · ${priority}\nOriginal:\n${item.text}${meaning}\n\nMy memo:\n${item.memo || "(없음)"}`;
       }).join("\n\n")
     : "(저장된 Annotation 없음)";
 

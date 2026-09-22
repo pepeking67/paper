@@ -1,6 +1,6 @@
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 
-export type AnnotationKind = "highlight" | "underline";
+export type AnnotationKind = "highlight" | "underline" | "dictionary";
 export type AnnotationColor = "yellow" | "green" | "blue" | "pink" | "purple";
 
 export type StudyHighlight = {
@@ -14,6 +14,8 @@ export type StudyHighlight = {
   kind?: AnnotationKind;
   /** Optional for backward compatibility with annotations already stored in localStorage. */
   color?: AnnotationColor;
+  /** A concise editable gloss shown above dictionary annotations. */
+  dictionaryMeaning?: string;
 };
 
 export type StudyArea = {

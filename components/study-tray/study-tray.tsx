@@ -150,8 +150,9 @@ export function StudyTray({
 
         <TraySection title={`Annotations (${tray.highlights.length})`}>
           {tray.highlights.map((item) => <TrayItem key={item.id}>
-            <p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p>
+            <p className="text-xs text-[var(--muted)]">Page {item.page} · {item.kind === "dictionary" ? "Dictionary" : (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.kind === "dictionary" ? "black" : item.color ?? "yellow"}</p>
             <p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>
+            {item.kind === "dictionary" && <p className="mt-1 text-sm text-[#bbb]">뜻: {item.dictionaryMeaning || "뜻 없음"}</p>}
             {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
             <p className="mt-2 text-[10px] text-[var(--muted)]">삭제는 PDF의 지우개 도구에서만 할 수 있습니다.</p>
           </TrayItem>)}

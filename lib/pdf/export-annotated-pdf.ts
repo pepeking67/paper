@@ -61,14 +61,14 @@ export async function downloadAnnotatedPdf(
     const page = pages[annotation.page - 1];
     if (!page) continue;
     const { width: pageWidth, height: pageHeight } = page.getSize();
-    const tuple = PDF_ANNOTATION_COLORS[annotation.color ?? "yellow"];
+    const tuple = annotation.kind === "dictionary" ? [0, 0, 0] as const : PDF_ANNOTATION_COLORS[annotation.color ?? "yellow"];
     const color = rgb(...tuple);
 
     for (const normalized of annotation.rects ?? []) {
       const rect = projectNormalizedRectToPdf(normalized, pageWidth, pageHeight);
       if (rect.width <= 0 || rect.height <= 0) continue;
 
-      if ((annotation.kind ?? "highlight") === "underline") {
+      if ((annotation.kind ?? "highlight") === "underline" || annotation.kind === "dictionary") {
         const y = rect.y + Math.max(0.6, rect.height * 0.06);
         page.drawLine({
           start: { x: rect.x, y },

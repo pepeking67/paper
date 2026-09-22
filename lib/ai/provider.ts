@@ -18,10 +18,18 @@ export type ChatTurn = {
   content: string;
   sourcePage?: number;
   sourceText?: string;
+  questionContext?: QuestionContextSnapshot;
+};
+
+export type QuestionContextSnapshot = {
+  page: number;
+  highlightIds: string[];
+  areaIds: string[];
 };
 
 export interface AiProvider {
   answerStream(message: string, context: StudyContext, history?: ChatTurn[]): Promise<ReadableStream<Uint8Array>>;
+  defineTerm(term: string, pageContext?: string): Promise<string>;
   composeStudyNote(material: string, areas?: StudyAreaContext[]): Promise<string>;
 }
 
@@ -69,6 +77,16 @@ class GeminiProvider implements AiProvider {
     );
   }
 
+  async defineTerm(term: string, pageContext = ""): Promise<string> {
+    const prompt = `Term: ${term.trim().slice(0, 200)}\n\nNearby paper text:\n${pageContext.trim().slice(0, 4_000)}`;
+    return this.generate(
+      [{ text: prompt }],
+      "Give the contextual Korean meaning of the selected English academic term or short phrase. Return only one concise Korean gloss suitable for printing in tiny text above the term. Use at most 24 Korean characters. Do not add Markdown, quotation marks, pronunciation, examples, or a full sentence. If context is insufficient, return the most common academic meaning.",
+      0,
+      128,
+    );
+  }
+
   async composeStudyNote(material: string, areas: StudyAreaContext[] = []): Promise<string> {
     const parts: GeminiPart[] = [{
       text: `Create a polished paper study note from the following deliberately saved study material. Use the paper's natural section order only as the document skeleton. The actual content must be selected primarily from the learner's underlines, highlights, selected PDF areas, and attached memos. Do not turn this into a generic full-paper summary just because a section exists in the paper. Reorganize the learner-marked evidence into the most appropriate paper sections and preserve the paper's conceptual/mechanism flow. Saved Insights are deliberate Q&A about places where the learner had questions; use them only as supplemental clarification inside the relevant section, not as a separate Q&A section and not as a new primary topic disconnected from marked evidence. Prefer paper annotations and inspected PDF-area images over Q&A answers when they conflict. Preserve useful page references, uncertainty, equations, and the learner's priorities. PDF area images have stable markers in the form [[PDF_AREA:<id>]]. When an area image is useful in the note, place its exact marker on its own line near the explanation. Never invent a URL and never use normal Markdown image syntax for an attached PDF area.\n\n${material.slice(0, 60_000)}`,
@@ -81,7 +99,7 @@ class GeminiProvider implements AiProvider {
     );
   }
 
-  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number): Promise<string> {
+  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55_000);
     const models = buildGeminiModelCandidates(this.model);
@@ -100,7 +118,7 @@ class GeminiProvider implements AiProvider {
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: systemInstruction }] },
               contents: [{ role: "user", parts }],
-              generationConfig: { temperature, maxOutputTokens: 8_192 },
+              generationConfig: { temperature, maxOutputTokens },
             }),
           });
 

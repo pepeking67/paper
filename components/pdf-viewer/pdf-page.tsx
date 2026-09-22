@@ -1,7 +1,7 @@
 "use client";
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
 
@@ -11,6 +11,7 @@ type CapturedSelection = {
   rects: NormalizedHighlightRect[];
   kind?: AnnotationKind | "context";
   color?: AnnotationColor;
+  dictionaryMeaning?: string;
 };
 
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
   onSelection: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
   onAreaSelection: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
   onDeleteAnnotation: (id: string) => void;
+  onEditDictionaryMeaning: (id: string, meaning: string) => void;
   onDeleteArea: (id: string) => void;
 };
 
@@ -59,6 +61,7 @@ export function PdfPage({
   onSelection,
   onAreaSelection,
   onDeleteAnnotation,
+  onEditDictionaryMeaning,
   onDeleteArea,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -77,6 +80,7 @@ export function PdfPage({
   const [renderedZoom, setRenderedZoom] = useState(0);
   const [renderError, setRenderError] = useState("");
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
+  const [dictionaryEditor, setDictionaryEditor] = useState<{ id: string; value: string } | null>(null);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -321,7 +325,7 @@ export function PdfPage({
               const commonProps = canDelete ? {
                 type: "button" as const,
                 title: "이 주석 삭제",
-                "aria-label": `${kind === "underline" ? "밑줄" : "형광펜"} 주석 삭제: ${selection.text.slice(0, 80)}`,
+                "aria-label": `${kind === "dictionary" ? "사전" : kind === "underline" ? "밑줄" : "형광펜"} 주석 삭제: ${selection.text.slice(0, 80)}`,
                 tabIndex: rectIndex === 0 ? 0 : -1,
                 onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => event.stopPropagation(),
                 onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => event.stopPropagation(),
@@ -330,6 +334,44 @@ export function PdfPage({
                   if (selection.annotationId) onDeleteAnnotation(selection.annotationId);
                 },
               } : null;
+
+              if (kind === "dictionary") {
+                const underlineStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: "1.5px solid #111", background: "transparent", padding: 0 };
+                const fontSize = Math.max(5, Math.min(7, rect.height * 0.42));
+                const meaning = selection.dictionaryMeaning?.trim() || "뜻 찾는 중…";
+                return <Fragment key={key}>
+                  {commonProps
+                    ? <button {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
+                    : <span className="absolute" style={underlineStyle} />}
+                  {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
+                    ? <form
+                        className="pointer-events-auto absolute z-[6] flex w-44 items-center gap-1 rounded border border-black/30 bg-white p-1 shadow-lg"
+                        style={{ left: rect.left, top: Math.max(0, rect.top - 30) }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onPointerUp={(event) => event.stopPropagation()}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const value = dictionaryEditor.value.trim();
+                          if (value) onEditDictionaryMeaning(selection.annotationId!, value);
+                          setDictionaryEditor(null);
+                        }}
+                      >
+                        <label className="sr-only" htmlFor={`dictionary-${selection.annotationId}`}>사전 뜻 수정</label>
+                        <input id={`dictionary-${selection.annotationId}`} autoFocus maxLength={100} value={dictionaryEditor.value} onChange={(event) => setDictionaryEditor({ id: selection.annotationId!, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") setDictionaryEditor(null); }} className="min-w-0 flex-1 rounded border border-black/20 bg-white px-1.5 py-1 text-[11px] text-black"/>
+                        <button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
+                      </form>
+                    : <button
+                        type="button"
+                        title="뜻 수정"
+                        aria-label={`${selection.text} 뜻 수정: ${meaning}`}
+                        className="pointer-events-auto absolute z-[5] max-w-[120px] truncate rounded-[2px] bg-white/90 px-0.5 font-medium text-black shadow-[0_0_1px_rgba(255,255,255,.8)]"
+                        style={{ left: rect.left, top: Math.max(0, rect.top - fontSize - 1), minWidth: Math.min(36, Math.max(12, rect.width)), fontSize, lineHeight: 1 }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onPointerUp={(event) => event.stopPropagation()}
+                        onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻 찾는 중…" ? "" : meaning }); }}
+                      >{meaning}</button>)}
+                </Fragment>;
+              }
 
               if (kind === "underline") {
                 const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: `2px solid ${palette.stroke}`, background: "transparent", padding: 0 };
