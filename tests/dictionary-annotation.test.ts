@@ -17,22 +17,24 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(workspace, /kind: "dictionary"/);
   assert.match(workspace, /fetch\("\/api\/dictionary"/);
   assert.match(page, /borderBottom: "1\.5px solid #111"/);
-  assert.match(page, /fontSize = Math\.max\(5, Math\.min\(7/);
+  assert.match(page, /fontSize = Math\.max\(8, Math\.min\(10/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
 });
 
-test("dictionary annotations remain in study material and annotated PDF export", async () => {
+test("dictionary annotations stay out of Study Tray and study-note material", async () => {
   const packet = await readFile("lib/study-tray/build-packet.ts", "utf8");
   const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
   const exporter = await readFile("lib/pdf/export-annotated-pdf.ts", "utf8");
   const provider = await readFile("lib/ai/provider.ts", "utf8");
 
-  assert.match(packet, /item\.dictionaryMeaning/);
-  assert.match(tray, /item\.kind === "dictionary" \? "Dictionary"/);
+  assert.match(packet, /tray\.highlights\.filter\(\(item\) => item\.kind !== "dictionary"\)/);
+  assert.match(tray, /tray\.highlights\.filter\(\(item\) => item\.kind !== "dictionary"\)/);
+  assert.doesNotMatch(packet, /item\.dictionaryMeaning/);
   assert.match(exporter, /annotation\.kind === "dictionary" \? \[0, 0, 0\]/);
   assert.match(exporter, /annotation\.kind === "dictionary"\)/);
   assert.match(provider, /async defineTerm/);
   assert.match(provider, /Use at most 24 Korean characters/);
-  assert.match(provider, /maxOutputTokens/);
+  assert.match(provider, /setTimeout\(\(\) => controller\.abort\(\), 12_000\)/);
+  assert.match(provider, /maxOutputTokens: 64/);
 });

@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 }
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 20;
 
 function isDictionaryRequest(value: unknown): value is { paperId: string; term: string; pageText?: string } {
   if (!value || typeof value !== "object") return false;

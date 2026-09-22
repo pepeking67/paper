@@ -78,12 +78,10 @@ class GeminiProvider implements AiProvider {
   }
 
   async defineTerm(term: string, pageContext = ""): Promise<string> {
-    const prompt = `Term: ${term.trim().slice(0, 200)}\n\nNearby paper text:\n${pageContext.trim().slice(0, 4_000)}`;
-    return this.generate(
+    const prompt = `Term: ${term.trim().slice(0, 120)}\n\nNearby paper text:\n${pageContext.trim().slice(0, 1_200)}`;
+    return this.generateOnce(
       [{ text: prompt }],
       "Give the contextual Korean meaning of the selected English academic term or short phrase. Return only one concise Korean gloss suitable for printing in tiny text above the term. Use at most 24 Korean characters. Do not add Markdown, quotation marks, pronunciation, examples, or a full sentence. If context is insufficient, return the most common academic meaning.",
-      0,
-      128,
     );
   }
 
@@ -156,6 +154,33 @@ class GeminiProvider implements AiProvider {
 
       if (lastProviderError) throw lastProviderError;
       throw new Error("GEMINI_RETRY_EXHAUSTED");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async generateOnce(parts: GeminiPart[], systemInstruction: string): Promise<string> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    const model = process.env.GEMINI_DICTIONARY_MODEL?.trim() || this.model;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: "user", parts }],
+          generationConfig: { temperature: 0, maxOutputTokens: 64 },
+        }),
+      });
+
+      if (!response.ok) throw new AiProviderRequestError(response.status, await readGeminiError(response), model);
+      const data: unknown = await response.json();
+      const text = extractOutputText(data);
+      if (!text) throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
+      return text;
     } finally {
       clearTimeout(timeout);
     }

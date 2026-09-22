@@ -43,8 +43,9 @@ export function StudyTray({
   const paperUiKey = paperUiStorageKey(storageScope, paper.id);
   const areas = useHydratedAreas(tray.areas ?? []);
   const hydratedTray = { ...tray, areas };
+  const studyAnnotations = tray.highlights.filter((item) => item.kind !== "dictionary");
   const embeddedAreas = areas.filter((area): area is StudyArea & { imageDataUrl: string } => typeof area.imageDataUrl === "string");
-  const total = tray.highlights.length + areas.length + tray.insights.length + tray.memos.length;
+  const total = studyAnnotations.length + areas.length + tray.insights.length + tray.memos.length;
 
   const setTrayVisibility = useCallback((next: boolean) => {
     setOpen(next);
@@ -148,11 +149,10 @@ export function StudyTray({
 
         <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!memo.trim()) return; onAddMemo(memo.trim()); updateMemoDraft(""); }}><label htmlFor="tray-memo" className="sr-only">자유 메모</label><textarea id="tray-memo" value={memo} onChange={(event) => updateMemoDraft(event.target.value)} placeholder="자유 메모 추가…" rows={2} className="min-w-0 flex-1 resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/><button className="rounded-xl bg-white px-4 text-sm font-medium text-black">추가</button></form>
 
-        <TraySection title={`Annotations (${tray.highlights.length})`}>
-          {tray.highlights.map((item) => <TrayItem key={item.id}>
-            <p className="text-xs text-[var(--muted)]">Page {item.page} · {item.kind === "dictionary" ? "Dictionary" : (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.kind === "dictionary" ? "black" : item.color ?? "yellow"}</p>
+        <TraySection title={`Annotations (${studyAnnotations.length})`}>
+          {studyAnnotations.map((item) => <TrayItem key={item.id}>
+            <p className="text-xs text-[var(--muted)]">Page {item.page} · {(item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p>
             <p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>
-            {item.kind === "dictionary" && <p className="mt-1 text-sm text-[#bbb]">뜻: {item.dictionaryMeaning || "뜻 없음"}</p>}
             {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
             <p className="mt-2 text-[10px] text-[var(--muted)]">삭제는 PDF의 지우개 도구에서만 할 수 있습니다.</p>
           </TrayItem>)}

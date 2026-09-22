@@ -337,7 +337,7 @@ export function PdfPage({
 
               if (kind === "dictionary") {
                 const underlineStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: "1.5px solid #111", background: "transparent", padding: 0 };
-                const fontSize = Math.max(5, Math.min(7, rect.height * 0.42));
+                const fontSize = Math.max(8, Math.min(10, rect.height * 0.62));
                 const meaning = selection.dictionaryMeaning?.trim() || "뜻 찾는 중…";
                 return <Fragment key={key}>
                   {commonProps
@@ -364,7 +364,7 @@ export function PdfPage({
                         type="button"
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
-                        className="pointer-events-auto absolute z-[5] max-w-[120px] truncate rounded-[2px] bg-white/90 px-0.5 font-medium text-black shadow-[0_0_1px_rgba(255,255,255,.8)]"
+                        className="pointer-events-auto absolute z-[5] max-w-[160px] truncate rounded-[2px] bg-white/95 px-0.5 font-semibold text-black shadow-[0_0_2px_rgba(255,255,255,.95)]"
                         style={{ left: rect.left, top: Math.max(0, rect.top - fontSize - 1), minWidth: Math.min(36, Math.max(12, rect.width)), fontSize, lineHeight: 1 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
