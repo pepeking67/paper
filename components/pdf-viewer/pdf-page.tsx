@@ -33,6 +33,7 @@ type Props = {
 
 type TextEndpoint = { divIndex: number; offset: number };
 type AreaDraft = { left: number; top: number; width: number; height: number };
+type TextBounds = { left: number; right: number };
 
 type RenderedTextLayer = {
   cancel: () => void;
@@ -80,6 +81,7 @@ export function PdfPage({
   const [renderedZoom, setRenderedZoom] = useState(0);
   const [renderError, setRenderError] = useState("");
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
+  const [textBounds, setTextBounds] = useState<TextBounds | null>(null);
   const [dictionaryEditor, setDictionaryEditor] = useState<{ id: string; value: string } | null>(null);
 
   useEffect(() => {
@@ -163,6 +165,16 @@ export function PdfPage({
 
         textDivsRef.current = [...textLayer.textDivs];
         textItemsRef.current = [...textLayer.textContentItemsStr];
+        const surfaceBounds = surfaceRef.current?.getBoundingClientRect();
+        if (surfaceBounds) {
+          const bounds = textLayer.textDivs
+            .map((node) => node.getBoundingClientRect())
+            .filter((rect) => rect.width > 0 && rect.height > 0);
+          if (bounds.length) setTextBounds({
+            left: Math.max(0, Math.min(...bounds.map((rect) => rect.left - surfaceBounds.left))),
+            right: Math.min(viewport.width, Math.max(...bounds.map((rect) => rect.right - surfaceBounds.left))),
+          });
+        }
         setRenderedWidth(width);
         setRenderedZoom(zoom);
       } catch (caught) {
@@ -192,6 +204,7 @@ export function PdfPage({
     textLayerRef.current?.replaceChildren();
     textDivsRef.current = [];
     textItemsRef.current = [];
+    setTextBounds(null);
     setRenderedWidth(0);
     setRenderedZoom(0);
   }, [nearViewport]);
@@ -337,8 +350,9 @@ export function PdfPage({
 
               if (kind === "dictionary") {
                 const underlineStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: "1.5px solid #111", background: "transparent", padding: 0 };
-                const fontSize = Math.max(8, Math.min(10, rect.height * 0.62));
+                const fontSize = Math.max(8, Math.min(9, rect.height * 0.58));
                 const meaning = selection.dictionaryMeaning?.trim() || "뜻 찾는 중…";
+                const rail = getDictionaryRail(rect, surfaceSize.width, textBounds);
                 return <Fragment key={key}>
                   {commonProps
                     ? <button {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
@@ -346,7 +360,7 @@ export function PdfPage({
                   {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
                     ? <form
                         className="pointer-events-auto absolute z-[6] flex w-44 items-center gap-1 rounded border border-black/30 bg-white p-1 shadow-lg"
-                        style={{ left: rect.left, top: rect.top + rect.height + fontSize + 4 }}
+                        style={{ left: rail.left, top: rect.top + rect.height + 3 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onSubmit={(event) => {
@@ -364,8 +378,8 @@ export function PdfPage({
                         type="button"
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
-                        className="pointer-events-auto absolute z-[5] max-w-[160px] truncate px-0.5 font-semibold text-black [text-shadow:0_0_2px_white,0_0_2px_white]"
-                        style={{ left: rect.left, top: rect.top + rect.height + 1, minWidth: Math.min(36, Math.max(12, rect.width)), fontSize, lineHeight: 0.9 }}
+                        className="pointer-events-auto absolute z-[5] line-clamp-3 break-keep px-0.5 text-right font-semibold text-black [text-shadow:0_0_2px_white,0_0_2px_white]"
+                        style={{ left: rail.left, top: rect.top, width: rail.width, fontSize, lineHeight: 0.88 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻을 입력하세요" ? "" : meaning }); }}
@@ -434,6 +448,20 @@ export function PdfPage({
       <span className="absolute bottom-1 right-2 z-30 rounded bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{pageNumber}</span>
     </article>
   );
+}
+
+export function getDictionaryRail(rect: { left: number; width: number }, pageWidth: number, textBounds: TextBounds | null) {
+  const contentLeft = textBounds?.left ?? pageWidth * 0.07;
+  const contentRight = textBounds?.right ?? pageWidth * 0.93;
+  const leftRail = { left: 4, width: Math.max(0, contentLeft - 8) };
+  const rightRail = { left: contentRight + 4, width: Math.max(0, pageWidth - contentRight - 8) };
+  const preferLeft = rect.left + rect.width / 2 < pageWidth / 2;
+
+  if (preferLeft && leftRail.width >= 28) return leftRail;
+  if (!preferLeft && rightRail.width >= 28) return rightRail;
+  if (rightRail.width >= leftRail.width && rightRail.width >= 28) return rightRail;
+  if (leftRail.width >= 28) return leftRail;
+  return { left: pageWidth + 6, width: 96 };
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

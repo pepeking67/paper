@@ -2,12 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { lookupLocalMeaning } from "../lib/dictionary/local-glossary";
+import { getDictionaryRail } from "../components/pdf-viewer/pdf-page";
 
 test("local paper glossary resolves common terms without a network request", () => {
   assert.equal(lookupLocalMeaning("Vision-Language-Action"), "시각·언어·행동");
   assert.equal(lookupLocalMeaning("policies"), "정책");
   assert.equal(lookupLocalMeaning("states"), "상태");
   assert.equal(lookupLocalMeaning("unlisted term"), null);
+});
+
+test("dictionary meanings use the nearest PDF margin instead of covering text lines", () => {
+  assert.deepEqual(getDictionaryRail({ left: 100, width: 40 }, 720, { left: 54, right: 666 }), { left: 4, width: 46 });
+  assert.deepEqual(getDictionaryRail({ left: 540, width: 40 }, 720, { left: 54, right: 666 }), { left: 670, width: 46 });
+  assert.deepEqual(getDictionaryRail({ left: 320, width: 40 }, 720, { left: 10, right: 710 }), { left: 726, width: 96 });
 });
 
 test("dictionary tool creates a synced black-underlined editable gloss", async () => {
@@ -28,7 +35,8 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.doesNotMatch(workspace, /fetch\("\/api\/dictionary"/);
   assert.match(glossary, /vision language action/);
   assert.match(page, /borderBottom: "1\.5px solid #111"/);
-  assert.match(page, /fontSize = Math\.max\(8, Math\.min\(10/);
+  assert.match(page, /fontSize = Math\.max\(8, Math\.min\(9/);
+  assert.match(page, /getDictionaryRail\(rect, surfaceSize\.width, textBounds\)/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
 });
