@@ -58,6 +58,10 @@ export async function downloadAnnotatedPdf(
   const pages = pdf.getPages();
 
   for (const annotation of highlights) {
+    // Text memos are positioned HTML annotations and may contain glyphs that
+    // the source PDF does not embed. Keep the established download contract:
+    // only highlights, underlines, and dictionary underlines are flattened.
+    if (annotation.kind === "text") continue;
     const page = pages[annotation.page - 1];
     if (!page) continue;
     const { width: pageWidth, height: pageHeight } = page.getSize();

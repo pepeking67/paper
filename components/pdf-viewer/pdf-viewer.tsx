@@ -25,8 +25,10 @@ type PdfViewerProps = {
   onPageChange: (page: number) => void;
   onPageTextChange: (text: string) => void;
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
-  onSaveDictionary: (text: string, page: number, rects: NormalizedHighlightRect[]) => void;
+  onSaveDictionary: (text: string, page: number, rects: NormalizedHighlightRect[], pageText: string) => void;
   onEditDictionaryMeaning: (id: string, meaning: string) => void;
+  onSaveTextAnnotation: (text: string, page: number, rect: NormalizedHighlightRect, fontSizeRatio: number, color: AnnotationColor) => void;
+  onEditTextAnnotation: (id: string, text: string) => void;
   onDeleteHighlight: (id: string) => void;
   onRemoveQuestionHighlight: (id: string) => void;
   onSaveArea: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
@@ -79,6 +81,8 @@ export function PdfViewer({
   onSaveHighlight,
   onSaveDictionary,
   onEditDictionaryMeaning,
+  onSaveTextAnnotation,
+  onEditTextAnnotation,
   onDeleteHighlight,
   onRemoveQuestionHighlight,
   onSaveArea,
@@ -258,10 +262,10 @@ export function PdfViewer({
   }, [onPageTextChange]);
 
   function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
-    if (tool === "erase" || tool === "area") return;
+    if (tool === "erase" || tool === "area" || tool === "text") return;
     onPageChange(selectedPage);
     if (tool === "dictionary") {
-      onSaveDictionary(text, selectedPage, rects);
+      onSaveDictionary(text, selectedPage, rects, pageTexts.current.get(selectedPage) ?? "");
       return;
     }
     onSaveHighlight(text, selectedPage, rects, "", tool, annotationColor);
@@ -288,13 +292,13 @@ export function PdfViewer({
     const count = savedHighlights.length + savedAreas.length;
     if (!count) return;
     const confirmed = window.confirm(
-      `이 논문의 형광펜·밑줄·사전 뜻·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A, 메모, 학습 노트는 유지됩니다.`,
+      `이 논문의 형광펜·밑줄·텍스트 메모·사전 뜻·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A, 메모, 학습 노트는 유지됩니다.`,
     );
     if (confirmed) onClearAnnotations();
   }
 
   function handleToolClick(nextTool: AnnotationTool) {
-    if ((nextTool === "highlight" || nextTool === "underline") && tool === nextTool) {
+    if ((nextTool === "highlight" || nextTool === "underline" || nextTool === "text") && tool === nextTool) {
       setColorMenuTool((current) => current === nextTool ? null : nextTool);
       return;
     }
@@ -357,6 +361,10 @@ export function PdfViewer({
             <ToolButton tool="underline" active={tool === "underline"} color={annotationColor} onClick={() => handleToolClick("underline")} label="밑줄" title={tool === "underline" ? "다시 눌러 색상 변경" : "밑줄 선택"}/>
             {colorMenuTool === "underline" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
+          <div className="relative">
+            <ToolButton tool="text" active={tool === "text"} color={annotationColor} onClick={() => handleToolClick("text")} label="텍스트 메모" title={tool === "text" ? "다시 눌러 색상 변경" : "페이지를 눌러 텍스트 메모 작성"}/>
+            {colorMenuTool === "text" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
+          </div>
           <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
           <ToolButton tool="area" active={tool === "area"} onClick={() => handleToolClick("area")} label="영역 선택" title="수식·그림·표 영역 선택"/>
           <ToolButton tool="erase" active={tool === "erase"} onClick={() => handleToolClick("erase")} label="지우개" title="저장된 표시를 눌러 삭제"/>
@@ -375,7 +383,7 @@ export function PdfViewer({
             disabled={!savedHighlights.length || downloadState === "loading"}
             onClick={() => void handleDownloadAnnotatedPdf()}
             aria-label={downloadState === "loading" ? "PDF 만드는 중" : "표시된 PDF 다운로드"}
-            title="저장된 형광펜·밑줄을 원본 PDF에 합성해서 다운로드합니다. 선택 영역은 다운로드 PDF에는 포함되지 않습니다."
+            title="저장된 형광펜·밑줄을 원본 PDF에 합성해서 다운로드합니다. 텍스트 메모와 선택 영역은 다운로드 PDF에는 포함되지 않습니다."
             className="grid h-7 w-7 place-items-center rounded-md border border-[var(--line)] text-[var(--muted)] hover:bg-white/[.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 17v3h14v-3"/></svg>
@@ -385,7 +393,7 @@ export function PdfViewer({
             disabled={savedHighlights.length + savedAreas.length === 0}
             onClick={handleClearAnnotations}
             aria-label="표시 모두 지우기"
-            title="현재 논문의 형광펜·밑줄·선택 영역을 모두 삭제합니다."
+            title="현재 논문의 형광펜·밑줄·텍스트 메모·사전 뜻·선택 영역을 모두 삭제합니다."
             className="grid h-7 w-7 place-items-center rounded-md border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><path d="m4 7 1.5 14h13L20 7M9 11v6m6-6v6M3 7h18M9 7V4h6v3"/></svg>
@@ -427,10 +435,12 @@ export function PdfViewer({
           pageNumber={index + 1}
           zoom={zoom}
           areaMode={tool === "area"}
+          textMode={tool === "text"}
+          textColor={annotationColor}
           deleteMode={tool === "erase"}
           capturedSelections={savedHighlights
             .filter((selection) => selection.page === index + 1)
-            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow", dictionaryMeaning: selection.dictionaryMeaning }))}
+            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow", dictionaryMeaning: selection.dictionaryMeaning, textFontSizeRatio: selection.textFontSizeRatio }))}
           savedAreas={savedAreas.filter((area) => area.page === index + 1)}
           scrollRoot={scrollRoot}
           onText={handlePageText}
@@ -438,6 +448,8 @@ export function PdfViewer({
           onAreaSelection={onSaveArea}
           onDeleteAnnotation={onDeleteHighlight}
           onEditDictionaryMeaning={onEditDictionaryMeaning}
+          onTextAnnotation={(text, annotationPage, rect, fontSizeRatio) => onSaveTextAnnotation(text, annotationPage, rect, fontSizeRatio, annotationColor)}
+          onEditTextAnnotation={onEditTextAnnotation}
           onDeleteArea={onDeleteArea}
         />)}
       </div>}
@@ -513,6 +525,7 @@ function ToolIcon({ tool }: { tool: AnnotationTool }) {
   if (tool === "highlight") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="m14.5 4.5 5 5L10 19H5v-5Z"/><path d="m12 7 5 5M4 21h16"/></svg>;
   if (tool === "underline") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M7 4v7a5 5 0 0 0 10 0V4M5 21h14"/></svg>;
   if (tool === "dictionary") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 20.5Z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H14v18a3 3 0 0 1 3-3h.5a2.5 2.5 0 0 1 2.5 2.5Z"/></svg>;
+  if (tool === "text") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M5 5h14M12 5v14M8 19h8"/><path d="M4 3h16v18H4z" opacity=".35"/></svg>;
   if (tool === "area") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>;
   return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="m4 15 9-9 7 7-7 7H8Z"/><path d="m10 9 7 7M13 20h8"/></svg>;
 }

@@ -12,6 +12,7 @@ type CapturedSelection = {
   kind?: AnnotationKind | "context";
   color?: AnnotationColor;
   dictionaryMeaning?: string;
+  textFontSizeRatio?: number;
 };
 
 type Props = {
@@ -19,6 +20,8 @@ type Props = {
   pageNumber: number;
   zoom: number;
   areaMode: boolean;
+  textMode: boolean;
+  textColor: AnnotationColor;
   deleteMode: boolean;
   capturedSelections: CapturedSelection[];
   savedAreas: StudyArea[];
@@ -28,6 +31,8 @@ type Props = {
   onAreaSelection: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
   onDeleteAnnotation: (id: string) => void;
   onEditDictionaryMeaning: (id: string, meaning: string) => void;
+  onTextAnnotation: (text: string, page: number, rect: NormalizedHighlightRect, fontSizeRatio: number) => void;
+  onEditTextAnnotation: (id: string, text: string) => void;
   onDeleteArea: (id: string) => void;
 };
 
@@ -54,6 +59,8 @@ export function PdfPage({
   pageNumber,
   zoom,
   areaMode,
+  textMode,
+  textColor,
   deleteMode,
   capturedSelections,
   savedAreas,
@@ -63,6 +70,8 @@ export function PdfPage({
   onAreaSelection,
   onDeleteAnnotation,
   onEditDictionaryMeaning,
+  onTextAnnotation,
+  onEditTextAnnotation,
   onDeleteArea,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -83,6 +92,8 @@ export function PdfPage({
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [textBounds, setTextBounds] = useState<TextBounds | null>(null);
   const [dictionaryEditor, setDictionaryEditor] = useState<{ id: string; value: string } | null>(null);
+  const [textDraft, setTextDraft] = useState<{ rect: NormalizedHighlightRect; fontSizeRatio: number; value: string } | null>(null);
+  const [textEditor, setTextEditor] = useState<{ id: string; value: string } | null>(null);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -110,6 +121,10 @@ export function PdfPage({
       setAreaDraft(null);
     }
   }, [areaMode]);
+
+  useEffect(() => {
+    if (!textMode) setTextDraft(null);
+  }, [textMode]);
 
   useEffect(() => {
     if (!nearViewport || width < 1 || (renderedWidth === width && renderedZoom === zoom)) return;
@@ -282,6 +297,30 @@ export function PdfPage({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
+  function beginTextMemo(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || surfaceSize.width <= 0 || surfaceSize.height <= 0) return;
+    event.preventDefault();
+    const surfaceBounds = event.currentTarget.getBoundingClientRect();
+    const point = {
+      x: clamp(event.clientX - surfaceBounds.left, 0, surfaceSize.width),
+      y: clamp(event.clientY - surfaceBounds.top, 0, surfaceSize.height),
+    };
+    const nearest = findNearestTextFontSize(textDivsRef.current, event.clientX, event.clientY);
+    const fontSize = getTextMemoFontSize(nearest ?? Math.max(9, surfaceSize.height * 0.012));
+    const left = clamp(point.x, 0, Math.max(0, surfaceSize.width - 84));
+    const width = Math.min(Math.max(150, surfaceSize.width * 0.3), Math.max(80, surfaceSize.width - left - 4));
+    setTextDraft({
+      rect: {
+        x: left / surfaceSize.width,
+        y: point.y / surfaceSize.height,
+        width: width / surfaceSize.width,
+        height: Math.max(fontSize * 1.5, 18) / surfaceSize.height,
+      },
+      fontSizeRatio: fontSize / surfaceSize.height,
+      value: "",
+    });
+  }
+
   function cropCanvasArea(rect: AreaDraft) {
     const canvas = canvasRef.current;
     if (!canvas || surfaceSize.width <= 0 || surfaceSize.height <= 0) return "";
@@ -303,6 +342,15 @@ export function PdfPage({
     return crop.toDataURL("image/jpeg", 0.88);
   }
 
+  const dictionaryLabelLayout = buildDictionaryLabelLayout(
+    capturedSelections.flatMap((selection) => {
+      if (selection.kind !== "dictionary" || !selection.annotationId || !selection.rects[0]) return [];
+      const rect = projectHighlightRect(selection.rects[0], surfaceSize.width, surfaceSize.height);
+      return [{ id: selection.annotationId, desiredTop: rect.top, rail: getDictionaryRail(rect, surfaceSize.width, textBounds) }];
+    }),
+    surfaceSize.height,
+  );
+
   return (
     <article
       ref={wrapperRef}
@@ -321,7 +369,7 @@ export function PdfPage({
       >
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
 
-        <div className={`absolute inset-0 ${deleteMode ? "pointer-events-auto z-[3]" : "pointer-events-none z-[1]"}`}>
+        <div className={`absolute inset-0 z-[3] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`}>
           {capturedSelections.flatMap((selection, selectionIndex) =>
             selection.rects.map((normalized, rectIndex) => {
               const rect = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
@@ -348,11 +396,40 @@ export function PdfPage({
                 },
               } : null;
 
+              if (kind === "text") {
+                if (rectIndex > 0 || !selection.annotationId) return null;
+                const memoFontSize = Math.max(7, (selection.textFontSizeRatio ?? normalized.height * 0.68) * surfaceSize.height);
+                const textStyle = { left: rect.left, top: rect.top, width: Math.max(rect.width, 80), minHeight: rect.height, fontSize: memoFontSize, lineHeight: 1.18, color: palette.stroke, borderColor: palette.stroke, background: palette.fill };
+                if (commonProps) return <button key={key} {...commonProps} className="pointer-events-auto absolute z-[5] whitespace-pre-wrap rounded border border-dashed px-1 py-0.5 text-left font-medium hover:outline hover:outline-1 hover:outline-red-500" style={textStyle}>{selection.text}</button>;
+                if (textEditor?.id === selection.annotationId) return <form
+                  key={key}
+                  className="pointer-events-auto absolute z-[7] flex min-w-48 flex-col gap-1 rounded border border-black/30 bg-white p-1 shadow-xl"
+                  style={{ left: rect.left, top: rect.top, width: Math.max(rect.width, 180) }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  onSubmit={(event) => { event.preventDefault(); const value = textEditor.value.trim(); if (value) onEditTextAnnotation(selection.annotationId!, value); setTextEditor(null); }}
+                >
+                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor({ id: selection.annotationId!, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="resize-y rounded border border-black/20 px-1.5 py-1 text-black" style={{ fontSize: memoFontSize }}/>
+                  <button type="submit" className="self-end rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
+                </form>;
+                return <button
+                  key={key}
+                  type="button"
+                  title="텍스트 메모 수정"
+                  className="pointer-events-auto absolute z-[5] whitespace-pre-wrap rounded border border-dashed px-1 py-0.5 text-left font-medium"
+                  style={textStyle}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  onClick={(event) => { event.stopPropagation(); setTextEditor({ id: selection.annotationId!, value: selection.text }); }}
+                >{selection.text}</button>;
+              }
+
               if (kind === "dictionary") {
                 const underlineStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: "1.5px solid #111", background: "transparent", padding: 0 };
                 const fontSize = Math.max(8, Math.min(9, rect.height * 0.58));
                 const meaning = selection.dictionaryMeaning?.trim() || "뜻 찾는 중…";
                 const rail = getDictionaryRail(rect, surfaceSize.width, textBounds);
+                const labelPosition = selection.annotationId ? dictionaryLabelLayout.get(selection.annotationId) : undefined;
                 return <Fragment key={key}>
                   {commonProps
                     ? <button {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
@@ -378,8 +455,8 @@ export function PdfPage({
                         type="button"
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
-                        className="pointer-events-auto absolute z-[5] line-clamp-3 break-keep px-0.5 text-right font-semibold text-black [text-shadow:0_0_2px_white,0_0_2px_white]"
-                        style={{ left: rail.left, top: rect.top, width: rail.width, fontSize, lineHeight: 0.88 }}
+                        className="pointer-events-auto absolute z-[5] line-clamp-2 break-keep px-px text-right font-semibold text-black [text-shadow:0_0_2px_white,0_0_2px_white]"
+                        style={{ left: rail.left, top: labelPosition?.top ?? rect.top, width: rail.width, fontSize, lineHeight: 0.95, maxHeight: labelPosition?.height ?? 18 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻을 입력하세요" ? "" : meaning }); }}
@@ -427,7 +504,7 @@ export function PdfPage({
           })}
         </div>
 
-        <div ref={textLayerRef} className={`textLayer z-[2] ${areaMode ? "pointer-events-none" : ""}`} />
+        <div ref={textLayerRef} className={`textLayer z-[2] ${areaMode || textMode ? "pointer-events-none" : ""}`} />
 
         {areaMode && <div
           className="absolute inset-0 z-[4] cursor-crosshair touch-none"
@@ -439,6 +516,17 @@ export function PdfPage({
         >
           {areaDraft && <span className="pointer-events-none absolute border-2 border-sky-500 bg-sky-400/10" style={{ left: areaDraft.left, top: areaDraft.top, width: areaDraft.width, height: areaDraft.height }}/>} 
         </div>}
+        {textMode && <div className="absolute inset-0 z-[4] cursor-text touch-none" aria-label={`Page ${pageNumber} 텍스트 메모 위치 선택`} onPointerDown={beginTextMemo}/>}
+        {textDraft && <form
+          className="pointer-events-auto absolute z-[8] flex min-w-44 flex-col gap-1 rounded border bg-white p-1 shadow-xl"
+          style={{ left: textDraft.rect.x * surfaceSize.width, top: textDraft.rect.y * surfaceSize.height, width: textDraft.rect.width * surfaceSize.width, borderColor: annotationColors[textColor].stroke }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onSubmit={(event) => { event.preventDefault(); const value = textDraft.value.trim(); if (value) onTextAnnotation(value, pageNumber, textDraft.rect, textDraft.fontSizeRatio); setTextDraft(null); }}
+        >
+          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="resize-y rounded border border-black/20 px-1.5 py-1 text-black" style={{ fontSize: textDraft.fontSizeRatio * surfaceSize.height }}/>
+          <div className="flex justify-end gap-1"><button type="button" onClick={() => setTextDraft(null)} className="rounded px-2 py-1 text-[10px] text-black/60">취소</button><button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button></div>
+        </form>}
       </div>
       {renderError && (
         <div role="alert" className="absolute inset-0 z-20 flex items-center justify-center bg-[#eee] p-6 text-center text-sm text-black">
@@ -462,6 +550,58 @@ export function getDictionaryRail(rect: { left: number; width: number }, pageWid
   if (rightRail.width >= leftRail.width && rightRail.width >= 28) return rightRail;
   if (leftRail.width >= 28) return leftRail;
   return { left: pageWidth + 6, width: 96 };
+}
+
+export function buildDictionaryLabelLayout(
+  labels: Array<{ id: string; desiredTop: number; rail: { left: number; width: number } }>,
+  pageHeight: number,
+) {
+  const result = new Map<string, { top: number; height: number }>();
+  const groups = new Map<string, typeof labels>();
+  for (const label of labels) {
+    const key = `${Math.round(label.rail.left)}:${Math.round(label.rail.width)}`;
+    groups.set(key, [...(groups.get(key) ?? []), label]);
+  }
+
+  const height = 18;
+  const gap = 1;
+  for (const group of groups.values()) {
+    const sorted = group.slice().sort((left, right) => left.desiredTop - right.desiredTop);
+    let cursor = 0;
+    const positions = sorted.map((label) => {
+      const top = Math.max(cursor, Math.max(0, label.desiredTop));
+      cursor = top + height + gap;
+      return { id: label.id, top };
+    });
+    const overflow = Math.max(0, cursor - gap - pageHeight);
+    if (overflow > 0) {
+      for (const position of positions) position.top = Math.max(0, position.top - overflow);
+      for (let index = 1; index < positions.length; index += 1) {
+        positions[index].top = Math.max(positions[index].top, positions[index - 1].top + height + gap);
+      }
+    }
+    for (const position of positions) result.set(position.id, { top: position.top, height });
+  }
+  return result;
+}
+
+export function getTextMemoFontSize(paperFontSizePx: number) {
+  return Math.max(7, paperFontSizePx - 4 / 3);
+}
+
+function findNearestTextFontSize(textDivs: HTMLElement[], clientX: number, clientY: number) {
+  let nearest: { distance: number; fontSize: number } | null = null;
+  for (const node of textDivs) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    const dx = clientX < rect.left ? rect.left - clientX : clientX > rect.right ? clientX - rect.right : 0;
+    const dy = clientY < rect.top ? rect.top - clientY : clientY > rect.bottom ? clientY - rect.bottom : 0;
+    const fontSize = Number.parseFloat(window.getComputedStyle(node).fontSize);
+    if (!Number.isFinite(fontSize)) continue;
+    const distance = Math.hypot(dx, dy);
+    if (!nearest || distance < nearest.distance) nearest = { distance, fontSize };
+  }
+  return nearest?.fontSize ?? null;
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

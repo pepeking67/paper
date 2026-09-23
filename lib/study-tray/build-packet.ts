@@ -7,7 +7,7 @@ export function buildStudyPacket(paper: Paper, tray: StudyTrayData) {
     ? [...studyAnnotations]
       .sort((left, right) => left.page - right.page)
       .map((item) => {
-        const kind = (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight";
+        const kind = item.kind === "text" ? "Text memo" : (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight";
         const priority = kind === "Underline" || item.memo ? "중요도 높음" : "참고";
         return `### Page ${item.page} · ${kind} · ${item.color ?? "yellow"} · ${priority}\nOriginal:\n${item.text}\n\nMy memo:\n${item.memo || "(없음)"}`;
       }).join("\n\n")

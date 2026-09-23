@@ -30,6 +30,7 @@ export type QuestionContextSnapshot = {
 export interface AiProvider {
   answerStream(message: string, context: StudyContext, history?: ChatTurn[]): Promise<ReadableStream<Uint8Array>>;
   composeStudyNote(material: string, areas?: StudyAreaContext[]): Promise<string>;
+  defineTerm(term: string, pageContext?: string): Promise<string>;
 }
 
 export function getAiProvider(): AiProvider | null {
@@ -88,10 +89,23 @@ class GeminiProvider implements AiProvider {
     );
   }
 
-  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192): Promise<string> {
+  async defineTerm(term: string, pageContext = ""): Promise<string> {
+    const context = buildDictionaryContext(pageContext, term);
+    const result = await this.generate(
+      [{ text: [`Term: ${term.trim().slice(0, 200)}`, context ? `Nearby paper context: ${context}` : ""].filter(Boolean).join("\n") }],
+      "Give only a very short Korean gloss for the term as used in the supplied robotics or AI paper context. Prefer a compact noun phrase, normally 2–12 Korean characters. Do not add the English term, a sentence, punctuation, quotation marks, Markdown, alternatives, or explanation. If context is weak, return the most common technical meaning.",
+      0,
+      48,
+      10_000,
+      process.env.GEMINI_DICTIONARY_MODEL?.trim() || this.model,
+    );
+    return sanitizeDictionaryMeaning(result);
+  }
+
+  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192, timeoutMs = 55_000, primaryModel = this.model): Promise<string> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55_000);
-    const models = buildGeminiModelCandidates(this.model);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const models = buildGeminiModelCandidates(primaryModel);
     let lastProviderError: AiProviderRequestError | null = null;
 
     try {
@@ -115,7 +129,7 @@ class GeminiProvider implements AiProvider {
             const data: unknown = await response.json();
             const text = extractOutputText(data);
             if (text) {
-              if (model !== this.model) console.info("[gemini] fallback model succeeded", { primary: this.model, fallback: model });
+              if (model !== primaryModel) console.info("[gemini] fallback model succeeded", { primary: primaryModel, fallback: model });
               return text;
             }
             throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
@@ -192,6 +206,27 @@ class GeminiProvider implements AiProvider {
       throw error;
     }
   }
+}
+
+export function buildDictionaryContext(pageText: string, term: string): string {
+  const compact = pageText.replace(/\s+/gu, " ").trim();
+  if (!compact) return "";
+  const needle = term.trim().toLocaleLowerCase();
+  const index = needle ? compact.toLocaleLowerCase().indexOf(needle) : -1;
+  if (index < 0) return compact.slice(0, 600);
+  const start = Math.max(0, Math.min(index - 280, compact.length - 600));
+  return compact.slice(start, start + 600);
+}
+
+export function sanitizeDictionaryMeaning(value: string): string {
+  const firstLine = value
+    .replace(/[`*_#]/gu, "")
+    .split(/\r?\n/gu)
+    .map((line) => line.trim())
+    .find(Boolean) ?? "";
+  const cleaned = firstLine.replace(/^["'“”‘’]+|["'“”‘’.,;:!?。]+$/gu, "").trim();
+  if (!cleaned) throw new Error("GEMINI_EMPTY_DICTIONARY_MEANING");
+  return [...cleaned].slice(0, 40).join("");
 }
 
 function decodeGeminiSseStream(source: ReadableStream<Uint8Array>, abortController: AbortController, timeout: ReturnType<typeof setTimeout>): ReadableStream<Uint8Array> {

@@ -7,6 +7,7 @@ test("personal AI routes authenticate the account and authorize the paper throug
   const helper = await readFile("lib/auth/authorize-personal-paper.ts", "utf8");
   const chatRoute = await readFile("app/api/chat/route.ts", "utf8");
   const noteRoute = await readFile("app/api/study-note/route.ts", "utf8");
+  const dictionaryRoute = await readFile("app/api/dictionary/route.ts", "utf8");
   const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
   const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
 
@@ -19,7 +20,9 @@ test("personal AI routes authenticate the account and authorize the paper throug
   assert.match(chatRoute, /no-cache, no-transform/);
   assert.match(chatRoute, /maxDuration = 120/);
   assert.match(noteRoute, /authorizePersonalPaper\(request, candidate\.paperId\)/);
-  assert.doesNotMatch(`${chatRoute}\n${noteRoute}`, /papers\/catalog|findPaper/);
+  assert.match(dictionaryRoute, /authorizePersonalPaper\(request, body\.paperId\)/);
+  assert.match(dictionaryRoute, /provider\.defineTerm\(body\.term, body\.pageText\)/);
+  assert.doesNotMatch(`${chatRoute}\n${noteRoute}\n${dictionaryRoute}`, /papers\/catalog|findPaper/);
   assert.match(chat, /authorization: `Bearer \$\{session\.access_token\}`/);
   assert.match(chat, /response\.body\.getReader\(\)/);
   assert.match(chat, /setMessages\(\[\.\.\.pending, \{ role: "assistant", content: streamedAnswer \}\]\)/);
