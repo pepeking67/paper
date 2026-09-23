@@ -95,14 +95,15 @@ class GeminiProvider implements AiProvider {
       [{ text: [`Term: ${term.trim().slice(0, 200)}`, context ? `Nearby paper context: ${context}` : ""].filter(Boolean).join("\n") }],
       "Give only a very short Korean gloss for the term as used in the supplied robotics or AI paper context. Prefer a compact noun phrase, normally 2–12 Korean characters. Do not add the English term, a sentence, punctuation, quotation marks, Markdown, alternatives, or explanation. If context is weak, return the most common technical meaning.",
       0,
-      48,
+      256,
       10_000,
       process.env.GEMINI_DICTIONARY_MODEL?.trim() || this.model,
+      true,
     );
     return sanitizeDictionaryMeaning(result);
   }
 
-  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192, timeoutMs = 55_000, primaryModel = this.model): Promise<string> {
+  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192, timeoutMs = 55_000, primaryModel = this.model, disableThinking = false): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const models = buildGeminiModelCandidates(primaryModel);
@@ -121,7 +122,11 @@ class GeminiProvider implements AiProvider {
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: systemInstruction }] },
               contents: [{ role: "user", parts }],
-              generationConfig: { temperature, maxOutputTokens },
+              generationConfig: {
+                temperature,
+                maxOutputTokens,
+                ...(disableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+              },
             }),
           });
 

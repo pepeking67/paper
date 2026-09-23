@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { buildDictionaryLabelLayout, getDictionaryRail, getTextMemoFontSize } from "../components/pdf-viewer/pdf-page";
+import { buildDictionaryBelowLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
 import { buildDictionaryContext, sanitizeDictionaryMeaning } from "../lib/ai/provider";
 import { buildDictionaryCsv } from "../lib/dictionary/csv";
 import { normalizeDictionaryTerm } from "../lib/dictionary/terms";
@@ -11,21 +11,15 @@ test("dictionary terms are normalized for account-first lookup", () => {
   assert.equal(normalizeDictionaryTerm("행동 정책"), "행동 정책");
 });
 
-test("dictionary meanings use the nearest PDF margin instead of covering text lines", () => {
-  assert.deepEqual(getDictionaryRail({ left: 100, width: 40 }, 720, { left: 54, right: 666 }), { left: 4, width: 46 });
-  assert.deepEqual(getDictionaryRail({ left: 540, width: 40 }, 720, { left: 54, right: 666 }), { left: 670, width: 46 });
-  assert.deepEqual(getDictionaryRail({ left: 320, width: 40 }, 720, { left: 10, right: 710 }), { left: 726, width: 96 });
-});
-
-test("nearby dictionary labels are stacked densely without overlap", () => {
-  const layout = buildDictionaryLabelLayout([
-    { id: "a", desiredTop: 100, rail: { left: 4, width: 46 } },
-    { id: "b", desiredTop: 104, rail: { left: 4, width: 46 } },
-    { id: "c", desiredTop: 101, rail: { left: 670, width: 46 } },
+test("dictionary meanings sit below the selected sentence without colliding", () => {
+  const layout = buildDictionaryBelowLayout([
+    { id: "a", meaning: "정책", desiredLeft: 100, desiredTop: 50, anchorWidth: 20 },
+    { id: "b", meaning: "상태", desiredLeft: 110, desiredTop: 51, anchorWidth: 20 },
+    { id: "c", meaning: "행동", desiredLeft: 100, desiredTop: 80, anchorWidth: 20 },
   ], 720);
-  assert.deepEqual(layout.get("a"), { top: 100, height: 18 });
-  assert.deepEqual(layout.get("b"), { top: 119, height: 18 });
-  assert.deepEqual(layout.get("c"), { top: 101, height: 18 });
+  assert.deepEqual(layout.get("a"), { left: 100, top: 50, width: 28, height: 11 });
+  assert.deepEqual(layout.get("b"), { left: 130, top: 51, width: 28, height: 11 });
+  assert.deepEqual(layout.get("c"), { left: 100, top: 80, width: 28, height: 11 });
 });
 
 test("Gemini dictionary context stays close to the selected term and the answer stays concise", () => {
@@ -49,6 +43,7 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   const dictionary = await readFile("lib/dictionary/use-personal-dictionary.ts", "utf8");
   const drawer = await readFile("components/dictionary/personal-dictionary.tsx", "utf8");
   const route = await readFile("app/api/dictionary/route.ts", "utf8");
+  const provider = await readFile("lib/ai/provider.ts", "utf8");
   const types = await readFile("lib/study-tray/types.ts", "utf8");
   const localUi = await readFile("lib/workspace-state/local-ui-state.ts", "utf8");
 
@@ -66,25 +61,30 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(route, /provider\.defineTerm/);
   assert.match(page, /borderBottom: "1\.5px solid #111"/);
   assert.match(page, /fontSize = Math\.max\(8, Math\.min\(9/);
-  assert.match(page, /getDictionaryRail\(rect, surfaceSize\.width, textBounds\)/);
-  assert.match(page, /buildDictionaryLabelLayout/);
+  assert.match(page, /desiredTop: rect\.top \+ rect\.height \+ 1/);
+  assert.match(page, /buildDictionaryBelowLayout/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
+  assert.match(provider, /maxOutputTokens[\s\S]*thinkingConfig: \{ thinkingBudget: 0 \}/);
+  assert.match(workspace, /Retry old annotations sequentially/);
 });
 
-test("PDF text memo tool uses a pen color and one-point-smaller local font", async () => {
+test("PDF text memo tool supports drag placement, resizing, and adjustable 10pt text", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
 
-  assert.equal(getTextMemoFontSize(12), 12 - 4 / 3);
+  assert.equal(textFontSizePtToPixels(10, 792, 792), 10);
   assert.match(viewer, /ToolButton tool="text"/);
   assert.match(viewer, /textColor=\{annotationColor\}/);
-  assert.match(page, /findNearestTextFontSize/);
-  assert.match(page, /paperFontSizePx - 4 \/ 3/);
+  assert.match(page, /fontSizePt: 10/);
+  assert.match(page, /onPointerMove=\{moveTextBox\}/);
+  assert.match(page, /텍스트 메모 크기 조절/);
+  assert.match(page, /TextFontSizeControl/);
   assert.match(page, /텍스트 메모 수정/);
   assert.match(workspace, /kind: "text"/);
-  assert.match(workspace, /textFontSizeRatio: fontSizeRatio/);
+  assert.match(workspace, /textFontSizePt: fontSizePt/);
+  assert.match(workspace, /moveResizeTextAnnotation/);
 });
 
 test("dictionary annotations stay out of Study Tray and study-note material", async () => {

@@ -20,6 +20,8 @@ export type StudyHighlight = {
   dictionaryUpdatedAt?: string;
   /** Font size divided by rendered page height, so PDF text memos scale with zoom. */
   textFontSizeRatio?: number;
+  /** User-selected PDF font size in points. New text memos default to 10pt. */
+  textFontSizePt?: number;
 };
 
 export type StudyArea = {

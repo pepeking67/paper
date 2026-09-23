@@ -19,7 +19,7 @@ import { paperUiStorageKey, readPaperUiState, updatePaperUiState } from "@/lib/w
 import type { QuestionContextSnapshot, StudyContext } from "@/lib/ai/provider";
 import { usePersonalDictionary } from "@/lib/dictionary/use-personal-dictionary";
 import { PersonalDictionary } from "./dictionary/personal-dictionary";
-import { normalizeDictionaryTerm } from "@/lib/dictionary/terms";
+import { isPendingDictionaryMeaning, normalizeDictionaryTerm } from "@/lib/dictionary/terms";
 
 export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const personalLibrary = usePersonalLibrary();
@@ -55,6 +55,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
   const dictionaryState = usePersonalDictionary();
   const dictionarySnapshotRef = useRef({ status: dictionaryState.status, findMeaning: dictionaryState.findMeaning });
   dictionarySnapshotRef.current = { status: dictionaryState.status, findMeaning: dictionaryState.findMeaning };
+  const dictionaryLookupIds = useRef(new Set<string>());
   const { tray } = studyState;
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
@@ -70,6 +71,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     setQuestionHighlights([]);
     setQuestionAreas([]);
     setRestoredPaperUiKey("");
+    dictionaryLookupIds.current.clear();
   }, [paperUiKey]);
 
   useEffect(() => {
@@ -206,7 +208,10 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     };
     updateTray((current) => ({ ...current, highlights: [...current.highlights, annotation] }));
     setPage(annotationPage);
-    if (!cachedMeaning) void resolveDictionaryMeaning(annotation.id, cleanText, definitionPageText);
+    if (!cachedMeaning) {
+      dictionaryLookupIds.current.add(annotation.id);
+      void resolveDictionaryMeaning(annotation.id, cleanText, definitionPageText);
+    }
   }
 
   async function resolveDictionaryMeaning(annotationId: string, term: string, definitionPageText: string) {
@@ -272,7 +277,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     }));
   }
 
-  function createTextAnnotation(text: string, annotationPage: number, rect: NormalizedHighlightRect, fontSizeRatio: number, color: AnnotationColor) {
+  function createTextAnnotation(text: string, annotationPage: number, rect: NormalizedHighlightRect, fontSizePt: number, color: AnnotationColor) {
     const clean = text.trim().slice(0, 1_000);
     if (!clean) return;
     const annotation: StudyHighlight = {
@@ -283,19 +288,26 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
       memo: "",
       kind: "text",
       color,
-      textFontSizeRatio: fontSizeRatio,
+      textFontSizePt: fontSizePt,
       createdAt: new Date().toISOString(),
     };
     updateTray((current) => ({ ...current, highlights: [...current.highlights, annotation] }));
     setPage(annotationPage);
   }
 
-  function editTextAnnotation(id: string, text: string) {
+  function editTextAnnotation(id: string, text: string, fontSizePt: number) {
     const clean = text.trim().slice(0, 1_000);
     if (!clean) return;
     updateTray((current) => ({
       ...current,
-      highlights: current.highlights.map((item) => item.id === id ? { ...item, text: clean } : item),
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, text: clean, textFontSizePt: clampTextFontSize(fontSizePt) } : item),
+    }));
+  }
+
+  function moveResizeTextAnnotation(id: string, rect: NormalizedHighlightRect) {
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, rects: [rect] } : item),
     }));
   }
 
@@ -375,6 +387,21 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
   // Area uploads are keyed by their stable IDs and retried when sync/network status changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, activePaper.id, studyState.status, (tray.areas ?? []).map((area) => `${area.id}:${area.storagePath ?? "pending"}`).join("|")]);
+
+  useEffect(() => {
+    if (!session?.access_token || studyState.status === "loading" || dictionaryState.status === "loading") return;
+    const pending = tray.highlights.filter((item) => item.kind === "dictionary"
+      && isPendingDictionaryMeaning(item.dictionaryMeaning)
+      && !dictionaryLookupIds.current.has(item.id));
+    if (!pending.length) return;
+    for (const item of pending) dictionaryLookupIds.current.add(item.id);
+    void (async () => {
+      // Retry old annotations sequentially to avoid a burst of Gemini requests.
+      for (const item of pending) await resolveDictionaryMeaning(item.id, item.text, item.page === page ? pageText : "");
+    })();
+  // The lookup ID set prevents duplicate requests while tray updates arrive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePaper.id, dictionaryState.status, page, pageText, session?.access_token, studyState.status, tray.highlights]);
 
   const selectedText = useMemo(
     () => questionHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
@@ -466,6 +493,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         onEditDictionaryMeaning={editDictionaryMeaning}
         onSaveTextAnnotation={createTextAnnotation}
         onEditTextAnnotation={editTextAnnotation}
+        onMoveResizeTextAnnotation={moveResizeTextAnnotation}
         onDeleteHighlight={removeHighlight}
         onRemoveQuestionHighlight={removeQuestionHighlight}
         onClearQuestionContext={clearQuestionAnnotations}
@@ -567,4 +595,8 @@ function clampChatWidth(value: number, viewportWidth: number, libraryOpen: boole
   const minimumPdfWidth = 320;
   const maximum = Math.max(minimum, Math.min(760, viewportWidth - libraryWidth - minimumPdfWidth));
   return Math.round(Math.max(minimum, Math.min(maximum, value)));
+}
+
+function clampTextFontSize(value: number) {
+  return Math.max(6, Math.min(32, Number.isFinite(value) ? value : 10));
 }

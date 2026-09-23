@@ -27,8 +27,9 @@ type PdfViewerProps = {
   onSaveHighlight: (text: string, page: number, rects: NormalizedHighlightRect[], memo: string, kind: AnnotationKind, color: AnnotationColor) => void;
   onSaveDictionary: (text: string, page: number, rects: NormalizedHighlightRect[], pageText: string) => void;
   onEditDictionaryMeaning: (id: string, meaning: string) => void;
-  onSaveTextAnnotation: (text: string, page: number, rect: NormalizedHighlightRect, fontSizeRatio: number, color: AnnotationColor) => void;
-  onEditTextAnnotation: (id: string, text: string) => void;
+  onSaveTextAnnotation: (text: string, page: number, rect: NormalizedHighlightRect, fontSizePt: number, color: AnnotationColor) => void;
+  onEditTextAnnotation: (id: string, text: string, fontSizePt: number) => void;
+  onMoveResizeTextAnnotation: (id: string, rect: NormalizedHighlightRect) => void;
   onDeleteHighlight: (id: string) => void;
   onRemoveQuestionHighlight: (id: string) => void;
   onSaveArea: (page: number, rect: NormalizedHighlightRect, imageDataUrl: string) => void;
@@ -83,6 +84,7 @@ export function PdfViewer({
   onEditDictionaryMeaning,
   onSaveTextAnnotation,
   onEditTextAnnotation,
+  onMoveResizeTextAnnotation,
   onDeleteHighlight,
   onRemoveQuestionHighlight,
   onSaveArea,
@@ -362,7 +364,7 @@ export function PdfViewer({
             {colorMenuTool === "underline" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
           <div className="relative">
-            <ToolButton tool="text" active={tool === "text"} color={annotationColor} onClick={() => handleToolClick("text")} label="텍스트 메모" title={tool === "text" ? "다시 눌러 색상 변경" : "페이지를 눌러 텍스트 메모 작성"}/>
+            <ToolButton tool="text" active={tool === "text"} color={annotationColor} onClick={() => handleToolClick("text")} label="텍스트 메모" title={tool === "text" ? "다시 눌러 색상 변경" : "페이지에서 원하는 크기로 드래그해 텍스트 메모 작성"}/>
             {colorMenuTool === "text" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
           <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
@@ -440,7 +442,7 @@ export function PdfViewer({
           deleteMode={tool === "erase"}
           capturedSelections={savedHighlights
             .filter((selection) => selection.page === index + 1)
-            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow", dictionaryMeaning: selection.dictionaryMeaning, textFontSizeRatio: selection.textFontSizeRatio }))}
+            .map((selection) => ({ annotationId: selection.id, text: selection.text, rects: selection.rects ?? [], kind: selection.kind ?? "highlight", color: selection.color ?? "yellow", dictionaryMeaning: selection.dictionaryMeaning, textFontSizeRatio: selection.textFontSizeRatio, textFontSizePt: selection.textFontSizePt }))}
           savedAreas={savedAreas.filter((area) => area.page === index + 1)}
           scrollRoot={scrollRoot}
           onText={handlePageText}
@@ -448,8 +450,9 @@ export function PdfViewer({
           onAreaSelection={onSaveArea}
           onDeleteAnnotation={onDeleteHighlight}
           onEditDictionaryMeaning={onEditDictionaryMeaning}
-          onTextAnnotation={(text, annotationPage, rect, fontSizeRatio) => onSaveTextAnnotation(text, annotationPage, rect, fontSizeRatio, annotationColor)}
+          onTextAnnotation={(text, annotationPage, rect, fontSizePt) => onSaveTextAnnotation(text, annotationPage, rect, fontSizePt, annotationColor)}
           onEditTextAnnotation={onEditTextAnnotation}
+          onMoveResizeTextAnnotation={onMoveResizeTextAnnotation}
           onDeleteArea={onDeleteArea}
         />)}
       </div>}
