@@ -101,7 +101,7 @@ export function PdfViewer({
   const [loadState, setLoadState] = useState<LoadState>(() => initialCachedResource === null ? "missing" : initialCachedResource ? "ready" : "loading");
   const [error, setError] = useState("");
   const [tool, setTool] = useState<AnnotationTool>("highlight");
-  const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("yellow");
+  const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("pink");
   const [colorMenuTool, setColorMenuTool] = useState<AnnotationKind | null>(null);
   const [zoom, setZoom] = useState(100);
   const [downloadState, setDownloadState] = useState<"idle" | "loading">("idle");

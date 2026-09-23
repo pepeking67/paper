@@ -17,6 +17,7 @@ import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaC
 import { LibraryManager } from "./library/library-manager";
 import { paperUiStorageKey, readPaperUiState, updatePaperUiState } from "@/lib/workspace-state/local-ui-state";
 import type { QuestionContextSnapshot, StudyContext } from "@/lib/ai/provider";
+import { lookupLocalMeaning } from "@/lib/dictionary/local-glossary";
 
 export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const personalLibrary = usePersonalLibrary();
@@ -44,7 +45,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
 }
 
 function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; papers: Paper[]; userId: string }) {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
@@ -184,33 +185,20 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     setPage(highlightPage);
   }
 
-  async function createDictionaryAnnotation(text: string, annotationPage: number, rects: NormalizedHighlightRect[]) {
+  function createDictionaryAnnotation(text: string, annotationPage: number, rects: NormalizedHighlightRect[]) {
+    const cleanText = text.trim();
     const annotation: StudyHighlight = {
       id: crypto.randomUUID(),
-      text: text.trim(),
+      text: cleanText,
       page: annotationPage,
       rects,
       memo: "",
       kind: "dictionary",
-      dictionaryMeaning: "뜻 찾는 중…",
+      dictionaryMeaning: lookupLocalMeaning(cleanText) ?? "뜻을 입력하세요",
       createdAt: new Date().toISOString(),
     };
     updateTray((current) => ({ ...current, highlights: [...current.highlights, annotation] }));
     setPage(annotationPage);
-
-    try {
-      if (!session?.access_token) throw new Error("로그인이 필요합니다.");
-      const response = await fetch("/api/dictionary", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ paperId: activePaper.id, term: annotation.text, pageText: annotationPage === page ? pageText : "" }),
-      });
-      const data = await response.json().catch(() => null) as { meaning?: string; error?: string } | null;
-      if (!response.ok || !data?.meaning?.trim()) throw new Error(data?.error ?? "단어 뜻을 불러오지 못했습니다.");
-      editDictionaryMeaning(annotation.id, data.meaning.trim());
-    } catch {
-      editDictionaryMeaning(annotation.id, "뜻을 직접 입력하세요");
-    }
   }
 
   function editDictionaryMeaning(id: string, meaning: string) {
@@ -379,7 +367,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         onDeleteArea={removeArea}
         onRemoveQuestionArea={removeQuestionArea}
         onSaveHighlight={createHighlight}
-        onSaveDictionary={(text, annotationPage, rects) => void createDictionaryAnnotation(text, annotationPage, rects)}
+        onSaveDictionary={createDictionaryAnnotation}
         onEditDictionaryMeaning={editDictionaryMeaning}
         onDeleteHighlight={removeHighlight}
         onRemoveQuestionHighlight={removeQuestionHighlight}

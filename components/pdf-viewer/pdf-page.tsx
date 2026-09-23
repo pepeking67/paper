@@ -346,7 +346,7 @@ export function PdfPage({
                   {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
                     ? <form
                         className="pointer-events-auto absolute z-[6] flex w-44 items-center gap-1 rounded border border-black/30 bg-white p-1 shadow-lg"
-                        style={{ left: rect.left, top: Math.max(0, rect.top - 30) }}
+                        style={{ left: rect.left, top: rect.top + rect.height + fontSize + 4 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onSubmit={(event) => {
@@ -364,11 +364,11 @@ export function PdfPage({
                         type="button"
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
-                        className="pointer-events-auto absolute z-[5] max-w-[160px] truncate rounded-[2px] bg-white/95 px-0.5 font-semibold text-black shadow-[0_0_2px_rgba(255,255,255,.95)]"
-                        style={{ left: rect.left, top: Math.max(0, rect.top - fontSize - 1), minWidth: Math.min(36, Math.max(12, rect.width)), fontSize, lineHeight: 1 }}
+                        className="pointer-events-auto absolute z-[5] max-w-[160px] truncate px-0.5 font-semibold text-black [text-shadow:0_0_2px_white,0_0_2px_white]"
+                        style={{ left: rect.left, top: rect.top + rect.height + 1, minWidth: Math.min(36, Math.max(12, rect.width)), fontSize, lineHeight: 0.9 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
-                        onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻 찾는 중…" ? "" : meaning }); }}
+                        onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻을 입력하세요" ? "" : meaning }); }}
                       >{meaning}</button>)}
                 </Fragment>;
               }

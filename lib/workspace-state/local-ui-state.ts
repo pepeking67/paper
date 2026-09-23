@@ -3,7 +3,7 @@ import type { AnnotationColor, AnnotationKind } from "@/lib/study-tray/types";
 export type AnnotationTool = AnnotationKind | "area" | "erase";
 
 export type PaperUiState = {
-  version: 2;
+  version: 3;
   page: number;
   scrollOffsetRatio: number;
   zoom: number;
@@ -29,12 +29,12 @@ export function paperUiStorageKey(userId: string, paperId: string) {
 
 export function defaultPaperUiState(): PaperUiState {
   return {
-    version: 2,
+    version: 3,
     page: 1,
     scrollOffsetRatio: 0,
     zoom: 100,
     annotationTool: "highlight",
-    annotationColor: "yellow",
+    annotationColor: "pink",
     chatDraft: "",
     studyTrayOpen: false,
     studyNoteOpen: false,
@@ -50,14 +50,14 @@ export function readPaperUiState(userId: string, paperId: string, storage = getB
   if (!storage) return fallback;
   try {
     const parsed = JSON.parse(storage.getItem(paperUiStorageKey(userId, paperId)) ?? "null") as (Partial<Omit<PaperUiState, "version">> & { version?: number }) | null;
-    if (!parsed || (parsed.version !== 1 && parsed.version !== 2)) return fallback;
+    if (!parsed || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3)) return fallback;
     return {
-      version: 2,
+      version: 3,
       page: clampInteger(parsed.page, 1, 100_000, fallback.page),
       scrollOffsetRatio: clampNumber(parsed.scrollOffsetRatio, 0, 1, fallback.scrollOffsetRatio),
       zoom: clampInteger(parsed.zoom, 75, 250, fallback.zoom),
       annotationTool: annotationTools.has(parsed.annotationTool as AnnotationTool) ? parsed.annotationTool as AnnotationTool : fallback.annotationTool,
-      annotationColor: annotationColors.has(parsed.annotationColor as AnnotationColor) ? parsed.annotationColor as AnnotationColor : fallback.annotationColor,
+      annotationColor: parsed.version < 3 ? "pink" : annotationColors.has(parsed.annotationColor as AnnotationColor) ? parsed.annotationColor as AnnotationColor : fallback.annotationColor,
       chatDraft: typeof parsed.chatDraft === "string" ? parsed.chatDraft.slice(0, 4_000) : fallback.chatDraft,
       studyTrayOpen: typeof parsed.studyTrayOpen === "boolean" ? parsed.studyTrayOpen : fallback.studyTrayOpen,
       studyNoteOpen: typeof parsed.studyNoteOpen === "boolean" ? parsed.studyNoteOpen : fallback.studyNoteOpen,
@@ -77,7 +77,7 @@ export function updatePaperUiState(userId: string, paperId: string, patch: Parti
   const next: PaperUiState = {
     ...current,
     ...patch,
-    version: 2,
+    version: 3,
     page: clampInteger(patch.page ?? current.page, 1, 100_000, current.page),
     scrollOffsetRatio: clampNumber(patch.scrollOffsetRatio ?? current.scrollOffsetRatio, 0, 1, current.scrollOffsetRatio),
     zoom: clampInteger(patch.zoom ?? current.zoom, 75, 250, current.zoom),

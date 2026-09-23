@@ -60,12 +60,18 @@ test("paper UI state validates browser data and keeps question context compact",
   assert.equal(restored.scrollOffsetRatio, 1);
   assert.equal(restored.zoom, 250);
   assert.equal(restored.annotationTool, "highlight");
-  assert.equal(restored.annotationColor, "yellow");
+  assert.equal(restored.annotationColor, "pink");
   assert.equal(restored.chatDraft.length, 4_000);
   assert.equal(restored.studyTrayOpen, false);
   assert.equal(restored.studyTrayMemoDraft, "");
   assert.deepEqual(restored.questionHighlightIds, ["one", "two"]);
   assert.deepEqual(restored.questionAreaIds, ["b", "c", "d", "e"]);
+});
+
+test("legacy viewer color migrates once to the new pink default", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(paperUiStorageKey("account", "paper"), JSON.stringify({ version: 2, annotationColor: "yellow" }));
+  assert.equal(readPaperUiState("account", "paper", storage).annotationColor, "pink");
 });
 
 test("legacy paper chat migrates once into an account-scoped key", () => {

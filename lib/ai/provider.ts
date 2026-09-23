@@ -29,7 +29,6 @@ export type QuestionContextSnapshot = {
 
 export interface AiProvider {
   answerStream(message: string, context: StudyContext, history?: ChatTurn[]): Promise<ReadableStream<Uint8Array>>;
-  defineTerm(term: string, pageContext?: string): Promise<string>;
   composeStudyNote(material: string, areas?: StudyAreaContext[]): Promise<string>;
 }
 
@@ -74,14 +73,6 @@ class GeminiProvider implements AiProvider {
       parts,
       "You are a careful paper-study assistant. Use only the supplied paper context and attached PDF-area images for paper-specific claims. When an image contains an equation, figure, table, or diagram, inspect the image directly rather than guessing from nearby text. Clearly label uncertainty and do not invent quotations. Answer naturally in the user's language. Lead with the direct answer, then give only the essential explanation and evidence. Be concise. Avoid generic introductions, repetition, excessive headings, and exhaustive lists unless the user explicitly asks for depth. Format answers as clean GitHub-flavored Markdown. Use headings only when useful, bullet or numbered lists for structure, Markdown tables when comparison helps, fenced code blocks for code, blockquotes for key quotations, and LaTeX math using $...$ for inline equations or $$...$$ for display equations. Never wrap the entire answer in a Markdown code fence.",
       0.2,
-    );
-  }
-
-  async defineTerm(term: string, pageContext = ""): Promise<string> {
-    const prompt = `Term: ${term.trim().slice(0, 120)}\n\nNearby paper text:\n${pageContext.trim().slice(0, 1_200)}`;
-    return this.generateOnce(
-      [{ text: prompt }],
-      "Give the contextual Korean meaning of the selected English academic term or short phrase. Return only one concise Korean gloss suitable for printing in tiny text above the term. Use at most 24 Korean characters. Do not add Markdown, quotation marks, pronunciation, examples, or a full sentence. If context is insufficient, return the most common academic meaning.",
     );
   }
 
@@ -154,33 +145,6 @@ class GeminiProvider implements AiProvider {
 
       if (lastProviderError) throw lastProviderError;
       throw new Error("GEMINI_RETRY_EXHAUSTED");
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  private async generateOnce(parts: GeminiPart[], systemInstruction: string): Promise<string> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12_000);
-    const model = process.env.GEMINI_DICTIONARY_MODEL?.trim() || this.model;
-
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "x-goog-api-key": this.apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: "user", parts }],
-          generationConfig: { temperature: 0, maxOutputTokens: 64 },
-        }),
-      });
-
-      if (!response.ok) throw new AiProviderRequestError(response.status, await readGeminiError(response), model);
-      const data: unknown = await response.json();
-      const text = extractOutputText(data);
-      if (!text) throw new Error(`GEMINI_EMPTY_RESPONSE: ${describeEmptyResponse(data)}`);
-      return text;
     } finally {
       clearTimeout(timeout);
     }
