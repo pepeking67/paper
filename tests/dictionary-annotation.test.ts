@@ -63,6 +63,8 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(page, /fontSize = Math\.max\(8, Math\.min\(9/);
   assert.match(page, /desiredTop: rect\.top \+ rect\.height \+ 1/);
   assert.match(page, /buildDictionaryBelowLayout/);
+  assert.match(page, /className="pointer-events-auto absolute z-\[5\] truncate bg-transparent/);
+  assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
   assert.match(provider, /maxOutputTokens[\s\S]*thinkingConfig: \{ thinkingBudget: 0 \}/);
@@ -73,6 +75,7 @@ test("PDF text memo tool supports drag placement, resizing, and adjustable 10pt 
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  const globalStyles = await readFile("app/globals.css", "utf8");
 
   assert.equal(textFontSizePtToPixels(10, 792, 792), 10);
   assert.match(viewer, /ToolButton tool="text"/);
@@ -81,10 +84,20 @@ test("PDF text memo tool supports drag placement, resizing, and adjustable 10pt 
   assert.match(page, /onPointerMove=\{moveTextBox\}/);
   assert.match(page, /텍스트 메모 크기 조절/);
   assert.match(page, /TextFontSizeControl/);
+  assert.match(page, /color: "#111"/);
+  assert.match(page, /background: "transparent"/);
+  assert.doesNotMatch(page, /className="pointer-events-auto absolute z-\[5\] overflow-hidden rounded border border-dashed"/);
+  assert.match(page, /pdf-annotation-input/);
+  assert.match(globalStyles, /\.pdf-annotation-input[\s\S]*background: #fff !important;[\s\S]*color: #111 !important;/);
   assert.match(page, /텍스트 메모 수정/);
   assert.match(workspace, /kind: "text"/);
   assert.match(workspace, /textFontSizePt: fontSizePt/);
   assert.match(workspace, /moveResizeTextAnnotation/);
+});
+
+test("personal dictionary and Study Tray header buttons keep their own spacing", async () => {
+  const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
+  assert.match(viewer, /id="study-tray-actions" className="flex items-center gap-2"/);
 });
 
 test("dictionary annotations stay out of Study Tray and study-note material", async () => {

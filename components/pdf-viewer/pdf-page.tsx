@@ -489,8 +489,8 @@ export function PdfPage({
                 if (rectIndex > 0 || !selection.annotationId) return null;
                 const fontSizePt = selection.textFontSizePt ?? legacyTextFontSizePt(selection.textFontSizeRatio, basePageSize.height);
                 const memoFontSize = textFontSizePtToPixels(fontSizePt, surfaceSize.height, basePageSize.height);
-                const textStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, fontSize: memoFontSize, lineHeight: 1.18, color: palette.stroke, borderColor: palette.stroke, background: palette.fill };
-                if (commonProps) return <button key={key} {...commonProps} className="pointer-events-auto absolute z-[5] overflow-hidden whitespace-pre-wrap rounded border border-dashed px-1 py-0.5 text-left font-medium hover:outline hover:outline-1 hover:outline-red-500" style={textStyle}>{selection.text}</button>;
+                const textStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, fontSize: memoFontSize, lineHeight: 1.18, color: "#111", background: "transparent" };
+                if (commonProps) return <button key={key} {...commonProps} className="pointer-events-auto absolute z-[5] overflow-hidden whitespace-pre-wrap px-1 py-0.5 text-left font-medium hover:outline hover:outline-1 hover:outline-red-500" style={textStyle}>{selection.text}</button>;
                 if (textEditor?.id === selection.annotationId) return <form
                   key={key}
                   className="pointer-events-auto absolute z-[7] flex min-w-48 flex-col gap-1 rounded border border-black/30 bg-white p-1 shadow-xl"
@@ -499,16 +499,16 @@ export function PdfPage({
                   onPointerUp={(event) => event.stopPropagation()}
                   onSubmit={(event) => { event.preventDefault(); const value = textEditor.value.trim(); if (value) onEditTextAnnotation(selection.annotationId!, value, textEditor.fontSizePt); setTextEditor(null); }}
                 >
-                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="resize-y rounded border border-black/20 px-1.5 py-1 text-black" style={{ fontSize: `${textEditor.fontSizePt}pt` }}/>
+                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }}/>
                   <TextFontSizeControl value={textEditor.fontSizePt} onChange={(value) => setTextEditor((current) => current ? { ...current, fontSizePt: value } : current)}/>
                   <button type="submit" className="self-end rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
                 </form>;
-                return <div key={key} className="pointer-events-auto absolute z-[5] overflow-hidden rounded border border-dashed" style={textStyle}>
+                return <div key={key} className="pointer-events-auto absolute z-[5] overflow-hidden" style={textStyle}>
                   <button
                     type="button"
                     title="텍스트 메모 수정"
                     className="absolute inset-0 h-full w-full overflow-hidden whitespace-pre-wrap px-1 py-0.5 text-left font-medium"
-                    style={{ fontSize: memoFontSize, lineHeight: 1.18, color: palette.stroke }}
+                    style={{ fontSize: memoFontSize, lineHeight: 1.18, color: "#111" }}
                     onPointerDown={(event) => event.stopPropagation()}
                     onPointerUp={(event) => event.stopPropagation()}
                     onClick={(event) => { event.stopPropagation(); setTextEditor({ id: selection.annotationId!, value: selection.text, fontSizePt }); }}
@@ -550,8 +550,8 @@ export function PdfPage({
                         type="button"
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
-                        className="pointer-events-auto absolute z-[5] truncate rounded-sm bg-white/95 px-0.5 text-left font-semibold text-black shadow-[0_0_2px_white]"
-                        style={{ left: labelPosition?.left ?? rect.left, top: labelPosition?.top ?? rect.top + rect.height + 1, width: labelPosition?.width ?? Math.max(32, rect.width), height: labelPosition?.height ?? 11, fontSize, lineHeight: 1 }}
+                        className="pointer-events-auto absolute z-[5] truncate bg-transparent px-0.5 text-left font-semibold"
+                        style={{ left: labelPosition?.left ?? rect.left, top: labelPosition?.top ?? rect.top + rect.height + 1, width: labelPosition?.width ?? Math.max(32, rect.width), height: labelPosition?.height ?? 11, color: "#111", fontSize, lineHeight: 1 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻을 입력하세요" ? "" : meaning }); }}
@@ -628,7 +628,7 @@ export function PdfPage({
           onPointerUp={(event) => event.stopPropagation()}
           onSubmit={(event) => { event.preventDefault(); const value = textDraft.value.trim(); if (value) onTextAnnotation(value, pageNumber, textDraft.rect, textDraft.fontSizePt); setTextDraft(null); }}
         >
-          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="resize-y rounded border border-black/20 px-1.5 py-1 text-black" style={{ fontSize: `${textDraft.fontSizePt}pt` }}/>
+          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }}/>
           <TextFontSizeControl value={textDraft.fontSizePt} onChange={(value) => setTextDraft((current) => current ? { ...current, fontSizePt: value } : current)}/>
           <div className="flex justify-end gap-1"><button type="button" onClick={() => setTextDraft(null)} className="rounded px-2 py-1 text-[10px] text-black/60">취소</button><button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button></div>
         </form>}
@@ -692,9 +692,9 @@ function clampTextFontSize(value: number) {
 }
 
 function TextFontSizeControl({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <label className="flex items-center gap-2 text-[10px] text-black/70">
+  return <label className="flex items-center gap-2 text-[10px]" style={{ color: "#111" }}>
     글자 크기
-    <input type="number" min={6} max={32} step={1} value={value} onChange={(event) => onChange(clampTextFontSize(Number(event.target.value)))} className="h-7 w-16 rounded border border-black/20 px-2 text-xs text-black"/>
+    <input type="number" min={6} max={32} step={1} value={value} onChange={(event) => onChange(clampTextFontSize(Number(event.target.value)))} className="pdf-annotation-input h-7 w-16 rounded border border-black/20 px-2 text-xs"/>
     <span>pt</span>
   </label>;
 }

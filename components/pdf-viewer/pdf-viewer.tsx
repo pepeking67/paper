@@ -335,7 +335,7 @@ export function PdfViewer({
           <p className="hidden shrink-0 truncate text-[10px] text-[var(--muted)] xl:block">{paper.authors} · {paper.year ?? "연도 미상"}</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
-          <div id="study-tray-actions" className="flex items-center"/>
+          <div id="study-tray-actions" className="flex items-center gap-2"/>
           <button
             type="button"
             onClick={onToggleChat}
