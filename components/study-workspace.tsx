@@ -16,6 +16,10 @@ import { useAuth } from "./auth/auth-provider";
 import { flushAreaDeletionQueue, loadAreaDataUrl, queueAreaDeletion, uploadAreaCrop } from "@/lib/area-assets/area-storage";
 import { LibraryManager } from "./library/library-manager";
 import { paperUiStorageKey, readPaperUiState, updatePaperUiState } from "@/lib/workspace-state/local-ui-state";
+import type { QuestionContextSnapshot, StudyContext } from "@/lib/ai/provider";
+import { usePersonalDictionary } from "@/lib/dictionary/use-personal-dictionary";
+import { PersonalDictionary } from "./dictionary/personal-dictionary";
+import { isPendingDictionaryMeaning, normalizeDictionaryTerm } from "@/lib/dictionary/terms";
 
 export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const personalLibrary = usePersonalLibrary();
@@ -43,11 +47,15 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
 }
 
 function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; papers: Paper[]; userId: string }) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
   const studyState = useStudyState(activePaper.id);
+  const dictionaryState = usePersonalDictionary();
+  const dictionarySnapshotRef = useRef({ status: dictionaryState.status, findMeaning: dictionaryState.findMeaning });
+  dictionarySnapshotRef.current = { status: dictionaryState.status, findMeaning: dictionaryState.findMeaning };
+  const dictionaryLookupIds = useRef(new Set<string>());
   const { tray } = studyState;
   const [questionHighlights, setQuestionHighlights] = useState<StudyHighlight[]>([]);
   const [questionAreas, setQuestionAreas] = useState<StudyArea[]>([]);
@@ -63,6 +71,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     setQuestionHighlights([]);
     setQuestionAreas([]);
     setRestoredPaperUiKey("");
+    dictionaryLookupIds.current.clear();
   }, [paperUiKey]);
 
   useEffect(() => {
@@ -183,6 +192,125 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     setPage(highlightPage);
   }
 
+  function createDictionaryAnnotation(text: string, annotationPage: number, rects: NormalizedHighlightRect[], definitionPageText: string) {
+    const cleanText = text.trim().slice(0, 200);
+    if (!cleanText) return;
+    const cachedMeaning = dictionaryState.findMeaning(cleanText);
+    const annotation: StudyHighlight = {
+      id: crypto.randomUUID(),
+      text: cleanText,
+      page: annotationPage,
+      rects,
+      memo: "",
+      kind: "dictionary",
+      dictionaryMeaning: cachedMeaning ?? "뜻 찾는 중…",
+      createdAt: new Date().toISOString(),
+    };
+    updateTray((current) => ({ ...current, highlights: [...current.highlights, annotation] }));
+    setPage(annotationPage);
+    if (!cachedMeaning) {
+      dictionaryLookupIds.current.add(annotation.id);
+      void resolveDictionaryMeaning(annotation.id, cleanText, definitionPageText);
+    }
+  }
+
+  async function resolveDictionaryMeaning(annotationId: string, term: string, definitionPageText: string) {
+    // A selection can happen while the account dictionary is still restoring.
+    // Wait briefly so an existing account entry always wins over a Gemini call.
+    for (let attempt = 0; attempt < 20 && dictionarySnapshotRef.current.status === "loading"; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    const accountMeaning = dictionarySnapshotRef.current.findMeaning(term);
+    if (accountMeaning) {
+      setDictionaryAnnotationMeaning(annotationId, accountMeaning);
+      return;
+    }
+    if (!session?.access_token) {
+      setDictionaryAnnotationMeaning(annotationId, "뜻을 입력하세요");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/dictionary", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ paperId: activePaper.id, term, pageText: definitionPageText }),
+      });
+      const data = await response.json().catch(() => null) as { meaning?: unknown } | null;
+      if (!response.ok || typeof data?.meaning !== "string" || !data.meaning.trim()) throw new Error("DICTIONARY_LOOKUP_FAILED");
+      const meaning = data.meaning.trim().slice(0, 100);
+      setDictionaryAnnotationMeaning(annotationId, meaning);
+      dictionaryState.upsert(term, meaning);
+    } catch {
+      setDictionaryAnnotationMeaning(annotationId, "뜻을 입력하세요");
+    }
+  }
+
+  function setDictionaryAnnotationMeaning(id: string, meaning: string) {
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, dictionaryMeaning: meaning, dictionaryUpdatedAt: new Date().toISOString() } : item),
+    }));
+  }
+
+  function editDictionaryMeaning(id: string, meaning: string) {
+    const clean = meaning.trim().slice(0, 100);
+    if (!clean) return;
+    const term = tray.highlights.find((item) => item.id === id)?.text;
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, dictionaryMeaning: clean, dictionaryUpdatedAt: new Date().toISOString() } : item),
+    }));
+    if (term) dictionaryState.upsert(term, clean);
+  }
+
+  function editPersonalDictionary(term: string, meaning: string) {
+    const clean = meaning.trim().slice(0, 100);
+    const normalized = normalizeDictionaryTerm(term);
+    if (!clean || !normalized) return;
+    dictionaryState.upsert(term, clean);
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.kind === "dictionary" && normalizeDictionaryTerm(item.text) === normalized
+        ? { ...item, dictionaryMeaning: clean, dictionaryUpdatedAt: new Date().toISOString() }
+        : item),
+    }));
+  }
+
+  function createTextAnnotation(text: string, annotationPage: number, rect: NormalizedHighlightRect, fontSizePt: number, color: AnnotationColor) {
+    const clean = text.trim().slice(0, 1_000);
+    if (!clean) return;
+    const annotation: StudyHighlight = {
+      id: crypto.randomUUID(),
+      text: clean,
+      page: annotationPage,
+      rects: [rect],
+      memo: "",
+      kind: "text",
+      color,
+      textFontSizePt: fontSizePt,
+      createdAt: new Date().toISOString(),
+    };
+    updateTray((current) => ({ ...current, highlights: [...current.highlights, annotation] }));
+    setPage(annotationPage);
+  }
+
+  function editTextAnnotation(id: string, text: string, fontSizePt: number) {
+    const clean = text.trim().slice(0, 1_000);
+    if (!clean) return;
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, text: clean, textFontSizePt: clampTextFontSize(fontSizePt) } : item),
+    }));
+  }
+
+  function moveResizeTextAnnotation(id: string, rect: NormalizedHighlightRect) {
+    updateTray((current) => ({
+      ...current,
+      highlights: current.highlights.map((item) => item.id === id ? { ...item, rects: [rect] } : item),
+    }));
+  }
+
   function removeHighlight(id: string) {
     updateTray((current) => ({ ...current, highlights: current.highlights.filter((item) => item.id !== id) }));
     setQuestionHighlights((current) => current.filter((item) => item.id !== id));
@@ -260,6 +388,21 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, activePaper.id, studyState.status, (tray.areas ?? []).map((area) => `${area.id}:${area.storagePath ?? "pending"}`).join("|")]);
 
+  useEffect(() => {
+    if (!session?.access_token || studyState.status === "loading" || dictionaryState.status === "loading") return;
+    const pending = tray.highlights.filter((item) => item.kind === "dictionary"
+      && isPendingDictionaryMeaning(item.dictionaryMeaning)
+      && !dictionaryLookupIds.current.has(item.id));
+    if (!pending.length) return;
+    for (const item of pending) dictionaryLookupIds.current.add(item.id);
+    void (async () => {
+      // Retry old annotations sequentially to avoid a burst of Gemini requests.
+      for (const item of pending) await resolveDictionaryMeaning(item.id, item.text, item.page === page ? pageText : "");
+    })();
+  // The lookup ID set prevents duplicate requests while tray updates arrive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePaper.id, dictionaryState.status, page, pageText, session?.access_token, studyState.status, tray.highlights]);
+
   const selectedText = useMemo(
     () => questionHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
     [questionHighlights],
@@ -272,6 +415,38 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     selectedAreas: questionAreas.flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []),
     pageText,
   }), [activePaper.id, page, selectedText, questionAreas, pageText]);
+
+  const displayedHighlights = tray.highlights.map((item) => {
+    if (item.kind !== "dictionary") return item;
+    const accountMeaning = dictionaryState.findMeaning(item.text);
+    return accountMeaning && accountMeaning !== item.dictionaryMeaning ? { ...item, dictionaryMeaning: accountMeaning } : item;
+  });
+
+  async function replayQuestionContext(snapshot: QuestionContextSnapshot): Promise<StudyContext> {
+    const highlightIds = new Set(snapshot.highlightIds);
+    const areaIds = new Set(snapshot.areaIds);
+    const restoredHighlights = tray.highlights.filter((item) => highlightIds.has(item.id));
+    const restoredAreas = (await Promise.all((tray.areas ?? [])
+      .filter((item) => areaIds.has(item.id))
+      .slice(0, 4)
+      .map(async (area) => {
+        if (area.imageDataUrl || !area.storagePath) return area;
+        try { return { ...area, imageDataUrl: await loadAreaDataUrl(area.storagePath) }; }
+        catch { return null; }
+      })))
+      .filter((area): area is StudyArea => area !== null);
+
+    setQuestionHighlights(restoredHighlights);
+    setQuestionAreas(restoredAreas);
+    setPage(snapshot.page);
+    return {
+      paperId: activePaper.id,
+      page: snapshot.page,
+      selectedText: restoredHighlights.map((item) => `[p.${item.page}] ${item.text}`).join("\n\n"),
+      selectedAreas: restoredAreas.flatMap((area) => area.imageDataUrl ? [{ id: area.id, page: area.page, imageDataUrl: area.imageDataUrl }] : []),
+      pageText: snapshot.page === page ? pageText : undefined,
+    };
+  }
 
   return <main
     className="study-workspace relative grid h-dvh min-h-0 grid-cols-1 overflow-hidden"
@@ -306,7 +481,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         page={page}
         onPageChange={setPage}
         onPageTextChange={setPageText}
-        savedHighlights={tray.highlights}
+        savedHighlights={displayedHighlights}
         savedAreas={tray.areas ?? []}
         questionHighlights={questionHighlights}
         questionAreas={questionAreas}
@@ -314,6 +489,11 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         onDeleteArea={removeArea}
         onRemoveQuestionArea={removeQuestionArea}
         onSaveHighlight={createHighlight}
+        onSaveDictionary={createDictionaryAnnotation}
+        onEditDictionaryMeaning={editDictionaryMeaning}
+        onSaveTextAnnotation={createTextAnnotation}
+        onEditTextAnnotation={editTextAnnotation}
+        onMoveResizeTextAnnotation={moveResizeTextAnnotation}
         onDeleteHighlight={removeHighlight}
         onRemoveQuestionHighlight={removeQuestionHighlight}
         onClearQuestionContext={clearQuestionAnnotations}
@@ -325,7 +505,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
       />
     </div>
 
-    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 w-[min(92vw,420px)] min-w-0 shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:shadow-none">
+    {chatOpen && <div className="fixed inset-y-0 right-0 z-50 h-dvh min-h-0 w-[min(92vw,420px)] min-w-0 overflow-hidden shadow-[-24px_0_70px_rgba(0,0,0,.38)] md:relative md:inset-auto md:z-auto md:h-full md:w-auto md:max-w-none md:shadow-none">
       <div
         role="separator"
         aria-label="질의응답 패널 크기 조절"
@@ -348,6 +528,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
         onClearQuestionContext={clearQuestionAnnotations}
         onClose={() => setChatVisibility(false)}
         onQuestionContextConsumed={clearQuestionAnnotations}
+        onReplayQuestionContext={replayQuestionContext}
         onSaveInsight={(question, answer) => updateTray((current) => {
           if (current.insights.some((insight) => insight.question === question && insight.answer === answer)) return current;
           return { ...current, insights: [...current.insights, { id: crypto.randomUUID(), question, answer, page, sourceText: selectedText || undefined, createdAt: new Date().toISOString() }] };
@@ -358,12 +539,22 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     <StudySyncStatusView status={studyState.status} conflict={studyState.conflict} onUseServer={() => void studyState.chooseServerVersion()} onUseDevice={() => void studyState.chooseDeviceVersion()} />
     <StudyTray
       paper={activePaper}
+      storageScope={userId}
       tray={tray}
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}
       onUseArea={useAreaForQuestion}
       noteMarkdown={studyState.noteMarkdown}
       onNoteChange={studyState.updateNote}
+    />
+    <PersonalDictionary
+      entries={dictionaryState.entries}
+      status={dictionaryState.status}
+      conflict={dictionaryState.conflict}
+      onEdit={editPersonalDictionary}
+      onRemove={dictionaryState.remove}
+      onUseServer={() => void dictionaryState.chooseServerVersion()}
+      onUseDevice={() => void dictionaryState.chooseDeviceVersion()}
     />
   </main>;
 }
@@ -404,4 +595,8 @@ function clampChatWidth(value: number, viewportWidth: number, libraryOpen: boole
   const minimumPdfWidth = 320;
   const maximum = Math.max(minimum, Math.min(760, viewportWidth - libraryWidth - minimumPdfWidth));
   return Math.round(Math.max(minimum, Math.min(maximum, value)));
+}
+
+function clampTextFontSize(value: number) {
+  return Math.max(6, Math.min(32, Number.isFinite(value) ? value : 10));
 }

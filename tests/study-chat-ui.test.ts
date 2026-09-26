@@ -12,8 +12,23 @@ test("study chat offers annotation-aware prompts and consumes used context", asy
   assert.match(chat, /ask\(item\.prompt\)/);
   assert.match(chat, /questionHighlights\.length \+ questionAreas\.length/);
   assert.match(chat, /aria-label="질문 문맥"/);
-  assert.match(chat, /usedAnnotationContext = hasAnnotationContext/);
+  assert.match(chat, /usedAnnotationContext = snapshot\.highlightIds\.length \+ snapshot\.areaIds\.length > 0/);
   assert.match(chat, /if \(usedAnnotationContext\) onQuestionContextConsumed\?\.\(\)/);
+});
+
+test("past questions can be resent with their original annotation context", async () => {
+  const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+  const route = await readFile("app/api/chat/route.ts", "utf8");
+
+  assert.match(chat, /questionContext: snapshot/);
+  assert.match(chat, /다시 질문/);
+  assert.match(chat, /onReplayQuestionContext\(snapshot\)/);
+  assert.match(chat, /표시 \$\{message\.questionContext\.highlightIds\.length \+ message\.questionContext\.areaIds\.length\}개 포함/);
+  assert.match(workspace, /async function replayQuestionContext/);
+  assert.match(workspace, /loadAreaDataUrl\(area\.storagePath\)/);
+  assert.match(workspace, /tray\.highlights\.filter\(\(item\) => highlightIds\.has\(item\.id\)\)/);
+  assert.match(route, /\.map\(\(turn\) => \(\{ role: turn\.role, content: turn\.content \}\)\)/);
 });
 
 test("saved insights become visibly disabled and duplicate saves are blocked", async () => {
@@ -25,4 +40,15 @@ test("saved insights become visibly disabled and duplicate saves are blocked", a
   assert.match(chat, /data-saved=\{insightSaved \? "true" : "false"\}/);
   assert.match(workspace, /savedInsights=\{tray\.insights\}/);
   assert.match(workspace, /current\.insights\.some\(\(insight\) => insight\.question === question && insight\.answer === answer\)/);
+});
+
+test("long chat answers scroll while the question form stays visible", async () => {
+  const chat = await readFile("components/study-chat/study-chat.tsx", "utf8");
+  const workspace = await readFile("components/study-workspace.tsx", "utf8");
+
+  assert.match(chat, /h-full min-h-0 flex-col overflow-hidden/);
+  assert.match(chat, /aria-label="질의응답 대화 내용"/);
+  assert.match(chat, /h-0 min-h-0 flex-1 touch-pan-y[^\"]*overflow-y-auto/);
+  assert.match(chat, /<form onSubmit=\{submit\} className="shrink-0/);
+  assert.match(workspace, /h-dvh min-h-0[^\"]*overflow-hidden[^\"]*md:h-full/);
 });

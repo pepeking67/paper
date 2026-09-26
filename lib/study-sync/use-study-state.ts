@@ -11,6 +11,7 @@ type ServerRow = { tray: unknown; note_markdown: string; revision: number; updat
 
 export function useStudyState(paperId: string) {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [tray, setTrayState] = useState<StudyTrayData>(emptyStudyTray);
   const [noteMarkdown, setNoteState] = useState("");
   const [status, setStatus] = useState<StudySyncStatus>("loading");
@@ -29,10 +30,9 @@ export function useStudyState(paperId: string) {
   const syncNow = useCallback(async () => {
     const client = getBrowserSupabase();
     const current = cacheRef.current;
-    const currentUser = user;
-    const identity = `${currentUser?.id ?? "guest"}:${paperId}`;
-    if (!client || !currentUser || !current?.dirty || identityRef.current !== identity || conflictRef.current) return;
-    const userId = currentUser.id;
+    const identity = `${userId ?? "guest"}:${paperId}`;
+    if (!client || !userId || !current?.dirty || identityRef.current !== identity || conflictRef.current) return;
+    const ownerId = userId;
     if (!navigator.onLine) { setStatus("offline"); return; }
     setStatus("syncing");
     const serverTray = sanitizeTrayForServer(current.tray);
@@ -40,14 +40,14 @@ export function useStudyState(paperId: string) {
 
     if (current.baseRevision === 0) {
       const { data, error } = await client.from("paper_study_states").insert({
-        user_id: userId,
+        user_id: ownerId,
         paper_id: paperId,
         tray: serverTray,
         note_markdown: current.noteMarkdown,
         revision: nextRevision,
       }).select("tray,note_markdown,revision,updated_at").maybeSingle();
       if (error || !data) {
-        const remote = await fetchServerRow(userId, paperId);
+        const remote = await fetchServerRow(ownerId, paperId);
         if (remote) showConflict(current, remote);
         else setStatus("error");
         return;
@@ -61,11 +61,11 @@ export function useStudyState(paperId: string) {
       note_markdown: current.noteMarkdown,
       revision: nextRevision,
       updated_at: new Date().toISOString(),
-    }).eq("user_id", userId).eq("paper_id", paperId).eq("revision", current.baseRevision)
+    }).eq("user_id", ownerId).eq("paper_id", paperId).eq("revision", current.baseRevision)
       .select("tray,note_markdown,revision,updated_at").maybeSingle();
     if (error) { setStatus("error"); return; }
     if (!data) {
-      const remote = await fetchServerRow(userId, paperId);
+      const remote = await fetchServerRow(ownerId, paperId);
       if (remote) showConflict(current, remote);
       else setStatus("error");
       return;
@@ -76,7 +76,7 @@ export function useStudyState(paperId: string) {
       if (identityRef.current !== identity) return;
       const saved: AccountStudyCache = { ...local, baseRevision: row.revision, dirty: false, updatedAt: row.updated_at };
       cacheRef.current = saved;
-      try { writeAccountCache(userId, paperId, saved); } catch { /* Server remains authoritative after sync. */ }
+      try { writeAccountCache(ownerId, paperId, saved); } catch { /* Server remains authoritative after sync. */ }
       setStatus("synced");
     }
 
@@ -90,7 +90,7 @@ export function useStudyState(paperId: string) {
       setConflict(nextConflict);
       setStatus("conflict");
     }
-  }, [paperId, user]);
+  }, [paperId, userId]);
 
   const scheduleSync = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -99,13 +99,13 @@ export function useStudyState(paperId: string) {
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    const identity = `${user?.id ?? "guest"}:${paperId}`;
+    const identity = `${userId ?? "guest"}:${paperId}`;
     identityRef.current = identity;
     conflictRef.current = null;
     setConflict(null);
     let cancelled = false;
 
-    if (!user) {
+    if (!userId) {
       cacheRef.current = null;
       setTrayState(emptyStudyTray());
       setNoteState("");
@@ -115,7 +115,7 @@ export function useStudyState(paperId: string) {
 
     // The personal paper UUID is the only study-state identity.
     // Never import legacy/global paper IDs into an authenticated account.
-    const cached = readAccountCache(user.id, paperId);
+    const cached = readAccountCache(userId, paperId);
     const initial = cached ?? {
       tray: emptyStudyTray(),
       noteMarkdown: "",
@@ -126,7 +126,7 @@ export function useStudyState(paperId: string) {
     applyCache(initial);
     setStatus(initial.dirty ? "saved-local" : "loading");
 
-    void fetchServerRow(user.id, paperId).then((remote) => {
+    void fetchServerRow(userId, paperId).then((remote) => {
       if (cancelled || identityRef.current !== identity) return;
       if (!remote) {
         if (initial.dirty) scheduleSync();
@@ -146,23 +146,23 @@ export function useStudyState(paperId: string) {
       if (initial.dirty) { scheduleSync(); return; }
       const next: AccountStudyCache = { tray: normalizeTray(remote.tray), noteMarkdown: remote.note_markdown, baseRevision: remote.revision, dirty: false, updatedAt: remote.updated_at };
       applyCache(next);
-      try { writeAccountCache(user.id, paperId, next); } catch { /* Continue with in-memory state. */ }
+      try { writeAccountCache(userId, paperId, next); } catch { /* Continue with in-memory state. */ }
       setStatus("synced");
     });
 
     return () => { cancelled = true; };
-  }, [applyCache, paperId, scheduleSync, user]);
+  }, [applyCache, paperId, scheduleSync, userId]);
 
   useEffect(() => {
     function reconnect() { if (cacheRef.current?.dirty) { setStatus("saved-local"); void syncNow(); } }
-    function disconnect() { if (user) setStatus("offline"); }
+    function disconnect() { if (userId) setStatus("offline"); }
     window.addEventListener("online", reconnect);
     window.addEventListener("offline", disconnect);
     return () => { window.removeEventListener("online", reconnect); window.removeEventListener("offline", disconnect); };
-  }, [syncNow, user]);
+  }, [syncNow, userId]);
 
   function persistLocal(nextTray: StudyTrayData, nextNote: string) {
-    if (!user) {
+    if (!userId) {
       try {
         localStorage.setItem(`paper-study-tray:${paperId}`, JSON.stringify(nextTray));
         localStorage.setItem(`paper-study-note:${paperId}`, nextNote);
@@ -173,7 +173,7 @@ export function useStudyState(paperId: string) {
     const previous = cacheRef.current ?? { tray: emptyStudyTray(), noteMarkdown: "", baseRevision: 0, dirty: false, updatedAt: new Date(0).toISOString() };
     const next: AccountStudyCache = { ...previous, tray: nextTray, noteMarkdown: nextNote, dirty: true, updatedAt: new Date().toISOString() };
     cacheRef.current = next;
-    try { writeAccountCache(user.id, paperId, next); } catch { /* In-memory state still contains the edit. */ }
+    try { writeAccountCache(userId, paperId, next); } catch { /* In-memory state still contains the edit. */ }
     setStatus(navigator.onLine ? "saved-local" : "offline");
     scheduleSync();
   }
@@ -192,28 +192,28 @@ export function useStudyState(paperId: string) {
   }
 
   async function chooseServerVersion() {
-    if (!user || !conflict) return;
+    if (!userId || !conflict) return;
     const next: AccountStudyCache = { tray: conflict.server.tray, noteMarkdown: conflict.server.noteMarkdown, baseRevision: conflict.server.revision, dirty: false, updatedAt: conflict.server.updatedAt };
     applyCache(next);
-    try { writeAccountCache(user.id, paperId, next); } catch { /* In-memory state still resolves the conflict. */ }
+    try { writeAccountCache(userId, paperId, next); } catch { /* In-memory state still resolves the conflict. */ }
     conflictRef.current = null;
     setConflict(null);
     setStatus("synced");
   }
 
   async function chooseDeviceVersion() {
-    if (!user || !conflict) return;
+    if (!userId || !conflict) return;
     const next: AccountStudyCache = { tray: conflict.device.tray, noteMarkdown: conflict.device.noteMarkdown, baseRevision: conflict.server.revision, dirty: true, updatedAt: new Date().toISOString() };
     applyCache(next);
-    try { writeAccountCache(user.id, paperId, next); } catch { /* In-memory state still resolves the conflict. */ }
+    try { writeAccountCache(userId, paperId, next); } catch { /* In-memory state still resolves the conflict. */ }
     conflictRef.current = null;
     setConflict(null);
     setStatus("saved-local");
   }
 
   useEffect(() => {
-    if (user && !conflict && status === "saved-local" && cacheRef.current?.dirty) scheduleSync();
-  }, [conflict, scheduleSync, status, user]);
+    if (userId && !conflict && status === "saved-local" && cacheRef.current?.dirty) scheduleSync();
+  }, [conflict, scheduleSync, status, userId]);
 
   return { tray, noteMarkdown, status, conflict, updateTray, updateNote, chooseServerVersion, chooseDeviceVersion, syncNow };
 }

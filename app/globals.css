@@ -45,6 +45,12 @@ input, textarea {
 input::placeholder, textarea::placeholder { color: #7d7d82 !important; }
 select { color-scheme: dark; }
 
+/* PDF annotation editors sit on the white paper surface, outside the dark app chrome. */
+.pdf-annotation-input {
+  background: #fff !important;
+  color: #111 !important;
+}
+
 .scrollbar { scrollbar-color: rgba(255,255,255,.22) transparent; scrollbar-width: thin; }
 
 .study-workspace { grid-template-columns: minmax(0, 1fr); background: #0b0b0c !important; }

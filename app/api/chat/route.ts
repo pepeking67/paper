@@ -10,8 +10,14 @@ export async function POST(request: Request) {
   const provider = getAiProvider();
   if (!provider) return NextResponse.json({ error: "Gemini API is not configured", code: "AI_NOT_CONFIGURED" }, { status: 503 });
   try {
-    const message = await provider.answer(body.message, sanitizeContext(body.context), sanitizeHistory(body.history));
-    return NextResponse.json({ message });
+    const stream = await provider.answerStream(body.message, sanitizeContext(body.context), sanitizeHistory(body.history));
+    return new Response(stream, {
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        "x-content-type-options": "nosniff",
+      },
+    });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json({ error: "AI 응답 시간이 초과되었습니다. 잠시 후 다시 시도하세요.", code: "AI_TIMEOUT" }, { status: 504 });
@@ -40,7 +46,7 @@ export async function POST(request: Request) {
 }
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function isChatRequest(value: unknown): value is { message: string; context: StudyContext; history?: ChatTurn[] } {
   if (!value || typeof value !== "object") return false;
@@ -74,5 +80,8 @@ function isSafeAreaContext(value: unknown): value is StudyAreaContext {
 
 function sanitizeHistory(history: ChatTurn[] | undefined): ChatTurn[] {
   if (!Array.isArray(history)) return [];
-  return history.filter((turn) => (turn?.role === "user" || turn?.role === "assistant") && typeof turn.content === "string").slice(-8);
+  return history
+    .filter((turn) => (turn?.role === "user" || turn?.role === "assistant") && typeof turn.content === "string")
+    .slice(-8)
+    .map((turn) => ({ role: turn.role, content: turn.content }));
 }

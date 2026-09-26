@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import type { ChatTurn, StudyContext } from "@/lib/ai/provider";
+import type { ChatTurn, QuestionContextSnapshot, StudyContext } from "@/lib/ai/provider";
 import type { Paper } from "@/lib/papers/types";
 import type { StudyArea, StudyHighlight, StudyInsight } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
@@ -22,6 +22,7 @@ export function StudyChat({
   onClose,
   onHistoryChange,
   onQuestionContextConsumed,
+  onReplayQuestionContext,
 }: {
   paper: Paper;
   storageScope: string;
@@ -36,6 +37,7 @@ export function StudyChat({
   onClose: () => void;
   onHistoryChange?: (messages: ChatTurn[]) => void;
   onQuestionContextConsumed?: () => void;
+  onReplayQuestionContext: (snapshot: QuestionContextSnapshot) => Promise<StudyContext>;
 }) {
   const { session } = useAuth();
   const [input, setInput] = useState("");
@@ -85,21 +87,50 @@ export function StudyChat({
     updatePaperUiState(storageScope, paper.id, { chatDraft: value });
   }
 
-  async function ask(value: string) {
+  async function ask(value: string, replaySnapshot?: QuestionContextSnapshot) {
     const question = value.trim();
     if (!question || loading) return;
     const previous = messages;
-    const usedAnnotationContext = hasAnnotationContext;
-    save([...previous, { role: "user", content: question }]);
     updateInput(""); setLoading(true); setError("");
+    let streamedAnswer = "";
+    let pending: ChatTurn[] | null = null;
     try {
       if (!session?.access_token) throw new Error("로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.");
-      const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: question, context, history: previous.slice(-8) }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error ?? "AI 응답 실패"}`);
-      save([...previous, { role: "user", content: question }, { role: "assistant", content: data.message }]);
+      const snapshot = replaySnapshot ?? {
+        page: context.page,
+        highlightIds: questionHighlights.map((item) => item.id),
+        areaIds: questionAreas.map((item) => item.id),
+      };
+      const requestContext = replaySnapshot ? await onReplayQuestionContext(snapshot) : context;
+      const usedAnnotationContext = snapshot.highlightIds.length + snapshot.areaIds.length > 0;
+      pending = [...previous, { role: "user" as const, content: question, sourcePage: snapshot.page, questionContext: snapshot }];
+      save(pending);
+      const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: question, context: requestContext, history: previous.slice(-8) }) });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { code?: string; error?: string } | null;
+        throw new Error(`${data?.code ? `[${data.code}] ` : ""}${data?.error ?? "AI 응답 실패"}`);
+      }
+      if (!response.body) throw new Error("AI 응답 스트림을 시작하지 못했습니다.");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        streamedAnswer += decoder.decode(chunk.value, { stream: true });
+        setMessages([...pending, { role: "assistant", content: streamedAnswer }]);
+      }
+      streamedAnswer += decoder.decode();
+      if (!streamedAnswer.trim()) throw new Error("Gemini가 빈 응답을 반환했습니다. 다시 시도하세요.");
+      save([...pending, { role: "assistant", content: streamedAnswer }]);
       if (usedAnnotationContext) onQuestionContextConsumed?.();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "AI 응답 실패"); }
+    } catch (caught) {
+      if (streamedAnswer.trim()) {
+        const latest = pending ?? [...previous, { role: "user" as const, content: question }];
+        save([...latest, { role: "assistant", content: streamedAnswer }]);
+      }
+      setError(caught instanceof Error ? caught.message : "AI 응답 실패");
+    }
     finally { setLoading(false); }
   }
 
@@ -108,8 +139,8 @@ export function StudyChat({
     void ask(input);
   }
 
-  return <aside className="flex h-full min-h-0 flex-col border-l border-[var(--line)] bg-black" aria-label="학습 대화">
-    <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] p-3.5">
+  return <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-[var(--line)] bg-black" aria-label="학습 대화">
+    <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] p-3.5">
       <div className="min-w-0">
         <div className="flex items-center gap-2"><p className="text-[11px] font-semibold tracking-[.12em] text-[var(--accent)]">STUDY CHAT</p>{contextCount > 0 && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[#8ec5ff]">문맥 {contextCount}</span>}</div>
         <h2 className="mt-0.5 truncate font-medium">논문에 질문하기</h2>
@@ -120,14 +151,14 @@ export function StudyChat({
       </div>
     </header>
 
-    {contextCount > 0 && <section className="border-b border-[var(--line)] bg-black/80 px-3.5 py-3" aria-label="질문 문맥">
+    {contextCount > 0 && <section className="shrink-0 border-b border-[var(--line)] bg-black/80 px-3.5 py-3" aria-label="질문 문맥">
       <div className="flex items-center justify-between gap-3">
         <div><p className="text-xs font-medium text-[#e5e5ea]">질문 문맥</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">다음 질문에만 사용되고 답변 성공 후 자동으로 비워집니다.</p></div>
         <button type="button" onClick={onClearQuestionContext} className="shrink-0 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--muted)] hover:bg-white/[.06] hover:text-white">전체 비우기</button>
       </div>
       <div className="scrollbar mt-2.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto pr-1">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-white/[.045] py-1 pl-2.5 pr-1 text-[11px]">
-          <span className="max-w-[290px] truncate">p.{highlight.page} · {(highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
+          <span className="max-w-[290px] truncate">p.{highlight.page} · {highlight.kind === "dictionary" ? "사전" : (highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
           <button type="button" onClick={() => onRemoveQuestionHighlight(highlight.id)} aria-label={`Page ${highlight.page} 질문 문맥에서 제외`} className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-white/[.08] hover:text-white">×</button>
         </span>)}
         {questionAreas.map((area) => <span key={area.id} className="flex items-center gap-1.5 rounded-lg border border-sky-500/35 bg-white/[.045] py-1 pl-1 pr-1 text-[11px]">
@@ -138,7 +169,7 @@ export function StudyChat({
       </div>
     </section>}
 
-    <div className="scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+    <div className="scrollbar h-0 min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto overscroll-contain p-4" aria-label="질의응답 대화 내용">
       {messages.length === 0 && <div className="rounded-xl border border-[var(--line)] bg-[#111] p-4 text-sm leading-relaxed text-[#bbb]">Gemini API가 현재 페이지와 형광펜·밑줄·영역으로 표시한 질문 문맥, 최근 대화를 사용해 답합니다. 답변은 Markdown과 수식 문법을 렌더링합니다. 일반 대화는 Study Tray에 자동 저장되지 않으며, 남기고 싶은 답변만 <strong>Save Insight</strong>로 저장합니다.</div>}
       {messages.map((message, index) => {
         const previousQuestion = message.role === "assistant" && messages[index - 1]?.role === "user" ? messages[index - 1].content : null;
@@ -146,6 +177,13 @@ export function StudyChat({
         return <div key={`${message.role}-${index}`} className={`rounded-2xl p-3.5 text-sm leading-relaxed ${message.role === "user" ? "ml-7 bg-[var(--accent)] text-white" : "mr-7 border border-[var(--line)] bg-[rgba(255,255,255,.045)]"}`}>
           <p className={`mb-2 text-[10px] uppercase tracking-wider ${message.role === "user" ? "text-white/65" : "text-[var(--muted)]"}`}>{message.role === "user" ? "You" : "Gemini"}</p>
           {message.role === "assistant" ? <MarkdownContent content={message.content} compact /> : <p className="whitespace-pre-wrap">{message.content}</p>}
+          {message.role === "user" && <button
+            type="button"
+            disabled={loading}
+            title="이 질문과 당시 사용한 표시 문맥을 다시 전송"
+            onClick={() => void ask(message.content, message.questionContext ?? { page: message.sourcePage ?? context.page, highlightIds: [], areaIds: [] })}
+            className="mt-3 rounded-lg border border-white/25 px-2.5 py-1.5 text-xs font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+          >다시 질문{message.questionContext && message.questionContext.highlightIds.length + message.questionContext.areaIds.length > 0 ? ` · 표시 ${message.questionContext.highlightIds.length + message.questionContext.areaIds.length}개 포함` : ""}</button>}
           {previousQuestion && <button
             type="button"
             title={insightSaved ? "이미 Study Tray에 저장된 Q&A입니다" : "이 Q&A를 Study Tray와 학습 노트 재료로 저장"}
@@ -160,7 +198,7 @@ export function StudyChat({
       {error && <p role="alert" className="rounded-lg border border-[var(--danger)] p-3 text-sm">{error}</p>}
     </div>
 
-    <form onSubmit={submit} className="border-t border-[var(--line)] p-3.5">
+    <form onSubmit={submit} className="shrink-0 border-t border-[var(--line)] p-3.5">
       <div className="mb-2 grid grid-cols-3 gap-1" aria-label="빠른 질문">{quickPrompts.map((item) => <button key={item.prompt} type="button" title={item.prompt} disabled={loading} onClick={() => void ask(item.prompt)} className="min-w-0 rounded-lg border border-[var(--line)] bg-white/[.025] px-1.5 py-1 text-[10px] leading-tight text-[#bbb] hover:bg-white/[.06] disabled:opacity-40">{item.label}</button>)}</div>
       <label htmlFor="chat" className="sr-only">질문</label>
       <textarea id="chat" maxLength={4000} rows={3} value={input} onChange={(event) => updateInput(event.target.value)} placeholder={`${paper.title}에 관해 질문하세요…`} className="w-full resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/>

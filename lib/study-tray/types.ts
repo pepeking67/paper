@@ -1,6 +1,6 @@
 import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 
-export type AnnotationKind = "highlight" | "underline";
+export type AnnotationKind = "highlight" | "underline" | "dictionary" | "text";
 export type AnnotationColor = "yellow" | "green" | "blue" | "pink" | "purple";
 
 export type StudyHighlight = {
@@ -14,6 +14,14 @@ export type StudyHighlight = {
   kind?: AnnotationKind;
   /** Optional for backward compatibility with annotations already stored in localStorage. */
   color?: AnnotationColor;
+  /** A concise editable gloss shown below dictionary annotations. */
+  dictionaryMeaning?: string;
+  /** Updated timestamp for account dictionary entries. */
+  dictionaryUpdatedAt?: string;
+  /** Font size divided by rendered page height, so PDF text memos scale with zoom. */
+  textFontSizeRatio?: number;
+  /** User-selected PDF font size in points. New text memos default to 10pt. */
+  textFontSizePt?: number;
 };
 
 export type StudyArea = {

@@ -31,6 +31,7 @@ const PersonalLibraryContext = createContext<LibraryContextValue | null>(null);
 
 export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [categories, setCategories] = useState<PersonalCategory[]>([]);
@@ -39,7 +40,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const client = getBrowserSupabase();
     if (authLoading) { setLoading(true); return; }
-    if (!client || !user) { setCategories([]); setPapers([]); setError(""); setLoading(false); return; }
+    if (!client || !userId) { setCategories([]); setPapers([]); setError(""); setLoading(false); return; }
     setLoading(true);
     setError("");
     const [categoryResult, paperResult, assetResult] = await Promise.all([
@@ -63,25 +64,27 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
       sourceUrl: row.source_url ? String(row.source_url) : null, notionUrl: row.notion_url ? String(row.notion_url) : null, library: "personal" as const,
       categoryId: row.category_id ? String(row.category_id) : null, readingStatus: normalizeReadingStatus(row.reading_status), asset: assetByPaper.get(String(row.id)),
     })));
-    void flushStorageCleanup(client, user.id);
+    void flushStorageCleanup(client, userId);
     setLoading(false);
-  }, [authLoading, user]);
+  }, [authLoading, userId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function createCategory(name: string) {
     const client = requireClient();
+    const ownerId = requireUserId();
     const clean = name.trim();
     if (!clean || clean.length > 80) throw new Error("카테고리 이름은 1~80자여야 합니다.");
-    const { error: dbError } = await client.from("paper_categories").insert({ user_id: user!.id, name: clean, display_order: categories.length });
+    const { error: dbError } = await client.from("paper_categories").insert({ user_id: ownerId, name: clean, display_order: categories.length });
     if (dbError) throw dbError;
     await refresh();
   }
 
   async function renameCategory(id: string, name: string) {
+    const ownerId = requireUserId();
     const clean = name.trim();
     if (!clean || clean.length > 80) throw new Error("카테고리 이름은 1~80자여야 합니다.");
-    const { error: dbError } = await requireClient().from("paper_categories").update({ name: clean, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user!.id);
+    const { error: dbError } = await requireClient().from("paper_categories").update({ name: clean, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", ownerId);
     if (dbError) throw dbError;
     await refresh();
   }
@@ -93,8 +96,9 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     const ordered = [...categories];
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
     const client = requireClient();
+    const ownerId = requireUserId();
     for (let position = 0; position < ordered.length; position += 1) {
-      const { error: dbError } = await client.from("paper_categories").update({ display_order: position }).eq("id", ordered[position].id).eq("user_id", user!.id);
+      const { error: dbError } = await client.from("paper_categories").update({ display_order: position }).eq("id", ordered[position].id).eq("user_id", ownerId);
       if (dbError) throw dbError;
     }
     await refresh();
@@ -102,9 +106,10 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
 
   async function deleteCategory(id: string) {
     const client = requireClient();
-    const detach = await client.from("user_papers").update({ category_id: null }).eq("category_id", id).eq("user_id", user!.id);
+    const ownerId = requireUserId();
+    const detach = await client.from("user_papers").update({ category_id: null }).eq("category_id", id).eq("user_id", ownerId);
     if (detach.error) throw detach.error;
-    const result = await client.from("paper_categories").delete().eq("id", id).eq("user_id", user!.id);
+    const result = await client.from("paper_categories").delete().eq("id", id).eq("user_id", ownerId);
     if (result.error) throw result.error;
     await refresh();
   }
@@ -112,18 +117,20 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
   async function createPaper(input: PersonalPaperInput, pdf?: File | null) {
     validatePaperInput(input);
     const client = requireClient();
-    const { data, error: dbError } = await client.from("user_papers").insert({ user_id: user!.id, category_id: input.categoryId, title: input.title.trim(), authors: input.authors.trim(), year: input.year, source_url: nullable(input.sourceUrl), notion_url: nullable(input.notionUrl), reading_status: input.readingStatus, display_order: papers.filter((paper) => paper.categoryId === input.categoryId).length }).select("id").single();
+    const ownerId = requireUserId();
+    const { data, error: dbError } = await client.from("user_papers").insert({ user_id: ownerId, category_id: input.categoryId, title: input.title.trim(), authors: input.authors.trim(), year: input.year, source_url: nullable(input.sourceUrl), notion_url: nullable(input.notionUrl), reading_status: input.readingStatus, display_order: papers.filter((paper) => paper.categoryId === input.categoryId).length }).select("id").single();
     if (dbError) throw dbError;
     const id = String(data.id);
     try { if (pdf) await uploadPdf(id, pdf); }
-    catch (uploadError) { await client.from("user_papers").delete().eq("id", id).eq("user_id", user!.id); throw uploadError; }
+    catch (uploadError) { await client.from("user_papers").delete().eq("id", id).eq("user_id", ownerId); throw uploadError; }
     await refresh();
     return id;
   }
 
   async function updatePaper(id: string, input: PersonalPaperInput) {
     validatePaperInput(input);
-    const { error: dbError } = await requireClient().from("user_papers").update({ category_id: input.categoryId, title: input.title.trim(), authors: input.authors.trim(), year: input.year, source_url: nullable(input.sourceUrl), notion_url: nullable(input.notionUrl), reading_status: input.readingStatus, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user!.id);
+    const ownerId = requireUserId();
+    const { error: dbError } = await requireClient().from("user_papers").update({ category_id: input.categoryId, title: input.title.trim(), authors: input.authors.trim(), year: input.year, source_url: nullable(input.sourceUrl), notion_url: nullable(input.notionUrl), reading_status: input.readingStatus, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", ownerId);
     if (dbError) throw dbError;
     await refresh();
   }
@@ -137,8 +144,9 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     if (target < 0 || target >= group.length) return;
     [group[index], group[target]] = [group[target], group[index]];
     const client = requireClient();
+    const ownerId = requireUserId();
     for (let position = 0; position < group.length; position += 1) {
-      const result = await client.from("user_papers").update({ display_order: position }).eq("id", group[position].id).eq("user_id", user!.id);
+      const result = await client.from("user_papers").update({ display_order: position }).eq("id", group[position].id).eq("user_id", ownerId);
       if (result.error) throw result.error;
     }
     await refresh();
@@ -146,42 +154,49 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
 
   async function uploadPdf(paperId: string, file: File) {
     const client = requireClient();
+    const ownerId = requireUserId();
     const validated = await validatePdfFile(file);
     const duplicate = papers.some((paper) => paper.asset?.checksum === validated.checksum);
     if (duplicate) throw new Error("같은 PDF가 이미 이 계정의 라이브러리에 있습니다.");
-    const path = `${user!.id}/${paperId}/${validated.checksum}.pdf`;
-    if (!isOwnedStoragePath(path, user!.id, paperId)) throw new Error("잘못된 Storage 경로입니다.");
+    const path = `${ownerId}/${paperId}/${validated.checksum}.pdf`;
+    if (!isOwnedStoragePath(path, ownerId, paperId)) throw new Error("잘못된 Storage 경로입니다.");
     const upload = await client.storage.from("paper-pdfs").upload(path, file, { contentType: validated.contentType, upsert: false });
     if (upload.error) throw upload.error;
-    const latest = await client.from("paper_assets").select("version").eq("paper_id", paperId).eq("user_id", user!.id).eq("kind", "pdf").order("version", { ascending: false }).limit(1).maybeSingle();
+    const latest = await client.from("paper_assets").select("version").eq("paper_id", paperId).eq("user_id", ownerId).eq("kind", "pdf").order("version", { ascending: false }).limit(1).maybeSingle();
     if (latest.error) { await client.storage.from("paper-pdfs").remove([path]); throw latest.error; }
-    const asset = await client.from("paper_assets").insert({ user_id: user!.id, paper_id: paperId, kind: "pdf", bucket_id: "paper-pdfs", object_path: path, original_filename: file.name, content_type: validated.contentType, byte_size: validated.size, checksum: validated.checksum, version: Number(latest.data?.version ?? 0) + 1, processing_status: "ready" });
+    const asset = await client.from("paper_assets").insert({ user_id: ownerId, paper_id: paperId, kind: "pdf", bucket_id: "paper-pdfs", object_path: path, original_filename: file.name, content_type: validated.contentType, byte_size: validated.size, checksum: validated.checksum, version: Number(latest.data?.version ?? 0) + 1, processing_status: "ready" });
     if (asset.error) { await client.storage.from("paper-pdfs").remove([path]); throw asset.error; }
     await refresh();
   }
 
   async function deletePaper(id: string) {
     const client = requireClient();
+    const ownerId = requireUserId();
     const [assets, areas] = await Promise.all([
-      client.from("paper_assets").select("bucket_id,object_path").eq("paper_id", id).eq("user_id", user!.id),
-      client.from("paper_area_assets").select("bucket_id,object_path").eq("paper_id", id).eq("user_id", user!.id),
+      client.from("paper_assets").select("bucket_id,object_path").eq("paper_id", id).eq("user_id", ownerId),
+      client.from("paper_area_assets").select("bucket_id,object_path").eq("paper_id", id).eq("user_id", ownerId),
     ]);
     if (assets.error || areas.error) throw assets.error || areas.error;
     const cleanup = ([...(assets.data ?? []), ...(areas.data ?? [])])
-      .filter((row) => (row.bucket_id === "paper-pdfs" || row.bucket_id === "paper-area-crops") && isOwnedStoragePath(String(row.object_path), user!.id, id))
+      .filter((row) => (row.bucket_id === "paper-pdfs" || row.bucket_id === "paper-area-crops") && isOwnedStoragePath(String(row.object_path), ownerId, id))
       .map((row) => ({ bucket: row.bucket_id as "paper-pdfs" | "paper-area-crops", path: String(row.object_path) }));
     const result = await client.rpc("delete_user_paper", { p_paper_id: id });
     if (result.error) throw result.error;
-    queueStorageCleanup(user!.id, cleanup);
-    const pending = await flushStorageCleanup(client, user!.id);
+    queueStorageCleanup(ownerId, cleanup);
+    const pending = await flushStorageCleanup(client, ownerId);
     if (pending) setError(`논문은 삭제됐지만 Storage 파일 ${pending}개의 정리를 재시도합니다.`);
     await refresh();
   }
 
   function requireClient() {
     const client = getBrowserSupabase();
-    if (!client || !user) throw new Error("로그인이 필요합니다.");
+    if (!client || !userId) throw new Error("로그인이 필요합니다.");
     return client;
+  }
+
+  function requireUserId() {
+    if (!userId) throw new Error("로그인이 필요합니다.");
+    return userId;
   }
 
   const value: LibraryContextValue = { loading, error, categories, papers, refresh, createCategory, renameCategory, moveCategory, deleteCategory, createPaper, updatePaper, movePaper, deletePaper, uploadPdf };
