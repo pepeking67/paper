@@ -79,7 +79,8 @@ test("PDF text memo tool supports drag placement, resizing, and adjustable 10pt 
 
   assert.equal(textFontSizePtToPixels(10, 792, 792), 10);
   assert.match(viewer, /ToolButton tool="text"/);
-  assert.match(viewer, /textColor=\{annotationColor\}/);
+  assert.doesNotMatch(viewer, /textColor=\{annotationColor\}/);
+  assert.match(viewer, /드래그해 검은 글자 메모 작성/);
   assert.match(page, /fontSizePt: 10/);
   assert.match(page, /onPointerMove=\{moveTextBox\}/);
   assert.match(page, /텍스트 메모 크기 조절/);

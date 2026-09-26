@@ -300,7 +300,7 @@ export function PdfViewer({
   }
 
   function handleToolClick(nextTool: AnnotationTool) {
-    if ((nextTool === "highlight" || nextTool === "underline" || nextTool === "text") && tool === nextTool) {
+    if ((nextTool === "highlight" || nextTool === "underline") && tool === nextTool) {
       setColorMenuTool((current) => current === nextTool ? null : nextTool);
       return;
     }
@@ -363,10 +363,7 @@ export function PdfViewer({
             <ToolButton tool="underline" active={tool === "underline"} color={annotationColor} onClick={() => handleToolClick("underline")} label="밑줄" title={tool === "underline" ? "다시 눌러 색상 변경" : "밑줄 선택"}/>
             {colorMenuTool === "underline" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
-          <div className="relative">
-            <ToolButton tool="text" active={tool === "text"} color={annotationColor} onClick={() => handleToolClick("text")} label="텍스트 메모" title={tool === "text" ? "다시 눌러 색상 변경" : "페이지에서 원하는 크기로 드래그해 텍스트 메모 작성"}/>
-            {colorMenuTool === "text" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
-          </div>
+          <ToolButton tool="text" active={tool === "text"} onClick={() => handleToolClick("text")} label="텍스트 메모" title="페이지에서 원하는 크기로 드래그해 검은 글자 메모 작성"/>
           <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
           <ToolButton tool="area" active={tool === "area"} onClick={() => handleToolClick("area")} label="영역 선택" title="수식·그림·표 영역 선택"/>
           <ToolButton tool="erase" active={tool === "erase"} onClick={() => handleToolClick("erase")} label="지우개" title="저장된 표시를 눌러 삭제"/>
@@ -438,7 +435,6 @@ export function PdfViewer({
           zoom={zoom}
           areaMode={tool === "area"}
           textMode={tool === "text"}
-          textColor={annotationColor}
           deleteMode={tool === "erase"}
           capturedSelections={savedHighlights
             .filter((selection) => selection.page === index + 1)

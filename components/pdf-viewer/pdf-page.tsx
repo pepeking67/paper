@@ -22,7 +22,6 @@ type Props = {
   zoom: number;
   areaMode: boolean;
   textMode: boolean;
-  textColor: AnnotationColor;
   deleteMode: boolean;
   capturedSelections: CapturedSelection[];
   savedAreas: StudyArea[];
@@ -63,7 +62,6 @@ export function PdfPage({
   zoom,
   areaMode,
   textMode,
-  textColor,
   deleteMode,
   capturedSelections,
   savedAreas,
@@ -619,11 +617,14 @@ export function PdfPage({
           onPointerUp={finishTextBox}
           onPointerCancel={cancelTextBox}
         >
-          {textBoxDraft && <span className="pointer-events-none absolute rounded border-2 border-dashed" style={{ left: textBoxDraft.left, top: textBoxDraft.top, width: textBoxDraft.width, height: textBoxDraft.height, borderColor: annotationColors[textColor].stroke, background: annotationColors[textColor].fill }}/>}
+          {textBoxDraft && <span
+            className="pointer-events-none absolute rounded border border-dashed border-black/70 bg-transparent"
+            style={{ left: textBoxDraft.left, top: textBoxDraft.top, width: textBoxDraft.width, height: textBoxDraft.height }}
+          />}
         </div>}
         {textDraft && <form
           className="pointer-events-auto absolute z-[8] flex min-w-56 flex-col gap-1 rounded border bg-white p-1 shadow-xl"
-          style={{ left: textDraft.rect.x * surfaceSize.width, top: textDraft.rect.y * surfaceSize.height, width: Math.max(224, textDraft.rect.width * surfaceSize.width), borderColor: annotationColors[textColor].stroke }}
+          style={{ left: textDraft.rect.x * surfaceSize.width, top: textDraft.rect.y * surfaceSize.height, width: Math.max(224, textDraft.rect.width * surfaceSize.width), borderColor: "#111" }}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onSubmit={(event) => { event.preventDefault(); const value = textDraft.value.trim(); if (value) onTextAnnotation(value, pageNumber, textDraft.rect, textDraft.fontSizePt); setTextDraft(null); }}
