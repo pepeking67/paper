@@ -111,4 +111,7 @@ test("dictionary annotations stay out of Study Tray and study-note material", as
   assert.doesNotMatch(packet, /item\.dictionaryMeaning/);
   assert.match(exporter, /annotation\.kind === "dictionary" \? \[0, 0, 0\]/);
   assert.match(exporter, /annotation\.kind === "dictionary"\)/);
+  assert.match(exporter, /createDictionaryLabelImage\(pdf, label\.meaning, fontSize\)/);
+  assert.match(exporter, /page\.drawImage\(rendered\.image/);
+  assert.match(exporter, /canvas\.toDataURL\("image\/png"\)/);
 });

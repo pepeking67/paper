@@ -382,7 +382,7 @@ export function PdfViewer({
             disabled={!savedHighlights.length || downloadState === "loading"}
             onClick={() => void handleDownloadAnnotatedPdf()}
             aria-label={downloadState === "loading" ? "PDF 만드는 중" : "표시된 PDF 다운로드"}
-            title="저장된 형광펜·밑줄을 원본 PDF에 합성해서 다운로드합니다. 텍스트 메모와 선택 영역은 다운로드 PDF에는 포함되지 않습니다."
+            title="저장된 형광펜·밑줄·사전 뜻을 원본 PDF에 합성해서 다운로드합니다. 텍스트 메모와 선택 영역은 다운로드 PDF에는 포함되지 않습니다."
             className="grid h-7 w-7 place-items-center rounded-md border border-[var(--line)] text-[var(--muted)] hover:bg-white/[.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 17v3h14v-3"/></svg>

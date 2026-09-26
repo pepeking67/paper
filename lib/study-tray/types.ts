@@ -14,7 +14,7 @@ export type StudyHighlight = {
   kind?: AnnotationKind;
   /** Optional for backward compatibility with annotations already stored in localStorage. */
   color?: AnnotationColor;
-  /** A concise editable gloss shown above dictionary annotations. */
+  /** A concise editable gloss shown below dictionary annotations. */
   dictionaryMeaning?: string;
   /** Updated timestamp for account dictionary entries. */
   dictionaryUpdatedAt?: string;
