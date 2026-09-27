@@ -71,7 +71,7 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(workspace, /Retry old annotations sequentially/);
 });
 
-test("PDF text memo tool supports drag placement, resizing, and adjustable 10pt text", async () => {
+test("PDF text memo tool defaults to 7pt while keeping its editor readable at 11pt", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
@@ -81,7 +81,10 @@ test("PDF text memo tool supports drag placement, resizing, and adjustable 10pt 
   assert.match(viewer, /ToolButton tool="text"/);
   assert.doesNotMatch(viewer, /textColor=\{annotationColor\}/);
   assert.match(viewer, /드래그해 검은 글자 메모 작성/);
-  assert.match(page, /fontSizePt: 10/);
+  assert.match(page, /DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 7/);
+  assert.match(page, /TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11/);
+  assert.match(page, /fontSizePt: DEFAULT_TEXT_MEMO_FONT_SIZE_PT/);
+  assert.equal(page.match(/fontSize: `\$\{TEXT_MEMO_EDITOR_FONT_SIZE_PT\}pt`/g)?.length, 2);
   assert.match(page, /onPointerMove=\{moveTextBox\}/);
   assert.match(page, /텍스트 메모 크기 조절/);
   assert.match(page, /TextFontSizeControl/);

@@ -49,6 +49,9 @@ type RenderedTextLayer = {
   textContentItemsStr: string[];
 };
 
+const DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 7;
+const TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11;
+
 const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }> = {
   yellow: { fill: "rgba(250, 204, 21, 0.42)", stroke: "#ca8a04" },
   green: { fill: "rgba(74, 222, 128, 0.36)", stroke: "#16a34a" },
@@ -347,7 +350,7 @@ export function PdfPage({
         width: box.width / surfaceSize.width,
         height: box.height / surfaceSize.height,
       },
-      fontSizePt: 10,
+      fontSizePt: DEFAULT_TEXT_MEMO_FONT_SIZE_PT,
       value: "",
     });
   }
@@ -504,7 +507,7 @@ export function PdfPage({
                   onPointerUp={(event) => event.stopPropagation()}
                   onSubmit={(event) => { event.preventDefault(); const value = textEditor.value.trim(); if (value) onEditTextAnnotation(selection.annotationId!, value, textEditor.fontSizePt); setTextEditor(null); }}
                 >
-                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }}/>
+                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${TEXT_MEMO_EDITOR_FONT_SIZE_PT}pt` }}/>
                   <p className="px-0.5 text-[9px] text-black/55">수식은 $...$ 또는 $$...$$ 형태로 입력</p>
                   {textEditor.value.trim() && <div className="max-h-28 overflow-auto rounded border border-black/10 bg-white px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }} aria-label="텍스트 메모 미리보기"><MarkdownContent content={textEditor.value} variant="pdfMemo" /></div>}
                   <TextFontSizeControl value={textEditor.fontSizePt} onChange={(value) => setTextEditor((current) => current ? { ...current, fontSizePt: value } : current)}/>
@@ -639,7 +642,7 @@ export function PdfPage({
           onPointerUp={(event) => event.stopPropagation()}
           onSubmit={(event) => { event.preventDefault(); const value = textDraft.value.trim(); if (value) onTextAnnotation(value, pageNumber, textDraft.rect, textDraft.fontSizePt); setTextDraft(null); }}
         >
-          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }}/>
+          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${TEXT_MEMO_EDITOR_FONT_SIZE_PT}pt` }}/>
           <p className="px-0.5 text-[9px] text-black/55">수식은 $...$ 또는 $$...$$ 형태로 입력</p>
           {textDraft.value.trim() && <div className="max-h-28 overflow-auto rounded border border-black/10 bg-white px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }} aria-label="새 텍스트 메모 미리보기"><MarkdownContent content={textDraft.value} variant="pdfMemo" /></div>}
           <TextFontSizeControl value={textDraft.fontSizePt} onChange={(value) => setTextDraft((current) => current ? { ...current, fontSizePt: value } : current)}/>
