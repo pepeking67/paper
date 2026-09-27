@@ -316,7 +316,6 @@ export function PdfViewer({
   const contextCount = questionHighlights.length + questionAreas.length;
 
   return <section className="flex h-full min-h-0 flex-col bg-[#111]" aria-label="PDF 뷰어">
-    <style>{`[aria-label="저장된 PDF 영역"]{pointer-events:none!important}[aria-label="저장된 PDF 영역"]>button{pointer-events:auto!important}`}</style>
     <header className="border-b border-[var(--line)] px-2 py-1 sm:px-3">
       <div className="flex min-h-8 items-center gap-2">
         <button

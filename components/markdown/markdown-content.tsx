@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { normalizeRenderedMarkdown } from "@/lib/markdown/normalize";
 
 type EmbeddedPdfArea = {
   id: string;
@@ -19,15 +20,17 @@ export function MarkdownContent({
   content,
   compact = false,
   areas = [],
+  variant = "default",
 }: {
   content: string;
   compact?: boolean;
   areas?: EmbeddedPdfArea[];
+  variant?: "default" | "pdfMemo";
 }) {
   const areaById = new Map(areas.map((area) => [area.id, area]));
-  const segments = splitPdfAreaMarkers(content);
+  const segments = splitPdfAreaMarkers(normalizeRenderedMarkdown(content));
 
-  return <div className={`markdown-content ${compact ? "markdown-content-compact" : ""}`}>
+  return <div className={`markdown-content ${compact ? "markdown-content-compact" : ""} ${variant === "pdfMemo" ? "markdown-content-pdf-memo" : ""}`}>
     {segments.map((segment, index) => {
       if (segment.kind === "area") {
         const area = areaById.get(segment.id);

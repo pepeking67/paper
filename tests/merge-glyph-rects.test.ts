@@ -1,6 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getTextFragmentRect, mergeGlyphRects, normalizeClientRects, normalizeHighlightRects, projectHighlightRect } from "../lib/pdf/merge-glyph-rects";
+import { getTextFragmentRect, mergeClientRectsIntoLineRects, mergeGlyphRects, normalizeClientRects, normalizeHighlightRects, projectHighlightRect } from "../lib/pdf/merge-glyph-rects";
+
+const clientRect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, width, height });
+
+test("formula glyphs become one continuous annotation line", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 8, 10),
+    clientRect(20, 5, 5, 6),
+    clientRect(32, 10, 8, 10),
+    clientRect(49, 15, 5, 6),
+    clientRect(58, 10, 8, 10),
+  ]), [clientRect(10, 5, 56, 16)]);
+});
+
+test("continuous annotation lines do not bridge PDF columns", () => {
+  assert.equal(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 40, 10),
+    clientRect(180, 10, 40, 10),
+  ]).length, 2);
+});
+
+test("continuous annotation lines preserve separate paragraph rows", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 40, 10),
+    clientRect(10, 23, 25, 10),
+  ]).map(({ left, top, width }) => ({ left, top, width })), [
+    { left: 10, top: 10, width: 40 },
+    { left: 10, top: 23, width: 25 },
+  ]);
+});
+
+test("a tall equation band does not absorb the following selected row", () => {
+  assert.equal(mergeClientRectsIntoLineRects([
+    clientRect(10, 5, 100, 16),
+    clientRect(10, 23, 100, 10),
+  ]).length, 2);
+});
 
 test("a single-line selection keeps its exact horizontal extent", () => {
   assert.deepEqual(mergeGlyphRects([{ left: 12, top: 8, width: 63, height: 9 }]), [{ left: 12, top: 8, width: 63, height: 9 }]);

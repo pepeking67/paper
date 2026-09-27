@@ -52,7 +52,7 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(page, /<canvas ref=\{canvasRef\}/);
   assert.match(page, /<div ref=\{textLayerRef\}/);
   assert.match(page, /collectSelectionFromTextItems/);
-  assert.match(page, /mergeCharacterRects/);
+  assert.match(page, /mergeClientRectsIntoLineRects/);
   assert.match(page, /document\.createRange\(\)/);
   assert.match(page, /setProperty\("--scale-factor", String\(viewport\.scale\)\)/);
   assert.match(page, /capturedSelections/);

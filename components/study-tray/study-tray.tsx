@@ -150,23 +150,21 @@ export function StudyTray({
         <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!memo.trim()) return; onAddMemo(memo.trim()); updateMemoDraft(""); }}><label htmlFor="tray-memo" className="sr-only">자유 메모</label><textarea id="tray-memo" value={memo} onChange={(event) => updateMemoDraft(event.target.value)} placeholder="자유 메모 추가…" rows={2} className="min-w-0 flex-1 resize-none rounded-xl border border-[var(--line)] bg-[#111] p-3 text-sm"/><button className="rounded-xl bg-white px-4 text-sm font-medium text-black">추가</button></form>
 
         <TraySection title={`Annotations (${studyAnnotations.length})`}>
-          {studyAnnotations.map((item) => <TrayItem key={item.id}>
+          {studyAnnotations.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("highlights", item.id)}>
             <p className="text-xs text-[var(--muted)]">Page {item.page} · {item.kind === "text" ? "Text memo" : (item.kind ?? "highlight") === "underline" ? "Underline" : "Highlight"} · {item.color ?? "yellow"}</p>
             <p className="mt-2 whitespace-pre-wrap text-sm">{item.text}</p>
             {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
-            <p className="mt-2 text-[10px] text-[var(--muted)]">삭제는 PDF의 지우개 도구에서만 할 수 있습니다.</p>
           </TrayItem>)}
         </TraySection>
 
         <TraySection title={`Areas (${areas.length})`}>
           {areas.length === 0 && <p className="rounded-xl border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">수식·그림·표를 `영역` 도구로 사각형 선택하면 여기에 저장됩니다.</p>}
-          {areas.map((item) => <TrayItem key={item.id}>
+          {areas.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("areas", item.id)}>
             <p className="text-xs text-[var(--muted)]">Page {item.page} · Area annotation</p>
             {item.imageDataUrl ? <img src={item.imageDataUrl} alt={`Page ${item.page}에서 선택한 PDF 영역`} className="mt-2 max-h-56 w-full rounded-xl border border-[var(--line)] bg-white object-contain"/> : <div className="mt-2 rounded-xl border border-dashed border-[var(--line)] p-4 text-xs text-[var(--muted)]">영역 이미지를 Storage에서 불러오는 중…</div>}
             {item.memo && <p className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm text-[#bbb]">내 메모: {item.memo}</p>}
-            <div className="mt-3 flex items-center justify-between gap-2">
+            <div className="mt-3 flex items-center gap-2">
               <button type="button" onClick={() => onUseArea(item)} className="rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs hover:bg-white/5">질문에 사용</button>
-              <span className="text-[10px] text-[var(--muted)]">삭제는 PDF 지우개에서</span>
             </div>
           </TrayItem>)}
         </TraySection>

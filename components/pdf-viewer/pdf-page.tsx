@@ -2,8 +2,9 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
+import { MarkdownContent } from "@/components/markdown/markdown-content";
 
 type CapturedSelection = {
   annotationId?: string;
@@ -47,6 +48,9 @@ type RenderedTextLayer = {
   textDivs: HTMLElement[];
   textContentItemsStr: string[];
 };
+
+const DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 6;
+const TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11;
 
 const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }> = {
   yellow: { fill: "rgba(250, 204, 21, 0.42)", stroke: "#ca8a04" },
@@ -241,7 +245,7 @@ export function PdfPage({
 
     const [start, end] = orderEndpoints(anchor, focus);
     const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
-    const mergedRects = mergeCharacterRects(characterRects);
+    const mergedRects = mergeClientRectsIntoLineRects(characterRects);
     const rects = normalizeClientRects(mergedRects, surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
@@ -346,7 +350,7 @@ export function PdfPage({
         width: box.width / surfaceSize.width,
         height: box.height / surfaceSize.height,
       },
-      fontSizePt: 10,
+      fontSizePt: DEFAULT_TEXT_MEMO_FONT_SIZE_PT,
       value: "",
     });
   }
@@ -455,12 +459,19 @@ export function PdfPage({
       >
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
 
-        <div className={`absolute inset-0 z-[5] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`}>
-          {capturedSelections.flatMap((selection, selectionIndex) =>
-            selection.rects.map((normalized, rectIndex) => {
-              const kind = selection.kind ?? "highlight";
-              const displayedNormalized = kind === "text" && selection.annotationId && textTransform?.id === selection.annotationId ? textTransform.preview : normalized;
-              const rect = projectHighlightRect(displayedNormalized, surfaceSize.width, surfaceSize.height);
+        <div className="pointer-events-none absolute inset-0 z-[5]">
+          {capturedSelections.flatMap((selection, selectionIndex) => {
+            const kind = selection.kind ?? "highlight";
+            const projectedRects = selection.rects.map((normalized) => {
+              const projected = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
+              return { ...projected, right: projected.left + projected.width, bottom: projected.top + projected.height };
+            });
+            const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects);
+            return displayRects.map((projected, rectIndex) => {
+              const normalized = selection.rects[Math.min(rectIndex, selection.rects.length - 1)];
+              const rect = kind === "text" && selection.annotationId && textTransform?.id === selection.annotationId
+                ? projectHighlightRect(textTransform.preview, surfaceSize.width, surfaceSize.height)
+                : projected;
               const color = selection.color ?? "yellow";
               const palette = annotationColors[color];
               const key = `${selection.annotationId ?? "context"}-${selectionIndex}-${rectIndex}`;
@@ -488,7 +499,6 @@ export function PdfPage({
                 const fontSizePt = selection.textFontSizePt ?? legacyTextFontSizePt(selection.textFontSizeRatio, basePageSize.height);
                 const memoFontSize = textFontSizePtToPixels(fontSizePt, surfaceSize.height, basePageSize.height);
                 const textStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, fontSize: memoFontSize, lineHeight: 1.18, color: "#111", background: "transparent" };
-                if (commonProps) return <button key={key} {...commonProps} className="pointer-events-auto absolute z-[5] overflow-hidden whitespace-pre-wrap px-1 py-0.5 text-left font-medium hover:outline hover:outline-1 hover:outline-red-500" style={textStyle}>{selection.text}</button>;
                 if (textEditor?.id === selection.annotationId) return <form
                   key={key}
                   className="pointer-events-auto absolute z-[7] flex min-w-48 flex-col gap-1 rounded border border-black/30 bg-white p-1 shadow-xl"
@@ -497,23 +507,26 @@ export function PdfPage({
                   onPointerUp={(event) => event.stopPropagation()}
                   onSubmit={(event) => { event.preventDefault(); const value = textEditor.value.trim(); if (value) onEditTextAnnotation(selection.annotationId!, value, textEditor.fontSizePt); setTextEditor(null); }}
                 >
-                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }}/>
+                  <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${TEXT_MEMO_EDITOR_FONT_SIZE_PT}pt` }}/>
+                  <p className="px-0.5 text-[9px] text-black/55">수식은 $...$ 또는 $$...$$ 형태로 입력</p>
+                  {textEditor.value.trim() && <div className="max-h-28 overflow-auto rounded border border-black/10 bg-white px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }} aria-label="텍스트 메모 미리보기"><MarkdownContent content={textEditor.value} variant="pdfMemo" /></div>}
                   <TextFontSizeControl value={textEditor.fontSizePt} onChange={(value) => setTextEditor((current) => current ? { ...current, fontSizePt: value } : current)}/>
                   <button type="submit" className="self-end rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
                 </form>;
                 return <div key={key} className="pointer-events-auto absolute z-[5] overflow-hidden" style={textStyle}>
+                  <div className="pointer-events-none h-full w-full overflow-hidden px-1 py-0.5 font-medium"><MarkdownContent content={selection.text} variant="pdfMemo" /></div>
                   <button
                     type="button"
-                    title="텍스트 메모 수정"
-                    className="absolute inset-0 h-full w-full overflow-hidden whitespace-pre-wrap px-1 py-0.5 text-left font-medium"
-                    style={{ fontSize: memoFontSize, lineHeight: 1.18, color: "#111" }}
+                    title={commonProps ? "이 주석 삭제" : "텍스트 메모 수정"}
+                    aria-label={commonProps ? `텍스트 메모 주석 삭제: ${selection.text.slice(0, 80)}` : "텍스트 메모 수정"}
+                    className={`absolute inset-0 h-full w-full bg-transparent ${commonProps ? "hover:outline hover:outline-1 hover:outline-red-500" : "cursor-text"}`}
                     onPointerDown={(event) => event.stopPropagation()}
                     onPointerUp={(event) => event.stopPropagation()}
-                    onClick={(event) => { event.stopPropagation(); setTextEditor({ id: selection.annotationId!, value: selection.text, fontSizePt }); }}
-                  >{selection.text}</button>
-                  {textMode && <>
-                    <button type="button" title="텍스트 메모 이동" aria-label="텍스트 메모 이동" className="absolute left-0 top-0 z-10 grid h-4 w-4 cursor-move place-items-center rounded-br bg-black/70 text-[9px] text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, displayedNormalized, "move")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}>↕</button>
-                    <button type="button" title="텍스트 메모 크기 조절" aria-label="텍스트 메모 크기 조절" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize rounded-tl bg-black/70 text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, displayedNormalized, "resize")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}><span className="block rotate-45 text-[10px]">↔</span></button>
+                    onClick={(event) => { event.stopPropagation(); if (commonProps) onDeleteAnnotation(selection.annotationId!); else setTextEditor({ id: selection.annotationId!, value: selection.text, fontSizePt }); }}
+                  />
+                  {textMode && !commonProps && <>
+                    <button type="button" title="텍스트 메모 이동" aria-label="텍스트 메모 이동" className="absolute left-0 top-0 z-10 grid h-4 w-4 cursor-move place-items-center rounded-br bg-black/70 text-[9px] text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, normalized, "move")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}>↕</button>
+                    <button type="button" title="텍스트 메모 크기 조절" aria-label="텍스트 메모 크기 조절" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize rounded-tl bg-black/70 text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, normalized, "resize")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}><span className="block rotate-45 text-[10px]">↔</span></button>
                   </>}
                 </div>;
               }
@@ -525,7 +538,7 @@ export function PdfPage({
                 const labelPosition = selection.annotationId ? dictionaryLabelLayout.get(selection.annotationId) : undefined;
                 return <Fragment key={key}>
                   {commonProps
-                    ? <button {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
+                    ? <button {...commonProps} className="pointer-events-auto absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
                     : <span className="absolute" style={underlineStyle} />}
                   {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
                     ? <form
@@ -560,19 +573,19 @@ export function PdfPage({
               if (kind === "underline") {
                 const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: `2px solid ${palette.stroke}`, background: "transparent", padding: 0 };
                 return commonProps
-                  ? <button key={key} {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
+                  ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
                   : <span key={key} className="absolute" style={style} />;
               }
 
               const style = { left: rect.left, top: rect.top + rect.height * 0.08, width: rect.width, height: rect.height * 0.84, border: "none", padding: 0, background: palette.fill, mixBlendMode: "multiply" as const };
               return commonProps
-                ? <button key={key} {...commonProps} className="absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
+                ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
                 : <span key={key} className="absolute rounded-[2px]" style={style} />;
-            }),
-          )}
+            });
+          })}
         </div>
 
-        <div className={`absolute inset-0 z-[3] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`} aria-label="저장된 PDF 영역">
+        <div className="pointer-events-none absolute inset-0 z-[6]" aria-label="저장된 PDF 영역">
           {savedAreas.map((area) => {
             const rect = projectHighlightRect(area.rect, surfaceSize.width, surfaceSize.height);
             const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
@@ -582,7 +595,7 @@ export function PdfPage({
                 type="button"
                 title="이 영역 삭제"
                 aria-label={`Page ${area.page} 영역 삭제`}
-                className="absolute cursor-pointer border-2 border-dashed border-sky-500/85 bg-sky-400/[.06] hover:outline hover:outline-2 hover:outline-red-500"
+                className="pointer-events-auto absolute cursor-pointer border-2 border-dashed border-sky-500/85 bg-sky-400/[.08] hover:outline hover:outline-2 hover:outline-red-500"
                 style={style}
                 onPointerDown={(event) => event.stopPropagation()}
                 onPointerUp={(event) => event.stopPropagation()}
@@ -629,7 +642,9 @@ export function PdfPage({
           onPointerUp={(event) => event.stopPropagation()}
           onSubmit={(event) => { event.preventDefault(); const value = textDraft.value.trim(); if (value) onTextAnnotation(value, pageNumber, textDraft.rect, textDraft.fontSizePt); setTextDraft(null); }}
         >
-          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }}/>
+          <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${TEXT_MEMO_EDITOR_FONT_SIZE_PT}pt` }}/>
+          <p className="px-0.5 text-[9px] text-black/55">수식은 $...$ 또는 $$...$$ 형태로 입력</p>
+          {textDraft.value.trim() && <div className="max-h-28 overflow-auto rounded border border-black/10 bg-white px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }} aria-label="새 텍스트 메모 미리보기"><MarkdownContent content={textDraft.value} variant="pdfMemo" /></div>}
           <TextFontSizeControl value={textDraft.fontSizePt} onChange={(value) => setTextDraft((current) => current ? { ...current, fontSizePt: value } : current)}/>
           <div className="flex justify-end gap-1"><button type="button" onClick={() => setTextDraft(null)} className="rounded px-2 py-1 text-[10px] text-black/60">취소</button><button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button></div>
         </form>}
@@ -801,62 +816,4 @@ function getDirectTextNode(div: HTMLElement): Text | null {
   }
   const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
   return walker.nextNode() as Text | null;
-}
-
-function mergeCharacterRects(rects: ClientRectLike[]): ClientRectLike[] {
-  if (!rects.length) return [];
-  const sorted = [...rects].sort((a, b) => a.top + a.height / 2 - (b.top + b.height / 2) || a.left - b.left);
-  const lines: ClientRectLike[][] = [];
-
-  for (const rect of sorted) {
-    let target: ClientRectLike[] | undefined;
-    for (const line of lines) {
-      const sample = line[0];
-      const sampleCenter = sample.top + sample.height / 2;
-      const rectCenter = rect.top + rect.height / 2;
-      if (Math.abs(sampleCenter - rectCenter) <= Math.max(1.5, Math.min(sample.height, rect.height) * 0.45)) {
-        target = line;
-        break;
-      }
-    }
-    if (!target) {
-      lines.push([rect]);
-      continue;
-    }
-    target.push(rect);
-  }
-
-  const merged: ClientRectLike[] = [];
-  for (const line of lines) {
-    line.sort((a, b) => a.left - b.left);
-    let run: ClientRectLike[] = [];
-
-    const flush = () => {
-      if (!run.length) return;
-      const left = Math.min(...run.map((rect) => rect.left));
-      const right = Math.max(...run.map((rect) => rect.right));
-      const top = Math.min(...run.map((rect) => rect.top));
-      const bottom = Math.max(...run.map((rect) => rect.bottom));
-      merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
-      run = [];
-    };
-
-    for (const rect of line) {
-      const previous = run.at(-1);
-      if (!previous) {
-        run.push(rect);
-        continue;
-      }
-      const allowedGap = Math.max(3, Math.min(previous.height, rect.height) * 1.15);
-      if (rect.left - previous.right <= allowedGap) {
-        run.push(rect);
-      } else {
-        flush();
-        run.push(rect);
-      }
-    }
-    flush();
-  }
-
-  return merged.sort((a, b) => a.top - b.top || a.left - b.left);
 }

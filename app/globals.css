@@ -206,6 +206,33 @@ select { color-scheme: dark; }
 .markdown-content-compact h1,
 .markdown-content-compact h2,
 .markdown-content-compact h3 { margin-top: 1.15em; }
+.markdown-content-pdf-memo {
+  color: #111;
+  font-size: inherit;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+.markdown-content-pdf-memo p,
+.markdown-content-pdf-memo ul,
+.markdown-content-pdf-memo ol,
+.markdown-content-pdf-memo blockquote,
+.markdown-content-pdf-memo pre,
+.markdown-content-pdf-memo .katex-display { margin: 0; }
+.markdown-content-pdf-memo h1,
+.markdown-content-pdf-memo h2,
+.markdown-content-pdf-memo h3,
+.markdown-content-pdf-memo h4,
+.markdown-content-pdf-memo strong,
+.markdown-content-pdf-memo em,
+.markdown-content-pdf-memo .katex { color: #111; }
+.markdown-content-pdf-memo h1,
+.markdown-content-pdf-memo h2,
+.markdown-content-pdf-memo h3,
+.markdown-content-pdf-memo h4 { border: 0; padding: 0; font-size: 1em; }
+.markdown-content-pdf-memo ul,
+.markdown-content-pdf-memo ol { padding-left: 1.25em; }
+.markdown-content-pdf-memo .katex-display { overflow: visible; padding: 0; }
+.markdown-content-pdf-memo .katex { font-size: 1em; }
 
 /*
  * PDF.js text layer for the exact pdfjs-dist version used by this project
