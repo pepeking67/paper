@@ -456,7 +456,7 @@ export function PdfPage({
       >
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
 
-        <div className={`absolute inset-0 z-[5] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`}>
+        <div className="pointer-events-none absolute inset-0 z-[5]">
           {capturedSelections.flatMap((selection, selectionIndex) => {
             const kind = selection.kind ?? "highlight";
             const projectedRects = selection.rects.map((normalized) => {
@@ -535,7 +535,7 @@ export function PdfPage({
                 const labelPosition = selection.annotationId ? dictionaryLabelLayout.get(selection.annotationId) : undefined;
                 return <Fragment key={key}>
                   {commonProps
-                    ? <button {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
+                    ? <button {...commonProps} className="pointer-events-auto absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
                     : <span className="absolute" style={underlineStyle} />}
                   {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
                     ? <form
@@ -570,19 +570,19 @@ export function PdfPage({
               if (kind === "underline") {
                 const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: `2px solid ${palette.stroke}`, background: "transparent", padding: 0 };
                 return commonProps
-                  ? <button key={key} {...commonProps} className="absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
+                  ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
                   : <span key={key} className="absolute" style={style} />;
               }
 
               const style = { left: rect.left, top: rect.top + rect.height * 0.08, width: rect.width, height: rect.height * 0.84, border: "none", padding: 0, background: palette.fill, mixBlendMode: "multiply" as const };
               return commonProps
-                ? <button key={key} {...commonProps} className="absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
+                ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
                 : <span key={key} className="absolute rounded-[2px]" style={style} />;
             });
           })}
         </div>
 
-        <div className={`absolute inset-0 z-[3] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`} aria-label="저장된 PDF 영역">
+        <div className="pointer-events-none absolute inset-0 z-[6]" aria-label="저장된 PDF 영역">
           {savedAreas.map((area) => {
             const rect = projectHighlightRect(area.rect, surfaceSize.width, surfaceSize.height);
             const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
@@ -592,7 +592,7 @@ export function PdfPage({
                 type="button"
                 title="이 영역 삭제"
                 aria-label={`Page ${area.page} 영역 삭제`}
-                className="absolute cursor-pointer border-2 border-dashed border-sky-500/85 bg-sky-400/[.06] hover:outline hover:outline-2 hover:outline-red-500"
+                className="pointer-events-auto absolute cursor-pointer border-2 border-dashed border-sky-500/85 bg-sky-400/[.08] hover:outline hover:outline-2 hover:outline-red-500"
                 style={style}
                 onPointerDown={(event) => event.stopPropagation()}
                 onPointerUp={(event) => event.stopPropagation()}

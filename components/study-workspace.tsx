@@ -49,6 +49,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
 function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; papers: Paper[]; userId: string }) {
   const { user, session } = useAuth();
   const uploadingAreas = useRef(new Set<string>());
+  const deletedUploadingAreas = useRef(new Set<string>());
   const [page, setPage] = useState(1);
   const [pageText, setPageText] = useState("");
   const studyState = useStudyState(activePaper.id);
@@ -72,6 +73,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
     setQuestionAreas([]);
     setRestoredPaperUiKey("");
     dictionaryLookupIds.current.clear();
+    deletedUploadingAreas.current.clear();
   }, [paperUiKey]);
 
   useEffect(() => {
@@ -330,6 +332,7 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
 
   function removeArea(id: string) {
     const area = (tray.areas ?? []).find((item) => item.id === id);
+    if (uploadingAreas.current.has(id)) deletedUploadingAreas.current.add(id);
     if (user && area) {
       try { queueAreaDeletion(user.id, activePaper.id, area); } catch { /* Local removal remains authoritative. */ }
       void flushAreaDeletionQueue(user.id);
@@ -354,8 +357,8 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
   }
 
   function removeTrayItem(kind: keyof StudyTrayData, id: string) {
-    // PDF annotations are intentionally erased only from the PDF eraser tool.
-    if (kind === "areas" || kind === "highlights") return;
+    if (kind === "areas") { removeArea(id); return; }
+    if (kind === "highlights") { removeHighlight(id); return; }
     if (kind === "insights") { updateTray((current) => ({ ...current, insights: current.insights.filter((item) => item.id !== id) })); return; }
     if (kind === "memos") updateTray((current) => ({ ...current, memos: current.memos.filter((item) => item.id !== id) }));
   }
@@ -372,9 +375,16 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
 
   async function persistArea(area: StudyArea) {
     if (!user || !area.imageDataUrl || area.storagePath || uploadingAreas.current.has(area.id)) return;
+    const ownerId = user.id;
+    const paperId = activePaper.id;
     uploadingAreas.current.add(area.id);
     try {
-      const storagePath = await uploadAreaCrop(user.id, activePaper.id, area);
+      const storagePath = await uploadAreaCrop(ownerId, paperId, area);
+      if (deletedUploadingAreas.current.delete(area.id)) {
+        queueAreaDeletion(ownerId, paperId, { ...area, storagePath, imageDataUrl: undefined });
+        await flushAreaDeletionQueue(ownerId);
+        return;
+      }
       updateTray((current) => ({ ...current, areas: (current.areas ?? []).map((item) => item.id === area.id ? { ...item, storagePath, imageDataUrl: undefined } : item) }));
     } catch { /* Pending base64 stays only in local cache and is retried after reconnect. */ }
     finally { uploadingAreas.current.delete(area.id); }

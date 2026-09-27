@@ -46,7 +46,8 @@ test("workspace uses independent button-controlled sidebars and keeps question c
   assert.match(viewer, /downloadAnnotatedPdf\(paper\.id, savedHighlights/);
   assert.match(viewer, /다운로드 PDF에는 포함되지 않습니다/);
   assert.match(pdfPage, /aria-label="저장된 PDF 영역"/);
-  assert.match(pdfPage, /deleteMode \? "pointer-events-auto" : "pointer-events-none"/);
+  assert.match(pdfPage, /pointer-events-none absolute inset-0 z-\[6\]/);
+  assert.match(pdfPage, /if \(deleteMode\) \{[\s\S]*pointer-events-auto absolute cursor-pointer/);
   assert.match(pdfPage, /border-dashed border-sky-500\/75/);
   assert.match(workspace, /clearPdfAnnotations/);
   assert.match(workspace, /highlights: \[\], areas: \[\]/);
