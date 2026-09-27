@@ -49,7 +49,7 @@ type RenderedTextLayer = {
   textContentItemsStr: string[];
 };
 
-const DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 7;
+const DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 6;
 const TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11;
 
 const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }> = {
