@@ -2,7 +2,7 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 
@@ -242,7 +242,7 @@ export function PdfPage({
 
     const [start, end] = orderEndpoints(anchor, focus);
     const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
-    const mergedRects = mergeCharacterRects(characterRects);
+    const mergedRects = mergeClientRectsIntoLineRects(characterRects);
     const rects = normalizeClientRects(mergedRects, surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
@@ -457,11 +457,18 @@ export function PdfPage({
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
 
         <div className={`absolute inset-0 z-[5] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`}>
-          {capturedSelections.flatMap((selection, selectionIndex) =>
-            selection.rects.map((normalized, rectIndex) => {
-              const kind = selection.kind ?? "highlight";
-              const displayedNormalized = kind === "text" && selection.annotationId && textTransform?.id === selection.annotationId ? textTransform.preview : normalized;
-              const rect = projectHighlightRect(displayedNormalized, surfaceSize.width, surfaceSize.height);
+          {capturedSelections.flatMap((selection, selectionIndex) => {
+            const kind = selection.kind ?? "highlight";
+            const projectedRects = selection.rects.map((normalized) => {
+              const projected = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
+              return { ...projected, right: projected.left + projected.width, bottom: projected.top + projected.height };
+            });
+            const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects);
+            return displayRects.map((projected, rectIndex) => {
+              const normalized = selection.rects[Math.min(rectIndex, selection.rects.length - 1)];
+              const rect = kind === "text" && selection.annotationId && textTransform?.id === selection.annotationId
+                ? projectHighlightRect(textTransform.preview, surfaceSize.width, surfaceSize.height)
+                : projected;
               const color = selection.color ?? "yellow";
               const palette = annotationColors[color];
               const key = `${selection.annotationId ?? "context"}-${selectionIndex}-${rectIndex}`;
@@ -515,8 +522,8 @@ export function PdfPage({
                     onClick={(event) => { event.stopPropagation(); if (commonProps) onDeleteAnnotation(selection.annotationId!); else setTextEditor({ id: selection.annotationId!, value: selection.text, fontSizePt }); }}
                   />
                   {textMode && !commonProps && <>
-                    <button type="button" title="텍스트 메모 이동" aria-label="텍스트 메모 이동" className="absolute left-0 top-0 z-10 grid h-4 w-4 cursor-move place-items-center rounded-br bg-black/70 text-[9px] text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, displayedNormalized, "move")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}>↕</button>
-                    <button type="button" title="텍스트 메모 크기 조절" aria-label="텍스트 메모 크기 조절" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize rounded-tl bg-black/70 text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, displayedNormalized, "resize")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}><span className="block rotate-45 text-[10px]">↔</span></button>
+                    <button type="button" title="텍스트 메모 이동" aria-label="텍스트 메모 이동" className="absolute left-0 top-0 z-10 grid h-4 w-4 cursor-move place-items-center rounded-br bg-black/70 text-[9px] text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, normalized, "move")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}>↕</button>
+                    <button type="button" title="텍스트 메모 크기 조절" aria-label="텍스트 메모 크기 조절" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize rounded-tl bg-black/70 text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, normalized, "resize")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}><span className="block rotate-45 text-[10px]">↔</span></button>
                   </>}
                 </div>;
               }
@@ -571,8 +578,8 @@ export function PdfPage({
               return commonProps
                 ? <button key={key} {...commonProps} className="absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
                 : <span key={key} className="absolute rounded-[2px]" style={style} />;
-            }),
-          )}
+            });
+          })}
         </div>
 
         <div className={`absolute inset-0 z-[3] ${deleteMode ? "pointer-events-auto" : "pointer-events-none"}`} aria-label="저장된 PDF 영역">
@@ -806,62 +813,4 @@ function getDirectTextNode(div: HTMLElement): Text | null {
   }
   const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
   return walker.nextNode() as Text | null;
-}
-
-function mergeCharacterRects(rects: ClientRectLike[]): ClientRectLike[] {
-  if (!rects.length) return [];
-  const sorted = [...rects].sort((a, b) => a.top + a.height / 2 - (b.top + b.height / 2) || a.left - b.left);
-  const lines: ClientRectLike[][] = [];
-
-  for (const rect of sorted) {
-    let target: ClientRectLike[] | undefined;
-    for (const line of lines) {
-      const sample = line[0];
-      const sampleCenter = sample.top + sample.height / 2;
-      const rectCenter = rect.top + rect.height / 2;
-      if (Math.abs(sampleCenter - rectCenter) <= Math.max(1.5, Math.min(sample.height, rect.height) * 0.45)) {
-        target = line;
-        break;
-      }
-    }
-    if (!target) {
-      lines.push([rect]);
-      continue;
-    }
-    target.push(rect);
-  }
-
-  const merged: ClientRectLike[] = [];
-  for (const line of lines) {
-    line.sort((a, b) => a.left - b.left);
-    let run: ClientRectLike[] = [];
-
-    const flush = () => {
-      if (!run.length) return;
-      const left = Math.min(...run.map((rect) => rect.left));
-      const right = Math.max(...run.map((rect) => rect.right));
-      const top = Math.min(...run.map((rect) => rect.top));
-      const bottom = Math.max(...run.map((rect) => rect.bottom));
-      merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
-      run = [];
-    };
-
-    for (const rect of line) {
-      const previous = run.at(-1);
-      if (!previous) {
-        run.push(rect);
-        continue;
-      }
-      const allowedGap = Math.max(3, Math.min(previous.height, rect.height) * 1.15);
-      if (rect.left - previous.right <= allowedGap) {
-        run.push(rect);
-      } else {
-        flush();
-        run.push(rect);
-      }
-    }
-    flush();
-  }
-
-  return merged.sort((a, b) => a.top - b.top || a.left - b.left);
 }

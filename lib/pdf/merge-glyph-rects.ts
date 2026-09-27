@@ -3,6 +3,70 @@ export type NormalizedHighlightRect = { x: number; y: number; width: number; hei
 export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 
 /**
+ * Collapse per-character browser ranges into one visual band per selected line.
+ *
+ * PDF formula glyphs often live in separate transformed spans. Superscripts,
+ * subscripts, operators and surrounding spaces therefore produce disconnected
+ * rectangles even though the user selected one equation line. We join nearby
+ * horizontal fragments and allow vertically shifted math glyphs to belong to
+ * the same line, while retaining a conservative gap limit so separate columns
+ * are never bridged.
+ */
+export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]): ClientRectLike[] {
+  if (!rects.length) return [];
+  const sorted = [...rects].sort((a, b) => a.left - b.left || (a.top + a.height / 2) - (b.top + b.height / 2));
+  const lines: ClientRectLike[][] = [];
+
+  for (const rect of sorted) {
+    const target = lines.find((line) => line.some((member) => {
+      const memberCenter = member.top + member.height / 2;
+      const rectCenter = rect.top + rect.height / 2;
+      const bothAreLineBands = member.width > member.height * 2.5 && rect.width > rect.height * 2.5;
+      const tolerance = bothAreLineBands
+        ? Math.max(1.5, Math.min(member.height, rect.height) * 0.45)
+        : Math.max(2, Math.max(member.height, rect.height) * 0.9);
+      return Math.abs(memberCenter - rectCenter) <= tolerance;
+    }));
+    if (target) target.push(rect);
+    else lines.push([rect]);
+  }
+
+  const merged: ClientRectLike[] = [];
+  for (const line of lines) {
+    line.sort((a, b) => a.left - b.left);
+    let run: ClientRectLike[] = [];
+
+    const flush = () => {
+      if (!run.length) return;
+      const left = Math.min(...run.map((rect) => rect.left));
+      const right = Math.max(...run.map((rect) => rect.right));
+      const top = Math.min(...run.map((rect) => rect.top));
+      const bottom = Math.max(...run.map((rect) => rect.bottom));
+      merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
+      run = [];
+    };
+
+    for (const rect of line) {
+      const previous = run.at(-1);
+      if (!previous) {
+        run.push(rect);
+        continue;
+      }
+      const lineHeight = Math.max(...run.map((item) => item.height), rect.height);
+      const allowedGap = Math.max(6, lineHeight * 2.25);
+      if (rect.left - previous.right <= allowedGap) run.push(rect);
+      else {
+        flush();
+        run.push(rect);
+      }
+    }
+    flush();
+  }
+
+  return merged.sort((a, b) => a.top - b.top || a.left - b.left);
+}
+
+/**
  * Convert the browser's actual DOM Range rectangles into page-relative coordinates.
  *
  * PDF.js already positions/scales every text-layer glyph in the browser. Using
