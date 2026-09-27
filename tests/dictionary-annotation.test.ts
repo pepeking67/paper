@@ -56,8 +56,12 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(workspace, /dictionaryState\.findMeaning\(cleanText\)/);
   assert.match(workspace, /fetch\("\/api\/dictionary"/);
   assert.match(workspace, /dictionaryState\.upsert\(term, meaning\)/);
-  assert.match(dictionary, /PERSONAL_DICTIONARY_PAPER_ID = "__personal_dictionary__"/);
+  assert.match(dictionary, /personal_dictionary_entries/);
+  assert.match(dictionary, /paper-study-personal-dictionary:/);
+  assert.match(dictionary, /readAccountCache\(userId, PERSONAL_DICTIONARY_PAPER_ID\)/);
+  assert.match(dictionary, /mergeRemoteWithPending/);
   assert.match(drawer, /CSV 다운로드/);
+  assert.match(drawer, /계정 전체에서 모든 논문에 공유됩니다/);
   assert.match(route, /provider\.defineTerm/);
   assert.match(page, /borderBottom: "1\.5px solid #111"/);
   assert.match(page, /fontSize = Math\.max\(8, Math\.min\(9/);
@@ -117,4 +121,13 @@ test("dictionary annotations stay out of Study Tray and study-note material", as
   assert.match(exporter, /createDictionaryLabelImage\(pdf, label\.meaning, fontSize\)/);
   assert.match(exporter, /page\.drawImage\(rendered\.image/);
   assert.match(exporter, /canvas\.toDataURL\("image\/png"\)/);
+});
+
+test("PDF export rasterizes positioned text memos instead of skipping them", async () => {
+  const exporter = await readFile("lib/pdf/export-annotated-pdf.ts", "utf8");
+  assert.doesNotMatch(exporter, /if \(annotation\.kind === "text"\) continue/);
+  assert.match(exporter, /textMemos\.push/);
+  assert.match(exporter, /createTextMemoImage/);
+  assert.match(exporter, /page\.drawImage\(rendered\.image/);
+  assert.match(exporter, /katex\.renderToString/);
 });
