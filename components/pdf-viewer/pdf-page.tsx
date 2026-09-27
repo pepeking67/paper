@@ -4,6 +4,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
+import { MarkdownContent } from "@/components/markdown/markdown-content";
 
 type CapturedSelection = {
   annotationId?: string;
@@ -488,7 +489,6 @@ export function PdfPage({
                 const fontSizePt = selection.textFontSizePt ?? legacyTextFontSizePt(selection.textFontSizeRatio, basePageSize.height);
                 const memoFontSize = textFontSizePtToPixels(fontSizePt, surfaceSize.height, basePageSize.height);
                 const textStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, fontSize: memoFontSize, lineHeight: 1.18, color: "#111", background: "transparent" };
-                if (commonProps) return <button key={key} {...commonProps} className="pointer-events-auto absolute z-[5] overflow-hidden whitespace-pre-wrap px-1 py-0.5 text-left font-medium hover:outline hover:outline-1 hover:outline-red-500" style={textStyle}>{selection.text}</button>;
                 if (textEditor?.id === selection.annotationId) return <form
                   key={key}
                   className="pointer-events-auto absolute z-[7] flex min-w-48 flex-col gap-1 rounded border border-black/30 bg-white p-1 shadow-xl"
@@ -498,20 +498,23 @@ export function PdfPage({
                   onSubmit={(event) => { event.preventDefault(); const value = textEditor.value.trim(); if (value) onEditTextAnnotation(selection.annotationId!, value, textEditor.fontSizePt); setTextEditor(null); }}
                 >
                   <textarea autoFocus rows={3} maxLength={1_000} value={textEditor.value} onChange={(event) => setTextEditor((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextEditor(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }}/>
+                  <p className="px-0.5 text-[9px] text-black/55">수식은 $...$ 또는 $$...$$ 형태로 입력</p>
+                  {textEditor.value.trim() && <div className="max-h-28 overflow-auto rounded border border-black/10 bg-white px-1.5 py-1" style={{ fontSize: `${textEditor.fontSizePt}pt` }} aria-label="텍스트 메모 미리보기"><MarkdownContent content={textEditor.value} variant="pdfMemo" /></div>}
                   <TextFontSizeControl value={textEditor.fontSizePt} onChange={(value) => setTextEditor((current) => current ? { ...current, fontSizePt: value } : current)}/>
                   <button type="submit" className="self-end rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
                 </form>;
                 return <div key={key} className="pointer-events-auto absolute z-[5] overflow-hidden" style={textStyle}>
+                  <div className="pointer-events-none h-full w-full overflow-hidden px-1 py-0.5 font-medium"><MarkdownContent content={selection.text} variant="pdfMemo" /></div>
                   <button
                     type="button"
-                    title="텍스트 메모 수정"
-                    className="absolute inset-0 h-full w-full overflow-hidden whitespace-pre-wrap px-1 py-0.5 text-left font-medium"
-                    style={{ fontSize: memoFontSize, lineHeight: 1.18, color: "#111" }}
+                    title={commonProps ? "이 주석 삭제" : "텍스트 메모 수정"}
+                    aria-label={commonProps ? `텍스트 메모 주석 삭제: ${selection.text.slice(0, 80)}` : "텍스트 메모 수정"}
+                    className={`absolute inset-0 h-full w-full bg-transparent ${commonProps ? "hover:outline hover:outline-1 hover:outline-red-500" : "cursor-text"}`}
                     onPointerDown={(event) => event.stopPropagation()}
                     onPointerUp={(event) => event.stopPropagation()}
-                    onClick={(event) => { event.stopPropagation(); setTextEditor({ id: selection.annotationId!, value: selection.text, fontSizePt }); }}
-                  >{selection.text}</button>
-                  {textMode && <>
+                    onClick={(event) => { event.stopPropagation(); if (commonProps) onDeleteAnnotation(selection.annotationId!); else setTextEditor({ id: selection.annotationId!, value: selection.text, fontSizePt }); }}
+                  />
+                  {textMode && !commonProps && <>
                     <button type="button" title="텍스트 메모 이동" aria-label="텍스트 메모 이동" className="absolute left-0 top-0 z-10 grid h-4 w-4 cursor-move place-items-center rounded-br bg-black/70 text-[9px] text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, displayedNormalized, "move")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}>↕</button>
                     <button type="button" title="텍스트 메모 크기 조절" aria-label="텍스트 메모 크기 조절" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize rounded-tl bg-black/70 text-white touch-none" onPointerDown={(event) => beginTextTransform(event, selection.annotationId!, displayedNormalized, "resize")} onPointerMove={moveTextTransform} onPointerUp={finishTextTransform} onPointerCancel={cancelTextTransform}><span className="block rotate-45 text-[10px]">↔</span></button>
                   </>}
@@ -630,6 +633,8 @@ export function PdfPage({
           onSubmit={(event) => { event.preventDefault(); const value = textDraft.value.trim(); if (value) onTextAnnotation(value, pageNumber, textDraft.rect, textDraft.fontSizePt); setTextDraft(null); }}
         >
           <textarea autoFocus rows={3} maxLength={1_000} value={textDraft.value} placeholder="메모 입력" onChange={(event) => setTextDraft((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") setTextDraft(null); if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} className="pdf-annotation-input resize-y rounded border border-black/20 px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }}/>
+          <p className="px-0.5 text-[9px] text-black/55">수식은 $...$ 또는 $$...$$ 형태로 입력</p>
+          {textDraft.value.trim() && <div className="max-h-28 overflow-auto rounded border border-black/10 bg-white px-1.5 py-1" style={{ fontSize: `${textDraft.fontSizePt}pt` }} aria-label="새 텍스트 메모 미리보기"><MarkdownContent content={textDraft.value} variant="pdfMemo" /></div>}
           <TextFontSizeControl value={textDraft.fontSizePt} onChange={(value) => setTextDraft((current) => current ? { ...current, fontSizePt: value } : current)}/>
           <div className="flex justify-end gap-1"><button type="button" onClick={() => setTextDraft(null)} className="rounded px-2 py-1 text-[10px] text-black/60">취소</button><button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button></div>
         </form>}
