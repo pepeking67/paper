@@ -14,20 +14,54 @@ export type ClientRectLike = { left: number; top: number; right: number; bottom:
  */
 export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]): ClientRectLike[] {
   if (!rects.length) return [];
-  const sorted = [...rects].sort((a, b) => a.left - b.left || (a.top + a.height / 2) - (b.top + b.height / 2));
+  const heights = rects.map((rect) => rect.height).sort((a, b) => a - b);
+  const typicalHeight = percentile(heights, 0.75);
+  const anchorThreshold = Math.max(0.5, typicalHeight * 0.72);
+  const anchors = rects.filter((rect) => rect.height >= anchorThreshold);
+  const satellites = rects.filter((rect) => rect.height < anchorThreshold);
   const lines: ClientRectLike[][] = [];
 
-  for (const rect of sorted) {
-    const target = lines.find((line) => line.some((member) => {
-      const memberCenter = member.top + member.height / 2;
-      const rectCenter = rect.top + rect.height / 2;
-      const bothAreLineBands = member.width > member.height * 2.5 && rect.width > rect.height * 2.5;
+  // Establish rows from full-height glyphs first. Comparing with a stable row
+  // center prevents a subscript on one row and a superscript on the next row
+  // from forming a transitive bridge that collapses both rows into one band.
+  for (const rect of [...anchors].sort(compareByCenterThenLeft)) {
+    const rectCenter = verticalCenter(rect);
+    let bestLine: ClientRectLike[] | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const line of lines) {
+      const lineCenter = median(line.map(verticalCenter));
+      const lineHeight = median(line.map((member) => member.height));
+      const bothAreLineBands = line.some((member) => member.width > member.height * 2.5)
+        && rect.width > rect.height * 2.5;
       const tolerance = bothAreLineBands
-        ? Math.max(1.5, Math.min(member.height, rect.height) * 0.45)
-        : Math.max(2, Math.max(member.height, rect.height) * 0.9);
-      return Math.abs(memberCenter - rectCenter) <= tolerance;
-    }));
-    if (target) target.push(rect);
+        ? Math.max(1.5, Math.min(lineHeight, rect.height) * 0.45)
+        : Math.max(2, Math.min(lineHeight, rect.height) * 0.55);
+      const distance = Math.abs(lineCenter - rectCenter);
+      if (distance <= tolerance && distance < bestDistance) {
+        bestLine = line;
+        bestDistance = distance;
+      }
+    }
+    if (bestLine) bestLine.push(rect);
+    else lines.push([rect]);
+  }
+
+  // Small superscript/subscript glyphs follow the nearest established row.
+  // They may expand that row's visual band, but never redefine its center and
+  // therefore cannot merge two neighboring selected rows.
+  for (const rect of [...satellites].sort(compareByCenterThenLeft)) {
+    const rectCenter = verticalCenter(rect);
+    let bestLine: ClientRectLike[] | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const line of lines) {
+      const anchorCenter = median(line.filter((member) => member.height >= anchorThreshold).map(verticalCenter));
+      const distance = Math.abs(anchorCenter - rectCenter);
+      if (distance < bestDistance) {
+        bestLine = line;
+        bestDistance = distance;
+      }
+    }
+    if (bestLine && bestDistance <= Math.max(typicalHeight * 1.1, rect.height * 1.5)) bestLine.push(rect);
     else lines.push([rect]);
   }
 
@@ -64,6 +98,26 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
   }
 
   return merged.sort((a, b) => a.top - b.top || a.left - b.left);
+}
+
+function verticalCenter(rect: ClientRectLike) {
+  return rect.top + rect.height / 2;
+}
+
+function compareByCenterThenLeft(a: ClientRectLike, b: ClientRectLike) {
+  return verticalCenter(a) - verticalCenter(b) || a.left - b.left;
+}
+
+function percentile(sorted: readonly number[], ratio: number) {
+  if (!sorted.length) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * ratio)))];
+}
+
+function median(values: readonly number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 /**

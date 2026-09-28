@@ -38,6 +38,21 @@ test("a tall equation band does not absorb the following selected row", () => {
   ]).length, 2);
 });
 
+test("adjacent formula rows are not bridged by subscripts and superscripts", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 36, 10),
+    clientRect(48, 17, 5, 6),
+    clientRect(10, 20, 5, 6),
+    clientRect(17, 25, 36, 10),
+  ]);
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map(({ left, top, right, bottom }) => ({ left, top, right, bottom })), [
+    { left: 10, top: 10, right: 53, bottom: 23 },
+    { left: 10, top: 20, right: 53, bottom: 35 },
+  ]);
+});
+
 test("a single-line selection keeps its exact horizontal extent", () => {
   assert.deepEqual(mergeGlyphRects([{ left: 12, top: 8, width: 63, height: 9 }]), [{ left: 12, top: 8, width: 63, height: 9 }]);
 });
