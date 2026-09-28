@@ -117,3 +117,18 @@ test("personal paper UUID is the only authenticated study-state identity", async
   assert.match(library, /const id = String\(data\.id\)/);
   assert.match(library, /updatePaper\(id: string/);
 });
+
+test("personal dictionary is an account-wide RLS-protected resource", async () => {
+  const hook = await readFile("lib/dictionary/use-personal-dictionary.ts", "utf8");
+  const migration = await readFile("supabase/migrations/202609270001_account_personal_dictionary.sql", "utf8");
+
+  assert.match(hook, /from\("personal_dictionary_entries"\)/);
+  assert.match(hook, /user_id: ownerId/);
+  assert.match(hook, /localStorage\.setItem\(dictionaryCacheKey\(userId\)/);
+  assert.match(hook, /window\.addEventListener\("online"/);
+  assert.match(migration, /unique \(user_id, normalized_term\)/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /auth\.uid\(\)\) = user_id/g);
+  assert.match(migration, /revoke all on table public\.personal_dictionary_entries from anon/);
+  assert.match(migration, /grant select, insert, update, delete/);
+});

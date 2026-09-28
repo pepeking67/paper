@@ -45,7 +45,7 @@ export function PersonalDictionary({
     {open && <div className="fixed inset-0 z-[70] flex justify-end bg-black/60" role="dialog" aria-modal="true" aria-labelledby="personal-dictionary-title" onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="flex h-full w-full max-w-lg flex-col border-l border-[var(--line)] bg-black text-white">
         <header className="flex items-start gap-3 border-b border-[var(--line)] p-4">
-          <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[.12em] text-[var(--accent)]">PERSONAL DICTIONARY</p><h2 id="personal-dictionary-title" className="mt-0.5 text-lg font-semibold">나만의 사전</h2><p className="mt-1 text-xs text-[var(--muted)]">저장된 뜻을 먼저 사용하고, 없는 단어만 Gemini에서 찾습니다.</p></div>
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[.12em] text-[var(--accent)]">PERSONAL DICTIONARY</p><h2 id="personal-dictionary-title" className="mt-0.5 text-lg font-semibold">나만의 사전</h2><p className="mt-1 text-xs text-[var(--muted)]">계정 전체에서 모든 논문에 공유됩니다. 저장된 뜻을 먼저 사용하고, 없는 단어만 Gemini에서 찾습니다.</p></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="나만의 사전 닫기" className="grid h-8 w-8 place-items-center rounded-full text-xl text-[var(--muted)] hover:bg-white/5">×</button>
         </header>
 

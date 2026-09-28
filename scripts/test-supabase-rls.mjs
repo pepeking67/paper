@@ -9,7 +9,7 @@ const credentials = [
 ];
 const clients = credentials.map(() => createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }));
 const marker = `rls-${Date.now()}`;
-const created = { categories: [], papers: [], paths: [] };
+const created = { categories: [], papers: [], dictionaryEntries: [], paths: [] };
 
 try {
   const users = [];
@@ -38,7 +38,10 @@ try {
     assert.ifError((await client.from("paper_assets").insert({ user_id: user.id, paper_id: paper.data.id, kind: "pdf", bucket_id: "paper-pdfs", object_path: pdfPath, original_filename: `${marker}.pdf`, content_type: "application/pdf", byte_size: 20, version: 1, processing_status: "ready" })).error);
     assert.ifError((await client.from("paper_study_states").insert({ user_id: user.id, paper_id: paper.data.id, tray: {}, note_markdown: marker, revision: 1 })).error);
     assert.ifError((await client.from("paper_area_assets").insert({ user_id: user.id, paper_id: paper.data.id, area_id: marker, page: 1, rect: { x: 0, y: 0, width: 0.1, height: 0.1 }, bucket_id: "paper-area-crops", object_path: cropPath, memo: "" })).error);
-    fixtures.push({ user, categoryId: category.data.id, paperId: paper.data.id, pdfPath, cropPath });
+    const dictionary = await client.from("personal_dictionary_entries").insert({ user_id: user.id, term: `${marker}-${index}`, normalized_term: `${marker}-${index}`, meaning: "RLS test" }).select("id").single();
+    assert.ifError(dictionary.error);
+    created.dictionaryEntries.push(dictionary.data.id);
+    fixtures.push({ user, categoryId: category.data.id, paperId: paper.data.id, dictionaryId: dictionary.data.id, pdfPath, cropPath });
   }
 
   for (const [attackerIndex, ownerIndex] of [[0, 1], [1, 0]]) {
@@ -50,6 +53,7 @@ try {
       ["paper_assets", "paper_id", owner.paperId],
       ["paper_study_states", "paper_id", owner.paperId],
       ["paper_area_assets", "paper_id", owner.paperId],
+      ["personal_dictionary_entries", "id", owner.dictionaryId],
     ]) {
       const selected = await attacker.from(table).select("*").eq(column, value);
       assert.ifError(selected.error);
@@ -67,6 +71,7 @@ try {
       ["paper_assets", { user_id: owner.user.id, paper_id: owner.paperId, kind: "pdf", bucket_id: "paper-pdfs", object_path: owner.pdfPath, version: 99, processing_status: "ready" }],
       ["paper_study_states", { user_id: owner.user.id, paper_id: `${owner.paperId}-foreign`, tray: {}, note_markdown: marker, revision: 1 }],
       ["paper_area_assets", { user_id: owner.user.id, paper_id: owner.paperId, area_id: `${marker}-foreign`, page: 1, rect: {}, bucket_id: "paper-area-crops", object_path: owner.cropPath }],
+      ["personal_dictionary_entries", { user_id: owner.user.id, term: `${marker}-foreign`, normalized_term: `${marker}-foreign`, meaning: "forbidden" }],
     ];
     for (const [table, row] of forbiddenInserts) {
       const result = await attacker.from(table).insert(row);
@@ -83,7 +88,7 @@ try {
     }
   }
 
-  console.log("RLS isolation passed for 5 tables and 2 private Storage buckets using two authenticated user JWTs.");
+  console.log("RLS isolation passed for 6 tables and 2 private Storage buckets using two authenticated user JWTs.");
 } finally {
   for (let index = 0; index < clients.length; index += 1) {
     const client = clients[index];
@@ -100,6 +105,7 @@ try {
       await client.storage.from("paper-area-crops").remove([paths.cropPath]);
     }
     if (created.categories[index]) await client.from("paper_categories").delete().eq("id", created.categories[index]);
+    if (created.dictionaryEntries[index]) await client.from("personal_dictionary_entries").delete().eq("id", created.dictionaryEntries[index]);
     await client.auth.signOut();
   }
 }

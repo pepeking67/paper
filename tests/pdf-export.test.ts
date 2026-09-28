@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { placeDictionaryPdfLabel, projectNormalizedRectToPdf } from "../lib/pdf/export-annotated-pdf";
+import { placeDictionaryPdfLabel, projectNormalizedRectToPdf, textMemoToPlainText } from "../lib/pdf/export-annotated-pdf";
 
 test("projects top-left normalized PDF marks into bottom-left PDF coordinates", () => {
   const rect = projectNormalizedRectToPdf({ x: 0.1, y: 0.2, width: 0.3, height: 0.1 }, 600, 800);
@@ -24,4 +24,8 @@ test("places dictionary meanings below their underlined term and avoids collisio
 test("moves a dictionary meaning above the term when the page bottom has no room", () => {
   const placement = placeDictionaryPdfLabel({ x: 590, y: 3, width: 20, height: 10 }, { width: 60, height: 7 }, 600, 800);
   assert.deepEqual(placement, { x: 538, y: 13.75, width: 60, height: 7 });
+});
+
+test("keeps text memo content readable when PDF export falls back from rich math rendering", () => {
+  assert.equal(textMemoToPlainText("**메모**: $x^2 + y^2$\n`policy`"), "메모: x^2 + y^2\npolicy");
 });
