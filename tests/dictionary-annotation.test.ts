@@ -97,6 +97,7 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   const provider = await readFile("lib/ai/provider.ts", "utf8");
   const types = await readFile("lib/study-tray/types.ts", "utf8");
   const localUi = await readFile("lib/workspace-state/local-ui-state.ts", "utf8");
+  const globalStyles = await readFile("app/globals.css", "utf8");
 
   assert.match(types, /"highlight" \| "underline" \| "dictionary" \| "text"/);
   assert.match(types, /dictionaryMeaning\?: string/);
@@ -122,6 +123,9 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
+  assert.match(page, /className="dictionary-edit-input/);
+  assert.match(drawer, /className="dictionary-edit-input/);
+  assert.match(globalStyles, /\.dictionary-edit-input[\s\S]*background: #fff !important;[\s\S]*color: #000 !important;[\s\S]*-webkit-text-fill-color: #000;/);
   assert.match(provider, /GEMINI_DICTIONARY_MODEL\?\.trim\(\) \|\| DEFAULT_GEMINI_DICTIONARY_MODEL/);
   assert.match(workspace, /Retry old annotations sequentially/);
 });

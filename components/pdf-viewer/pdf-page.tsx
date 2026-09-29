@@ -563,7 +563,7 @@ export function PdfPage({
                         }}
                       >
                         <label className="sr-only" htmlFor={`dictionary-${selection.annotationId}`}>사전 뜻 수정</label>
-                        <input id={`dictionary-${selection.annotationId}`} autoFocus maxLength={100} value={dictionaryEditor.value} onChange={(event) => setDictionaryEditor({ id: selection.annotationId!, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") setDictionaryEditor(null); }} className="min-w-0 flex-1 rounded border border-black/20 bg-white px-1.5 py-1 text-[11px] text-black"/>
+                        <input id={`dictionary-${selection.annotationId}`} autoFocus maxLength={100} value={dictionaryEditor.value} onChange={(event) => setDictionaryEditor({ id: selection.annotationId!, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") setDictionaryEditor(null); }} className="dictionary-edit-input min-w-0 flex-1 rounded border border-black/20 px-1.5 py-1 text-[11px]"/>
                         <button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
                       </form>
                     : <button

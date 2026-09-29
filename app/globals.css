@@ -51,6 +51,16 @@ select { color-scheme: dark; }
   color: #111 !important;
 }
 
+/* Dictionary meaning editors must stay legible on both the white PDF and the dark drawer. */
+.dictionary-edit-input {
+  background: #fff !important;
+  color: #000 !important;
+  caret-color: #000;
+  -webkit-text-fill-color: #000;
+  opacity: 1;
+}
+.dictionary-edit-input::placeholder { color: #525252 !important; }
+
 .scrollbar { scrollbar-color: rgba(255,255,255,.22) transparent; scrollbar-width: thin; }
 
 .study-workspace { grid-template-columns: minmax(0, 1fr); background: #0b0b0c !important; }
