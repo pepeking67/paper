@@ -24,6 +24,30 @@ test("a product operator uses the surrounding body-text band instead of painting
   ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(10, 10, 12, 10)]);
 });
 
+test("a product operator attaches to the equation row rather than the preceding prose row", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(45, 5, 55, 10),
+    clientRect(10, 22, 18, 10),
+    { ...clientRect(30, 12, 12, 26), character: "∏" },
+    clientRect(44, 22, 56, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true }), [
+    clientRect(45, 5, 55, 10),
+    clientRect(10, 22, 90, 10),
+  ]);
+});
+
+test("a selected tall square bracket is clamped to the normal equation band", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    { ...clientRect(50, 2, 5, 28), character: "[" },
+  ], { referenceLineHeight: 10 }), [clientRect(50, 11, 5, 10)]);
+
+  // Stored annotations no longer contain per-character metadata. Their text
+  // still enables the same compatibility normalization during display.
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(50, 2, 5, 28),
+  ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(50, 11, 5, 10)]);
+});
+
 test("fraction bars and tall operators remain in one body-height equation band", () => {
   const rows = mergeClientRectsIntoLineRects([
     clientRect(10, 20, 22, 10),

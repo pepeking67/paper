@@ -3,8 +3,9 @@ export type NormalizedHighlightRect = { x: number; y: number; width: number; hei
 export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number; character?: string };
 export type MergeLineRectOptions = { referenceLineHeight?: number; clampTallMath?: boolean };
 
-const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃]/u;
-const MATH_NOTATION = /[=≈≃≤≥∏∐∑∫∬∭∮⋂⋃∇_^]/u;
+const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃Π]/u;
+const TALL_MATH_DELIMITER = /[()[\]{}|‖⌈⌉⌊⌋]/u;
+const MATH_NOTATION = /[=≈≃≤≥∏∐∑∫∬∭∮⋂⋃Π∇_^\[\]{}]/u;
 
 /**
  * Collapse per-character browser ranges into one visual band per selected line.
@@ -23,12 +24,16 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
   const typicalHeight = options.referenceLineHeight && options.referenceLineHeight > 0
     ? options.referenceLineHeight
     : selectedTypicalHeight;
-  const isBodyAnchor = (rect: ClientRectLike) => !(rect.character && LARGE_MATH_OPERATOR.test(rect.character))
+  const isTallMathGlyph = (rect: ClientRectLike) => Boolean(rect.character && (
+    LARGE_MATH_OPERATOR.test(rect.character)
+    || (TALL_MATH_DELIMITER.test(rect.character) && rect.height > typicalHeight * 1.45)
+  ));
+  const isBodyAnchor = (rect: ClientRectLike) => !isTallMathGlyph(rect)
     && rect.height >= typicalHeight * 0.68
     && rect.height <= typicalHeight * 1.45;
   const anchors = rects.filter(isBodyAnchor);
   const satellites = rects.filter((rect) => !isBodyAnchor(rect));
-  const normalizeMathBand = options.clampTallMath || rects.some((rect) => rect.character && LARGE_MATH_OPERATOR.test(rect.character));
+  const normalizeMathBand = options.clampTallMath || rects.some(isTallMathGlyph);
   const lines: ClientRectLike[][] = [];
 
   // Establish rows only from body-height glyphs. Tall operators, fraction bars,
@@ -82,7 +87,10 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
       if (!run.length) return;
       const left = Math.min(...run.map((rect) => rect.left));
       const right = Math.max(...run.map((rect) => rect.right));
-      const { top, bottom } = representativeVerticalBand(run, typicalHeight, options);
+      const { top, bottom } = representativeVerticalBand(run, typicalHeight, {
+        ...options,
+        clampTallMath: normalizeMathBand,
+      });
       merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
       run = [];
     };
@@ -125,7 +133,10 @@ function representativeVerticalBand(run: readonly ClientRectLike[], typicalHeigh
     : typicalHeight;
   const containsOperator = options.clampTallMath || run.some((rect) => rect.character && LARGE_MATH_OPERATOR.test(rect.character));
   const candidates = run.filter((rect) => {
-    if (rect.character && LARGE_MATH_OPERATOR.test(rect.character)) return false;
+    if (rect.character && (
+      LARGE_MATH_OPERATOR.test(rect.character)
+      || (TALL_MATH_DELIMITER.test(rect.character) && rect.height > reference * 1.45)
+    )) return false;
     return rect.height >= reference * 0.68 && rect.height <= reference * 1.45;
   });
 
