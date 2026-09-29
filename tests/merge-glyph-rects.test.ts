@@ -48,6 +48,36 @@ test("a selected tall square bracket is clamped to the normal equation band", ()
   ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(50, 11, 5, 10)]);
 });
 
+test("garbled legacy math rects use geometry instead of extracted symbols", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 20, 90, 10),
+    clientRect(102, 6, 18, 38),
+    clientRect(122, 10, 22, 30),
+    clientRect(146, 5, 16, 40),
+    clientRect(164, 20, 150, 10),
+  ]);
+
+  assert.deepEqual(rows, [clientRect(10, 20, 304, 10)]);
+});
+
+test("a geometry-detected operator stays on the equation row below prose", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(55, 4, 65, 10),
+    clientRect(10, 22, 22, 10),
+    clientRect(34, 10, 16, 34),
+    clientRect(52, 22, 68, 10),
+  ], { referenceLineHeight: 10 }), [
+    clientRect(55, 4, 65, 10),
+    clientRect(10, 22, 110, 10),
+  ]);
+});
+
+test("a large ordinary heading is not mistaken for a math operator", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 4, 120, 22),
+  ], { referenceLineHeight: 10 }), [clientRect(10, 4, 120, 22)]);
+});
+
 test("fraction bars and tall operators remain in one body-height equation band", () => {
   const rows = mergeClientRectsIntoLineRects([
     clientRect(10, 20, 22, 10),

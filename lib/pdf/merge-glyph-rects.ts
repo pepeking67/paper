@@ -19,8 +19,11 @@ const MATH_NOTATION = /[=≈≃≤≥∏∐∑∫∬∭∮⋂⋃Π∇_^\[\]{}]/u
  */
 export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], options: MergeLineRectOptions = {}): ClientRectLike[] {
   if (!rects.length) return [];
-  const heights = rects.map((rect) => rect.height).sort((a, b) => a - b);
-  const selectedTypicalHeight = percentile(heights, 0.75);
+  // Count-based percentiles are unstable for equations: one sum can produce
+  // several tall PDF spans (operator, upper limit, lower limit) while ordinary
+  // body text is stored as one wide span. Weight by horizontal coverage so the
+  // long body band, rather than the number of PDF fragments, sets the baseline.
+  const selectedTypicalHeight = weightedMedianHeight(rects);
   const typicalHeight = options.referenceLineHeight && options.referenceLineHeight > 0
     ? options.referenceLineHeight
     : selectedTypicalHeight;
@@ -33,7 +36,23 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
     && rect.height <= typicalHeight * 1.45;
   const anchors = rects.filter(isBodyAnchor);
   const satellites = rects.filter((rect) => !isBodyAnchor(rect));
-  const normalizeMathBand = options.clampTallMath || rects.some(isTallMathGlyph);
+  const hasGeometryMath = satellites.some((rect) => {
+    const tall = rect.height > typicalHeight * 1.45;
+    const thin = rect.height < typicalHeight * 0.55;
+    if (!tall && !thin) return false;
+
+    // A tall/narrow span next to a normal-height span is the characteristic
+    // geometry of sums, products, integrals, fractions and stretched brackets.
+    // This works even when PDF text extraction maps the glyph to the wrong
+    // character or omits it entirely.
+    const narrowMathShape = thin || rect.width <= Math.max(typicalHeight * 5, rect.height * 1.5);
+    if (!narrowMathShape) return false;
+    if (!anchors.length) {
+      return Boolean(options.referenceLineHeight) && rects.length === 1;
+    }
+    return anchors.some((anchor) => Math.abs(verticalCenter(anchor) - verticalCenter(rect)) <= Math.max(typicalHeight * 2.4, rect.height * 0.6));
+  });
+  const normalizeMathBand = options.clampTallMath || rects.some(isTallMathGlyph) || hasGeometryMath;
   const lines: ClientRectLike[][] = [];
 
   // Establish rows only from body-height glyphs. Tall operators, fraction bars,
@@ -177,6 +196,21 @@ function median(values: readonly number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function weightedMedianHeight(rects: readonly ClientRectLike[]) {
+  const weighted = rects
+    .filter((rect) => Number.isFinite(rect.height) && rect.height > 0)
+    .map((rect) => ({ height: rect.height, weight: Math.max(1, Number.isFinite(rect.width) ? rect.width : 1) }))
+    .sort((left, right) => left.height - right.height);
+  if (!weighted.length) return 0;
+  const middle = weighted.reduce((sum, item) => sum + item.weight, 0) / 2;
+  let cumulative = 0;
+  for (const item of weighted) {
+    cumulative += item.weight;
+    if (cumulative >= middle) return item.height;
+  }
+  return weighted.at(-1)!.height;
 }
 
 /**
