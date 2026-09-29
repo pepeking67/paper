@@ -2,7 +2,7 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { containsLargeMathOperator, estimateTypicalLineHeight, mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { containsMathNotation, estimateTypicalLineHeight, mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 
@@ -248,7 +248,10 @@ export function PdfPage({
 
     const [start, end] = orderEndpoints(anchor, focus);
     const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
-    const mergedRects = mergeClientRectsIntoLineRects(characterRects, { referenceLineHeight: typicalTextLineHeight || undefined });
+    const mergedRects = mergeClientRectsIntoLineRects(characterRects, {
+      referenceLineHeight: typicalTextLineHeight || undefined,
+      clampTallMath: containsMathNotation(text),
+    });
     const rects = normalizeClientRects(mergedRects, surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
@@ -471,7 +474,7 @@ export function PdfPage({
             });
             const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects, {
               referenceLineHeight: typicalTextLineHeight || undefined,
-              clampTallMath: containsLargeMathOperator(selection.text),
+              clampTallMath: containsMathNotation(selection.text),
             });
             return displayRects.map((projected, rectIndex) => {
               const normalized = selection.rects[Math.min(rectIndex, selection.rects.length - 1)];

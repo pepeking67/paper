@@ -4,6 +4,7 @@ export type ClientRectLike = { left: number; top: number; right: number; bottom:
 export type MergeLineRectOptions = { referenceLineHeight?: number; clampTallMath?: boolean };
 
 const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃]/u;
+const MATH_NOTATION = /[=≈≃≤≥∏∐∑∫∬∭∮⋂⋃∇_^]/u;
 
 /**
  * Collapse per-character browser ranges into one visual band per selected line.
@@ -18,27 +19,27 @@ const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃]/u;
 export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], options: MergeLineRectOptions = {}): ClientRectLike[] {
   if (!rects.length) return [];
   const heights = rects.map((rect) => rect.height).sort((a, b) => a - b);
-  const typicalHeight = percentile(heights, 0.75);
-  const anchorThreshold = Math.max(0.5, typicalHeight * 0.72);
-  const anchors = rects.filter((rect) => rect.height >= anchorThreshold);
-  const satellites = rects.filter((rect) => rect.height < anchorThreshold);
+  const selectedTypicalHeight = percentile(heights, 0.75);
+  const typicalHeight = options.referenceLineHeight && options.referenceLineHeight > 0
+    ? options.referenceLineHeight
+    : selectedTypicalHeight;
+  const isBodyAnchor = (rect: ClientRectLike) => !(rect.character && LARGE_MATH_OPERATOR.test(rect.character))
+    && rect.height >= typicalHeight * 0.68
+    && rect.height <= typicalHeight * 1.45;
+  const anchors = rects.filter(isBodyAnchor);
+  const satellites = rects.filter((rect) => !isBodyAnchor(rect));
+  const normalizeMathBand = options.clampTallMath || rects.some((rect) => rect.character && LARGE_MATH_OPERATOR.test(rect.character));
   const lines: ClientRectLike[][] = [];
 
-  // Establish rows from full-height glyphs first. Comparing with a stable row
-  // center prevents a subscript on one row and a superscript on the next row
-  // from forming a transitive bridge that collapses both rows into one band.
+  // Establish rows only from body-height glyphs. Tall operators, fraction bars,
+  // superscripts and subscripts must not seed their own visual rows.
   for (const rect of [...anchors].sort(compareByCenterThenLeft)) {
     const rectCenter = verticalCenter(rect);
     let bestLine: ClientRectLike[] | undefined;
     let bestDistance = Number.POSITIVE_INFINITY;
     for (const line of lines) {
-      const lineCenter = median(line.map(verticalCenter));
-      const lineHeight = median(line.map((member) => member.height));
-      const bothAreLineBands = line.some((member) => member.width > member.height * 2.5)
-        && rect.width > rect.height * 2.5;
-      const tolerance = bothAreLineBands
-        ? Math.max(1.5, Math.min(lineHeight, rect.height) * 0.45)
-        : Math.max(2, Math.min(lineHeight, rect.height) * 0.55);
+      const lineCenter = median(line.filter(isBodyAnchor).map(verticalCenter));
+      const tolerance = Math.max(2, typicalHeight * 0.62);
       const distance = Math.abs(lineCenter - rectCenter);
       if (distance <= tolerance && distance < bestDistance) {
         bestLine = line;
@@ -49,22 +50,26 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
     else lines.push([rect]);
   }
 
-  // Small superscript/subscript glyphs follow the nearest established row.
-  // They may expand that row's visual band, but never redefine its center and
-  // therefore cannot merge two neighboring selected rows.
+  // Math fragments follow the nearest body row without changing its center.
+  // This handles a single equation whose PDF spans sit at many vertical offsets,
+  // while still preventing those offsets from bridging adjacent selected rows.
   for (const rect of [...satellites].sort(compareByCenterThenLeft)) {
     const rectCenter = verticalCenter(rect);
     let bestLine: ClientRectLike[] | undefined;
     let bestDistance = Number.POSITIVE_INFINITY;
     for (const line of lines) {
-      const anchorCenter = median(line.filter((member) => member.height >= anchorThreshold).map(verticalCenter));
+      const bodyMembers = line.filter(isBodyAnchor);
+      const anchorCenter = median((bodyMembers.length ? bodyMembers : line).map(verticalCenter));
       const distance = Math.abs(anchorCenter - rectCenter);
       if (distance < bestDistance) {
         bestLine = line;
         bestDistance = distance;
       }
     }
-    if (bestLine && bestDistance <= Math.max(typicalHeight * 1.1, rect.height * 1.5)) bestLine.push(rect);
+    const attachmentDistance = normalizeMathBand
+      ? Math.max(typicalHeight * 2.4, rect.height * 0.6)
+      : Math.max(typicalHeight * 1.1, rect.height * 0.6);
+    if (bestLine && bestDistance <= attachmentDistance) bestLine.push(rect);
     else lines.push([rect]);
   }
 
@@ -88,8 +93,7 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
         run.push(rect);
         continue;
       }
-      const lineHeight = Math.max(...run.map((item) => item.height), rect.height);
-      const allowedGap = Math.max(6, lineHeight * 2.25);
+      const allowedGap = Math.max(6, typicalHeight * 2.25);
       if (rect.left - previous.right <= allowedGap) run.push(rect);
       else {
         flush();
@@ -109,6 +113,10 @@ export function estimateTypicalLineHeight(rects: readonly Pick<ClientRectLike, "
 
 export function containsLargeMathOperator(text: string) {
   return LARGE_MATH_OPERATOR.test(text);
+}
+
+export function containsMathNotation(text: string) {
+  return MATH_NOTATION.test(text);
 }
 
 function representativeVerticalBand(run: readonly ClientRectLike[], typicalHeight: number, options: MergeLineRectOptions) {

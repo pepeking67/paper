@@ -24,6 +24,33 @@ test("a product operator uses the surrounding body-text band instead of painting
   ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(10, 10, 12, 10)]);
 });
 
+test("fraction bars and tall operators remain in one body-height equation band", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 20, 22, 10),
+    clientRect(34, 5, 18, 2),
+    { ...clientRect(54, 8, 12, 28), character: "∏" },
+    clientRect(68, 13, 7, 6),
+    clientRect(77, 27, 7, 6),
+    clientRect(86, 20, 32, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true });
+
+  assert.deepEqual(rows, [clientRect(10, 20, 108, 10)]);
+});
+
+test("math fragments attach to the nearest body row instead of creating thin extra rows", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 40, 10),
+    clientRect(55, 1, 18, 2),
+    clientRect(75, 4, 10, 24),
+    clientRect(10, 34, 40, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true });
+
+  assert.deepEqual(rows, [
+    clientRect(10, 10, 75, 10),
+    clientRect(10, 34, 40, 10),
+  ]);
+});
+
 test("continuous annotation lines do not bridge PDF columns", () => {
   assert.equal(mergeClientRectsIntoLineRects([
     clientRect(10, 10, 40, 10),
