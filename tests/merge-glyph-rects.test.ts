@@ -11,7 +11,17 @@ test("formula glyphs become one continuous annotation line", () => {
     clientRect(32, 10, 8, 10),
     clientRect(49, 15, 5, 6),
     clientRect(58, 10, 8, 10),
-  ]), [clientRect(10, 5, 56, 16)]);
+  ]), [clientRect(10, 10, 56, 10)]);
+});
+
+test("a product operator uses the surrounding body-text band instead of painting into the line above", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    { ...clientRect(10, 4, 12, 22), character: "∏" },
+    clientRect(23, 11, 7, 10),
+  ], { referenceLineHeight: 10 }), [clientRect(10, 11, 20, 10)]);
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 4, 12, 22),
+  ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(10, 10, 12, 10)]);
 });
 
 test("continuous annotation lines do not bridge PDF columns", () => {
@@ -48,8 +58,8 @@ test("adjacent formula rows are not bridged by subscripts and superscripts", () 
 
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map(({ left, top, right, bottom }) => ({ left, top, right, bottom })), [
-    { left: 10, top: 10, right: 53, bottom: 23 },
-    { left: 10, top: 20, right: 53, bottom: 35 },
+    { left: 10, top: 10, right: 53, bottom: 20 },
+    { left: 10, top: 25, right: 53, bottom: 35 },
   ]);
 });
 

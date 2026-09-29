@@ -2,7 +2,7 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { containsLargeMathOperator, estimateTypicalLineHeight, mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 
@@ -96,6 +96,7 @@ export function PdfPage({
   const [rendering, setRendering] = useState(false);
   const [renderedWidth, setRenderedWidth] = useState(0);
   const [renderedZoom, setRenderedZoom] = useState(0);
+  const [typicalTextLineHeight, setTypicalTextLineHeight] = useState(0);
   const [renderError, setRenderError] = useState("");
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [basePageSize, setBasePageSize] = useState({ width: 612, height: 792 });
@@ -197,6 +198,7 @@ export function PdfPage({
 
         textDivsRef.current = [...textLayer.textDivs];
         textItemsRef.current = [...textLayer.textContentItemsStr];
+        setTypicalTextLineHeight(estimateTypicalLineHeight(textDivsRef.current.map((div) => div.getBoundingClientRect())) ?? 0);
         setRenderedWidth(width);
         setRenderedZoom(zoom);
       } catch (caught) {
@@ -226,6 +228,7 @@ export function PdfPage({
     textLayerRef.current?.replaceChildren();
     textDivsRef.current = [];
     textItemsRef.current = [];
+    setTypicalTextLineHeight(0);
     setRenderedWidth(0);
     setRenderedZoom(0);
   }, [nearViewport]);
@@ -245,7 +248,7 @@ export function PdfPage({
 
     const [start, end] = orderEndpoints(anchor, focus);
     const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
-    const mergedRects = mergeClientRectsIntoLineRects(characterRects);
+    const mergedRects = mergeClientRectsIntoLineRects(characterRects, { referenceLineHeight: typicalTextLineHeight || undefined });
     const rects = normalizeClientRects(mergedRects, surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
@@ -466,7 +469,10 @@ export function PdfPage({
               const projected = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
               return { ...projected, right: projected.left + projected.width, bottom: projected.top + projected.height };
             });
-            const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects);
+            const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects, {
+              referenceLineHeight: typicalTextLineHeight || undefined,
+              clampTallMath: containsLargeMathOperator(selection.text),
+            });
             return displayRects.map((projected, rectIndex) => {
               const normalized = selection.rects[Math.min(rectIndex, selection.rects.length - 1)];
               const rect = kind === "text" && selection.annotationId && textTransform?.id === selection.annotationId
@@ -798,7 +804,15 @@ function collectSelectionFromTextItems(
       for (const rect of Array.from(characterRange.getClientRects())) {
         if (rect.width < 0.25 || rect.height < 0.5) continue;
         if (rect.width > Math.max(24, rect.height * 3.5)) continue;
-        rects.push(rect);
+        rects.push({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+          character,
+        });
       }
       characterRange.detach();
     }

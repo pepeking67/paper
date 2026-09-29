@@ -1,6 +1,9 @@
 export type GlyphRect = { left: number; top: number; width: number; height: number };
 export type NormalizedHighlightRect = { x: number; y: number; width: number; height: number };
-export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number; character?: string };
+export type MergeLineRectOptions = { referenceLineHeight?: number; clampTallMath?: boolean };
+
+const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃]/u;
 
 /**
  * Collapse per-character browser ranges into one visual band per selected line.
@@ -12,7 +15,7 @@ export type ClientRectLike = { left: number; top: number; right: number; bottom:
  * the same line, while retaining a conservative gap limit so separate columns
  * are never bridged.
  */
-export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]): ClientRectLike[] {
+export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], options: MergeLineRectOptions = {}): ClientRectLike[] {
   if (!rects.length) return [];
   const heights = rects.map((rect) => rect.height).sort((a, b) => a - b);
   const typicalHeight = percentile(heights, 0.75);
@@ -74,8 +77,7 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
       if (!run.length) return;
       const left = Math.min(...run.map((rect) => rect.left));
       const right = Math.max(...run.map((rect) => rect.right));
-      const top = Math.min(...run.map((rect) => rect.top));
-      const bottom = Math.max(...run.map((rect) => rect.bottom));
+      const { top, bottom } = representativeVerticalBand(run, typicalHeight, options);
       merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
       run = [];
     };
@@ -98,6 +100,44 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
   }
 
   return merged.sort((a, b) => a.top - b.top || a.left - b.left);
+}
+
+export function estimateTypicalLineHeight(rects: readonly Pick<ClientRectLike, "height">[]): number | undefined {
+  const heights = rects.map((rect) => rect.height).filter((height) => Number.isFinite(height) && height >= 2 && height <= 96).sort((a, b) => a - b);
+  return heights.length ? percentile(heights, 0.5) : undefined;
+}
+
+export function containsLargeMathOperator(text: string) {
+  return LARGE_MATH_OPERATOR.test(text);
+}
+
+function representativeVerticalBand(run: readonly ClientRectLike[], typicalHeight: number, options: MergeLineRectOptions) {
+  const reference = options.referenceLineHeight && Number.isFinite(options.referenceLineHeight) && options.referenceLineHeight > 0
+    ? options.referenceLineHeight
+    : typicalHeight;
+  const containsOperator = options.clampTallMath || run.some((rect) => rect.character && LARGE_MATH_OPERATOR.test(rect.character));
+  const candidates = run.filter((rect) => {
+    if (rect.character && LARGE_MATH_OPERATOR.test(rect.character)) return false;
+    return rect.height >= reference * 0.68 && rect.height <= reference * 1.45;
+  });
+
+  if (candidates.length) {
+    const height = median(candidates.map((rect) => rect.height));
+    const center = median(candidates.map(verticalCenter));
+    return { top: center - height / 2, bottom: center + height / 2 };
+  }
+
+  // Preserve genuinely large ordinary text such as headings. For a math run,
+  // however, use the page's normal line height so a tall product/sum/integral
+  // glyph cannot paint into the line above or below.
+  if (!containsOperator) {
+    const height = median(run.map((rect) => rect.height));
+    const center = median(run.map(verticalCenter));
+    return { top: center - height / 2, bottom: center + height / 2 };
+  }
+
+  const center = median(run.map(verticalCenter));
+  return { top: center - reference / 2, bottom: center + reference / 2 };
 }
 
 function verticalCenter(rect: ClientRectLike) {
