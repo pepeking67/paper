@@ -263,10 +263,13 @@ function intervalGap(left: { left: number; right: number }, right: { left: numbe
 }
 
 export function getUnderlinePaintRect(rect: Pick<ClientRectLike, "left" | "top" | "width" | "height">, thickness = 2) {
-  const offset = Math.max(0.5, Math.min(1.5, rect.height * 0.04));
+  // Keep the stroke inside the lower edge of the text range. Drawing below the
+  // range leaves a conspicuous gap because PDF.js range boxes already include
+  // the font's descent space.
+  const bottomInset = Math.max(thickness, Math.min(4, rect.height * 0.12));
   return {
     left: rect.left,
-    top: rect.top + rect.height + offset,
+    top: rect.top + rect.height - bottomInset,
     width: rect.width,
     height: thickness,
   };

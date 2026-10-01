@@ -94,9 +94,7 @@ export async function downloadAnnotatedPdf(
       if (annotation.kind === "dictionary" && !dictionaryAnchor) dictionaryAnchor = rect;
 
       if ((annotation.kind ?? "highlight") === "underline" || annotation.kind === "dictionary") {
-        const y = annotation.kind === "underline" && formulaBounds
-          ? rect.y
-          : rect.y + Math.max(0.6, rect.height * 0.06);
+        const y = rect.y + Math.max(0.6, Math.min(3, rect.height * 0.08));
         page.drawLine({
           start: { x: rect.x, y },
           end: { x: rect.x + rect.width, y },

@@ -72,8 +72,17 @@ test("full formula bounds do not bridge separate PDF columns", () => {
 test("underline paint sits below the complete formula bounds", () => {
   assert.deepEqual(getUnderlinePaintRect(clientRect(10, 8, 280, 52)), {
     left: 10,
-    top: 61.5,
+    top: 56,
     width: 280,
+    height: 2,
+  });
+});
+
+test("ordinary text underline hugs the lower text edge without an outside gap", () => {
+  assert.deepEqual(getUnderlinePaintRect(clientRect(10, 20, 120, 20)), {
+    left: 10,
+    top: 37.6,
+    width: 120,
     height: 2,
   });
 });
