@@ -49,6 +49,18 @@ test("full formula bounds still preserve separate visual equation rows", () => {
   ]);
 });
 
+test("a mismatched page reference height cannot collapse real selected text rows", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 220, 20),
+    { ...clientRect(10, 34, 220, 20), character: "=" },
+    clientRect(10, 58, 180, 20),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }), [
+    clientRect(10, 10, 220, 20),
+    clientRect(10, 34, 220, 20),
+    clientRect(10, 58, 180, 20),
+  ]);
+});
+
 test("full formula bounds do not bridge separate PDF columns", () => {
   assert.equal(mergeClientRectsIntoLineRects([
     clientRect(10, 20, 60, 10),

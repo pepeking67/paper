@@ -29,18 +29,30 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
   // body text is stored as one wide span. Weight by horizontal coverage so the
   // long body band, rather than the number of PDF fragments, sets the baseline.
   const selectedTypicalHeight = weightedMedianHeight(rects);
-  const typicalHeight = options.referenceLineHeight && options.referenceLineHeight > 0
+  const referenceHeight = options.referenceLineHeight && options.referenceLineHeight > 0
     ? options.referenceLineHeight
-    : selectedTypicalHeight;
+    : undefined;
+  const selectionHeight = selectedTypicalHeight || referenceHeight || 0;
   const isTallMathGlyph = (rect: ClientRectLike) => Boolean(rect.character && (
     LARGE_MATH_OPERATOR.test(rect.character)
-    || (TALL_MATH_DELIMITER.test(rect.character) && rect.height > typicalHeight * 1.45)
+    || (TALL_MATH_DELIMITER.test(rect.character) && (
+      rect.height > selectionHeight * 1.45
+      || (rects.length === 1 && referenceHeight && rect.height > referenceHeight * 1.45)
+    ))
   ));
+  const matchesBodyHeight = (rect: ClientRectLike, height: number | undefined) => Boolean(height
+    && rect.height >= height * 0.68
+    && rect.height <= height * 1.45);
   const isBodyAnchor = (rect: ClientRectLike) => !isTallMathGlyph(rect)
-    && rect.height >= typicalHeight * 0.68
-    && rect.height <= typicalHeight * 1.45;
+    && (matchesBodyHeight(rect, selectedTypicalHeight) || matchesBodyHeight(rect, referenceHeight));
   const anchors = rects.filter(isBodyAnchor);
   const satellites = rects.filter((rect) => !isBodyAnchor(rect));
+  // The page-level reference can differ from the selected DOM ranges because
+  // PDF.js spans use different transforms. Row separation must follow the
+  // selected body glyphs or genuine adjacent lines can collapse into one.
+  const typicalHeight = anchors.length
+    ? weightedMedianHeight(anchors)
+    : (referenceHeight || selectedTypicalHeight);
   const hasGeometryMath = satellites.some((rect) => {
     const tall = rect.height > typicalHeight * 1.45;
     const thin = rect.height < typicalHeight * 0.55;
