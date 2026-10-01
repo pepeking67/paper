@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { placeDictionaryPdfLabel, projectNormalizedRectToPdf, renderTextMemoMarkup, textMemoToPlainText } from "../lib/pdf/export-annotated-pdf";
+import { absolutizeCssUrls, placeDictionaryPdfLabel, projectNormalizedRectToPdf, renderTextMemoMarkup, textMemoToPlainText } from "../lib/pdf/export-annotated-pdf";
 
 test("projects top-left normalized PDF marks into bottom-left PDF coordinates", () => {
   const rect = projectNormalizedRectToPdf({ x: 0.1, y: 0.2, width: 0.3, height: 0.1 }, 600, 800);
@@ -36,7 +36,16 @@ test("PDF memo renderer recognizes a multiline aligned formula inside single dol
 
   assert.match(markup, /<math/u);
   assert.match(markup, /<mtable/u);
+  assert.match(markup, /class="katex-html"/u);
   assert.doesNotMatch(markup, /\$\\begin\{aligned\}/u);
   assert.equal(textMemoToPlainText(source).startsWith("\\begin{aligned}"), true);
   assert.equal(textMemoToPlainText(source).endsWith("\\end{aligned}"), true);
+});
+
+test("rewrites KaTeX font URLs so the PDF memo SVG can load the same webfonts as the site", () => {
+  const css = "@font-face{font-family:KaTeX_Main;src:url(fonts/KaTeX_Main-Regular.woff2)} .icon{background:url('data:image/png;base64,abc')}";
+  assert.equal(
+    absolutizeCssUrls(css, "https://paper.example/_next/static/css/katex.css"),
+    "@font-face{font-family:KaTeX_Main;src:url(https://paper.example/_next/static/css/fonts/KaTeX_Main-Regular.woff2)} .icon{background:url('data:image/png;base64,abc')}",
+  );
 });

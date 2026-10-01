@@ -9,6 +9,8 @@ type DictionaryLabel = { pageIndex: number; anchor: PdfRect; meaning: string };
 type TextMemo = { pageIndex: number; rect: PdfRect; text: string; fontSize: number };
 type RasterizedAnnotationImage = { image: PDFImage; width: number; height: number };
 
+let textMemoExportCssPromise: Promise<string> | undefined;
+
 const PDF_ANNOTATION_COLORS: Record<AnnotationColor, RgbTuple> = {
   yellow: [0.98, 0.78, 0.08],
   green: [0.22, 0.78, 0.38],
@@ -250,8 +252,10 @@ async function createTextMemoImage(
   const pixelHeight = Math.max(1, Math.ceil(height * scale));
 
   try {
-    const markup = await renderTextMemoMarkup(text);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelWidth}" height="${pixelHeight}" viewBox="0 0 ${pixelWidth} ${pixelHeight}"><foreignObject x="0" y="0" width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="box-sizing:border-box;width:100%;height:100%;overflow:hidden;padding:${1 * scale}px ${1.5 * scale}px;color:#111;background:transparent;font:${Math.max(1, fontSize * scale)}px/1.22 system-ui,-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;white-space:pre-wrap;overflow-wrap:anywhere">${markup}</div></foreignObject></svg>`;
+    const exportCss = await getTextMemoExportCss();
+    const markup = await renderTextMemoMarkup(text, exportCss ? "htmlAndMathml" : "mathml");
+    const safeCss = exportCss.replace(/<\/style/giu, "<\\/style");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelWidth}" height="${pixelHeight}" viewBox="0 0 ${pixelWidth} ${pixelHeight}"><style>${safeCss}</style><foreignObject x="0" y="0" width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="box-sizing:border-box;width:100%;height:100%;overflow:hidden;padding:${1 * scale}px ${1.5 * scale}px;color:#111;background:transparent;font:500 ${Math.max(1, fontSize * scale)}px/1.18 system-ui,-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;overflow-wrap:anywhere"><div class="markdown-content markdown-content-pdf-memo"><p>${markup}</p></div></div></foreignObject></svg>`;
     const canvas = document.createElement("canvas");
     canvas.width = pixelWidth;
     canvas.height = pixelHeight;
@@ -265,7 +269,7 @@ async function createTextMemoImage(
   }
 }
 
-export async function renderTextMemoMarkup(value: string) {
+export async function renderTextMemoMarkup(value: string, output: "htmlAndMathml" | "mathml" = "htmlAndMathml") {
   const { default: katex } = await import("katex");
   const mathPattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\$)\$(?!\$)[\s\S]+?\$(?!\$))/gu;
   let cursor = 0;
@@ -280,11 +284,48 @@ export async function renderTextMemoMarkup(value: string) {
       : token.startsWith("\\[") || token.startsWith("\\(")
         ? token.slice(2, -2)
         : token.slice(1, -1);
-    markup += katex.renderToString(expression, { displayMode, output: "mathml", throwOnError: false, trust: false });
+    markup += katex.renderToString(expression, { displayMode, output, throwOnError: false, trust: false });
     cursor = start + token.length;
   }
   markup += renderBasicMemoMarkdown(value.slice(cursor));
   return markup;
+}
+
+async function getTextMemoExportCss() {
+  if (textMemoExportCssPromise) return textMemoExportCssPromise;
+  textMemoExportCssPromise = (async () => {
+    const chunks: string[] = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      let cssText = "";
+      try {
+        cssText = Array.from(sheet.cssRules).map((rule) => rule.cssText).join("\n");
+      } catch {
+        if (!sheet.href || new URL(sheet.href, document.baseURI).origin !== window.location.origin) continue;
+        try {
+          const response = await fetch(sheet.href);
+          if (response.ok) cssText = await response.text();
+        } catch {
+          // A missing stylesheet falls back to native MathML below.
+        }
+      }
+      if (!cssText.includes(".katex") && !cssText.includes("markdown-content-pdf-memo")) continue;
+      chunks.push(absolutizeCssUrls(cssText, sheet.href ?? document.baseURI));
+    }
+    return chunks.join("\n");
+  })();
+  return textMemoExportCssPromise;
+}
+
+export function absolutizeCssUrls(cssText: string, baseUrl: string) {
+  return cssText.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/giu, (match, quote: string, rawUrl: string) => {
+    const value = rawUrl.trim();
+    if (!value || value.startsWith("data:") || value.startsWith("blob:") || value.startsWith("#")) return match;
+    try {
+      return `url(${quote}${new URL(value, baseUrl).href}${quote})`;
+    } catch {
+      return match;
+    }
+  });
 }
 
 export function textMemoToPlainText(value: string) {
@@ -314,9 +355,16 @@ function escapeHtml(value: string) {
 function loadSvgImage(svg: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("텍스트 메모 SVG를 불러오지 못했습니다."));
-    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const objectUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+    image.onload = () => {
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("텍스트 메모 SVG를 불러오지 못했습니다."));
+    };
+    image.src = objectUrl;
   });
 }
 
