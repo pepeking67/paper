@@ -265,9 +265,9 @@ async function createTextMemoImage(
   }
 }
 
-async function renderTextMemoMarkup(value: string) {
+export async function renderTextMemoMarkup(value: string) {
   const { default: katex } = await import("katex");
-  const mathPattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\$)\$(?!\$)[^\n$]+?\$(?!\$))/gu;
+  const mathPattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\$)\$(?!\$)[\s\S]+?\$(?!\$))/gu;
   let cursor = 0;
   let markup = "";
   for (const match of value.matchAll(mathPattern)) {
@@ -292,7 +292,7 @@ export function textMemoToPlainText(value: string) {
     .replace(/\$\$([\s\S]+?)\$\$/gu, "$1")
     .replace(/\\\[([\s\S]+?)\\\]/gu, "$1")
     .replace(/\\\(([^\n]+?)\\\)/gu, "$1")
-    .replace(/(?<!\$)\$([^\n$]+?)\$(?!\$)/gu, "$1")
+    .replace(/(?<!\$)\$([\s\S]+?)\$(?!\$)/gu, "$1")
     .replace(/^#{1,6}\s+/gmu, "")
     .replace(/\*\*([^*]+)\*\*/gu, "$1")
     .replace(/__([^_]+)__/gu, "$1")
