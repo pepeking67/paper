@@ -1,5 +1,5 @@
 import type { AnnotationColor, StudyHighlight } from "@/lib/study-tray/types";
-import type { NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { containsMathNotation, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import { isPendingDictionaryMeaning } from "@/lib/dictionary/terms";
 import type { PDFDocument as PdfLibDocument, PDFImage } from "pdf-lib";
 
@@ -85,6 +85,7 @@ export async function downloadAnnotatedPdf(
     }
     const tuple = annotation.kind === "dictionary" ? [0, 0, 0] as const : PDF_ANNOTATION_COLORS[annotation.color ?? "yellow"];
     const color = rgb(...tuple);
+    const formulaBounds = containsMathNotation(annotation.text);
     let dictionaryAnchor: PdfRect | null = null;
 
     for (const normalized of annotation.rects ?? []) {
@@ -93,7 +94,9 @@ export async function downloadAnnotatedPdf(
       if (annotation.kind === "dictionary" && !dictionaryAnchor) dictionaryAnchor = rect;
 
       if ((annotation.kind ?? "highlight") === "underline" || annotation.kind === "dictionary") {
-        const y = rect.y + Math.max(0.6, rect.height * 0.06);
+        const y = annotation.kind === "underline" && formulaBounds
+          ? rect.y
+          : rect.y + Math.max(0.6, rect.height * 0.06);
         page.drawLine({
           start: { x: rect.x, y },
           end: { x: rect.x + rect.width, y },
@@ -104,9 +107,9 @@ export async function downloadAnnotatedPdf(
       } else {
         page.drawRectangle({
           x: rect.x,
-          y: rect.y + rect.height * 0.08,
+          y: formulaBounds ? rect.y : rect.y + rect.height * 0.08,
           width: rect.width,
-          height: rect.height * 0.84,
+          height: formulaBounds ? rect.height : rect.height * 0.84,
           color,
           opacity: 0.3,
           borderWidth: 0,

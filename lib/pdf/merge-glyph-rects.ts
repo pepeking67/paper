@@ -1,7 +1,11 @@
 export type GlyphRect = { left: number; top: number; width: number; height: number };
 export type NormalizedHighlightRect = { x: number; y: number; width: number; height: number };
 export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number; character?: string };
-export type MergeLineRectOptions = { referenceLineHeight?: number; clampTallMath?: boolean };
+export type MergeLineRectOptions = {
+  referenceLineHeight?: number;
+  clampTallMath?: boolean;
+  fullFormulaBounds?: boolean;
+};
 
 const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃Π]/u;
 const TALL_MATH_DELIMITER = /[()[\]{}|‖⌈⌉⌊⌋]/u;
@@ -15,7 +19,8 @@ const MATH_NOTATION = /[=≈≃≤≥∏∐∑∫∬∭∮⋂⋃Π∇_^\[\]{}]/u
  * rectangles even though the user selected one equation line. We join nearby
  * horizontal fragments and allow vertically shifted math glyphs to belong to
  * the same line, while retaining a conservative gap limit so separate columns
- * are never bridged.
+ * are never bridged. Formula annotations can opt into one full bounding box per
+ * visual equation row so operators, limits and fractions are painted together.
  */
 export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], options: MergeLineRectOptions = {}): ClientRectLike[] {
   if (!rects.length) return [];
@@ -53,7 +58,7 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
     return anchors.some((anchor) => Math.abs(verticalCenter(anchor) - verticalCenter(rect)) <= Math.max(typicalHeight * 2.4, rect.height * 0.6));
   });
   const normalizeMathBand = options.clampTallMath || rects.some(isTallMathGlyph) || hasGeometryMath;
-  const lines: ClientRectLike[][] = [];
+  let lines: ClientRectLike[][] = [];
 
   // Establish rows only from body-height glyphs. Tall operators, fraction bars,
   // superscripts and subscripts must not seed their own visual rows.
@@ -97,6 +102,10 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
     else lines.push([rect]);
   }
 
+  if (options.fullFormulaBounds && normalizeMathBand && lines.length > 1) {
+    lines = collapseFormulaFragmentRows(lines, typicalHeight);
+  }
+
   const merged: ClientRectLike[] = [];
   for (const line of lines) {
     line.sort((a, b) => a.left - b.left);
@@ -120,7 +129,9 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], 
         run.push(rect);
         continue;
       }
-      const allowedGap = Math.max(6, typicalHeight * 2.25);
+      const allowedGap = options.fullFormulaBounds && normalizeMathBand
+        ? Math.max(10, typicalHeight * 6)
+        : Math.max(6, typicalHeight * 2.25);
       if (rect.left - previous.right <= allowedGap) run.push(rect);
       else {
         flush();
@@ -147,6 +158,13 @@ export function containsMathNotation(text: string) {
 }
 
 function representativeVerticalBand(run: readonly ClientRectLike[], typicalHeight: number, options: MergeLineRectOptions) {
+  if (options.fullFormulaBounds && options.clampTallMath) {
+    return {
+      top: Math.min(...run.map((rect) => rect.top)),
+      bottom: Math.max(...run.map((rect) => rect.bottom)),
+    };
+  }
+
   const reference = options.referenceLineHeight && Number.isFinite(options.referenceLineHeight) && options.referenceLineHeight > 0
     ? options.referenceLineHeight
     : typicalHeight;
@@ -176,6 +194,70 @@ function representativeVerticalBand(run: readonly ClientRectLike[], typicalHeigh
 
   const center = median(run.map(verticalCenter));
   return { top: center - reference / 2, bottom: center + reference / 2 };
+}
+
+function collapseFormulaFragmentRows(lines: ClientRectLike[][], typicalHeight: number) {
+  const summaries = lines.map((line) => ({
+    line,
+    coverage: line.reduce((sum, rect) => sum + rect.width, 0),
+    center: median(line.map(verticalCenter)),
+  }));
+  const widestCoverage = Math.max(...summaries.map(({ coverage }) => coverage));
+  const substantialCoverage = Math.max(typicalHeight * 2.25, widestCoverage * 0.35);
+  let rows = summaries.filter(({ coverage }) => coverage >= substantialCoverage);
+
+  // Very short formulas (for example x^2) may have no row above the absolute
+  // threshold. The widest fragment is still the most reliable baseline.
+  if (!rows.length) {
+    rows = [summaries.reduce((widest, current) => current.coverage > widest.coverage ? current : widest)];
+  }
+
+  for (const fragment of summaries) {
+    if (rows.includes(fragment)) continue;
+    let nearest = rows[0];
+    let nearestDistance = Math.abs(nearest.center - fragment.center);
+    for (const row of rows.slice(1)) {
+      const distance = Math.abs(row.center - fragment.center);
+      if (distance < nearestDistance) {
+        nearest = row;
+        nearestDistance = distance;
+      }
+    }
+
+    const horizontalGap = intervalGap(horizontalBounds(nearest.line), horizontalBounds(fragment.line));
+    if (nearestDistance <= typicalHeight * 2.8 && horizontalGap <= typicalHeight * 6) {
+      nearest.line.push(...fragment.line);
+      nearest.coverage += fragment.coverage;
+      nearest.center = median(nearest.line.map(verticalCenter));
+    } else {
+      rows.push(fragment);
+    }
+  }
+
+  return rows.map(({ line }) => line);
+}
+
+function horizontalBounds(rects: readonly ClientRectLike[]) {
+  return {
+    left: Math.min(...rects.map((rect) => rect.left)),
+    right: Math.max(...rects.map((rect) => rect.right)),
+  };
+}
+
+function intervalGap(left: { left: number; right: number }, right: { left: number; right: number }) {
+  if (left.right < right.left) return right.left - left.right;
+  if (right.right < left.left) return left.left - right.right;
+  return 0;
+}
+
+export function getUnderlinePaintRect(rect: Pick<ClientRectLike, "left" | "top" | "width" | "height">, thickness = 2) {
+  const offset = Math.max(0.5, Math.min(1.5, rect.height * 0.04));
+  return {
+    left: rect.left,
+    top: rect.top + rect.height + offset,
+    width: rect.width,
+    height: thickness,
+  };
 }
 
 function verticalCenter(rect: ClientRectLike) {

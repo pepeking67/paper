@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getTextFragmentRect, mergeClientRectsIntoLineRects, mergeGlyphRects, normalizeClientRects, normalizeHighlightRects, projectHighlightRect } from "../lib/pdf/merge-glyph-rects";
+import { getTextFragmentRect, getUnderlinePaintRect, mergeClientRectsIntoLineRects, mergeGlyphRects, normalizeClientRects, normalizeHighlightRects, projectHighlightRect } from "../lib/pdf/merge-glyph-rects";
 
 const clientRect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, width, height });
 
@@ -12,6 +12,58 @@ test("formula glyphs become one continuous annotation line", () => {
     clientRect(49, 15, 5, 6),
     clientRect(58, 10, 8, 10),
   ]), [clientRect(10, 10, 56, 10)]);
+});
+
+test("a formula highlight uses one full bounding block for operators and limits", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 30, 30, 10),
+    { ...clientRect(42, 10, 12, 50), character: "∑" },
+    clientRect(55, 8, 8, 8),
+    clientRect(55, 50, 8, 8),
+    clientRect(66, 30, 100, 10),
+    clientRect(210, 30, 80, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }), [
+    clientRect(10, 8, 280, 52),
+  ]);
+});
+
+test("garbled formula text still uses its full geometry when requested", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 30, 90, 10),
+    clientRect(102, 8, 18, 52),
+    clientRect(122, 30, 120, 10),
+  ], { referenceLineHeight: 10, fullFormulaBounds: true }), [
+    clientRect(10, 8, 232, 52),
+  ]);
+});
+
+test("full formula bounds still preserve separate visual equation rows", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 100, 10),
+    clientRect(42, 2, 8, 6),
+    clientRect(10, 40, 100, 10),
+    clientRect(42, 52, 8, 6),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }), [
+    clientRect(10, 2, 100, 18),
+    clientRect(10, 40, 100, 18),
+  ]);
+});
+
+test("full formula bounds do not bridge separate PDF columns", () => {
+  assert.equal(mergeClientRectsIntoLineRects([
+    clientRect(10, 20, 60, 10),
+    { ...clientRect(72, 8, 12, 34), character: "∑" },
+    clientRect(180, 20, 60, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }).length, 2);
+});
+
+test("underline paint sits below the complete formula bounds", () => {
+  assert.deepEqual(getUnderlinePaintRect(clientRect(10, 8, 280, 52)), {
+    left: 10,
+    top: 61.5,
+    width: 280,
+    height: 2,
+  });
 });
 
 test("a product operator uses the surrounding body-text band instead of painting into the line above", () => {
