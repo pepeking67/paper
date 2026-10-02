@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { buildDictionaryBelowLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
+import { buildDictionaryRightLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
 import { buildDictionaryContext, buildGeminiModelCandidates, sanitizeDictionaryMeaning } from "../lib/ai/provider";
 import { buildDictionaryCsv } from "../lib/dictionary/csv";
 import { normalizeDictionaryTerm } from "../lib/dictionary/terms";
@@ -12,15 +12,15 @@ test("dictionary terms are normalized for account-first lookup", () => {
   assert.equal(normalizeDictionaryTerm("행동 정책"), "행동 정책");
 });
 
-test("dictionary meanings sit below the selected sentence without colliding", () => {
-  const layout = buildDictionaryBelowLayout([
-    { id: "a", meaning: "정책", desiredLeft: 100, desiredTop: 50, anchorWidth: 20 },
-    { id: "b", meaning: "상태", desiredLeft: 110, desiredTop: 51, anchorWidth: 20 },
-    { id: "c", meaning: "행동", desiredLeft: 100, desiredTop: 80, anchorWidth: 20 },
+test("dictionary meanings sit to the right of their term and avoid each other", () => {
+  const layout = buildDictionaryRightLayout([
+    { id: "a", meaning: "정책", anchorLeft: 100, anchorRight: 120, anchorTop: 50, anchorHeight: 12 },
+    { id: "b", meaning: "상태", anchorLeft: 110, anchorRight: 130, anchorTop: 51, anchorHeight: 12 },
+    { id: "c", meaning: "행동", anchorLeft: 100, anchorRight: 120, anchorTop: 80, anchorHeight: 12 },
   ], 720);
-  assert.deepEqual(layout.get("a"), { left: 100, top: 50, width: 28, height: 11 });
-  assert.deepEqual(layout.get("b"), { left: 130, top: 51, width: 28, height: 11 });
-  assert.deepEqual(layout.get("c"), { left: 100, top: 80, width: 28, height: 11 });
+  assert.deepEqual(layout.get("a"), { left: 122, top: 52, width: 20, height: 8 });
+  assert.deepEqual(layout.get("b"), { left: 132, top: 44, width: 20, height: 8 });
+  assert.deepEqual(layout.get("c"), { left: 122, top: 82, width: 20, height: 8 });
 });
 
 test("Gemini dictionary context stays close to the selected term and the answer stays concise", () => {
@@ -115,10 +115,10 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(drawer, /CSV 다운로드/);
   assert.match(drawer, /계정 전체에서 모든 논문에 공유됩니다/);
   assert.match(route, /provider\.defineTerm/);
-  assert.match(page, /borderBottom: "1\.5px solid #111"/);
-  assert.match(page, /fontSize = Math\.max\(8, Math\.min\(9/);
-  assert.match(page, /desiredTop: rect\.top \+ rect\.height \+ 1/);
-  assert.match(page, /buildDictionaryBelowLayout/);
+  assert.match(page, /borderBottom: "1px solid rgba\(17, 17, 17, 0\.58\)"/);
+  assert.match(page, /fontSize = Math\.max\(6, Math\.min\(7/);
+  assert.match(page, /anchorRight: rect\.left \+ rect\.width/);
+  assert.match(page, /buildDictionaryRightLayout/);
   assert.match(page, /className="pointer-events-auto absolute z-\[5\] truncate bg-transparent/);
   assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
