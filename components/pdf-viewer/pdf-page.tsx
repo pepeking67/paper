@@ -436,7 +436,7 @@ export function PdfPage({
     return crop.toDataURL("image/jpeg", 0.88);
   }
 
-  const dictionaryLabelLayout = buildDictionaryRightLayout(
+  const dictionaryLabelLayout = buildDictionaryBelowRightLayout(
     capturedSelections.flatMap((selection) => {
       if (selection.kind !== "dictionary" || !selection.annotationId || !selection.rects[0]) return [];
       const rect = projectHighlightRect(selection.rects[0], surfaceSize.width, surfaceSize.height);
@@ -450,6 +450,7 @@ export function PdfPage({
       }];
     }),
     surfaceSize.width,
+    surfaceSize.height,
   );
 
   return (
@@ -549,7 +550,7 @@ export function PdfPage({
 
               if (kind === "dictionary") {
                 const underlineStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: "1px solid rgba(17, 17, 17, 0.58)", background: "transparent", padding: 0 };
-                const fontSize = Math.max(6, Math.min(7, rect.height * 0.42));
+                const fontSize = Math.max(5, Math.min(6, rect.height * 0.36));
                 const meaning = selection.dictionaryMeaning?.trim() || "뜻 찾는 중…";
                 const labelPosition = selection.annotationId ? dictionaryLabelLayout.get(selection.annotationId) : undefined;
                 return <Fragment key={key}>
@@ -559,7 +560,7 @@ export function PdfPage({
                   {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
                     ? <form
                         className="pointer-events-auto absolute z-[6] flex w-44 items-center gap-1 rounded border border-black/30 bg-white p-1 shadow-lg"
-                        style={{ left: labelPosition?.left ?? rect.left + rect.width + 2, top: (labelPosition?.top ?? rect.top) + (labelPosition?.height ?? 8) + 2 }}
+                        style={{ left: labelPosition?.left ?? rect.left + rect.width + 1, top: (labelPosition?.top ?? rect.top + rect.height + 0.5) + (labelPosition?.height ?? 7) + 2 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onSubmit={(event) => {
@@ -578,7 +579,7 @@ export function PdfPage({
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
                         className="pointer-events-auto absolute z-[5] truncate bg-transparent px-0.5 text-left font-medium"
-                        style={{ left: labelPosition?.left ?? rect.left + rect.width + 2, top: labelPosition?.top ?? rect.top + (rect.height - 8) / 2, width: labelPosition?.width ?? 24, height: labelPosition?.height ?? 8, color: "#111", fontSize, lineHeight: 1 }}
+                        style={{ left: labelPosition?.left ?? rect.left + rect.width + 1, top: labelPosition?.top ?? rect.top + rect.height + 0.5, width: labelPosition?.width ?? 24, height: labelPosition?.height ?? 7, color: "#111", fontSize, lineHeight: 1 }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻을 입력하세요" ? "" : meaning }); }}
@@ -677,29 +678,33 @@ export function PdfPage({
   );
 }
 
-export function buildDictionaryRightLayout(
+export function buildDictionaryBelowRightLayout(
   labels: Array<{ id: string; meaning: string; anchorLeft: number; anchorRight: number; anchorTop: number; anchorHeight: number }>,
   pageWidth: number,
+  pageHeight: number,
 ) {
   const result = new Map<string, { left: number; top: number; width: number; height: number }>();
   const occupied: Array<{ left: number; top: number; width: number; height: number }> = [];
-  const height = 8;
-  const gap = 2;
+  const height = 7;
+  const horizontalGap = 1;
+  const verticalGap = 0.5;
 
   for (const label of labels.slice().sort((left, right) => left.anchorTop - right.anchorTop || left.anchorLeft - right.anchorLeft)) {
-    const estimated = [...label.meaning].length * 6.2 + 4;
-    const width = Math.min(96, Math.max(20, estimated));
-    const centeredTop = Math.max(0, label.anchorTop + (label.anchorHeight - height) / 2);
+    const estimated = [...label.meaning].length * 5.3 + 3;
+    const width = Math.min(84, Math.max(18, estimated));
+    const belowTop = Math.max(2, Math.min(pageHeight - height - 2, label.anchorTop + label.anchorHeight + verticalGap));
+    const rightLeft = Math.min(pageWidth - width - 2, label.anchorRight + horizontalGap);
     const candidates = [
-      { left: label.anchorRight + gap, top: centeredTop },
-      { left: label.anchorRight + gap, top: Math.max(0, centeredTop - height - 1) },
-      { left: label.anchorRight + gap, top: centeredTop + height + 1 },
-      { left: label.anchorLeft - width - gap, top: centeredTop },
+      { left: rightLeft, top: belowTop },
+      { left: Math.min(pageWidth - width - 2, rightLeft + width + horizontalGap), top: belowTop },
+      { left: rightLeft, top: Math.min(pageHeight - height - 2, belowTop + height + verticalGap) },
     ];
     const candidate = candidates.find((position) => position.left >= 2
       && position.left + width <= pageWidth - 2
+      && position.top >= 2
+      && position.top + height <= pageHeight - 2
       && !occupied.some((rect) => clientRectsOverlap({ ...position, width, height }, rect)))
-      ?? { left: Math.max(2, Math.min(label.anchorRight + gap, pageWidth - width - 2)), top: centeredTop };
+      ?? { left: Math.max(2, rightLeft), top: Math.max(2, belowTop) };
     const placement = { ...candidate, width, height };
     result.set(label.id, placement);
     occupied.push(placement);

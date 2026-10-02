@@ -129,7 +129,7 @@ export async function downloadAnnotatedPdf(
     const page = pages[label.pageIndex];
     if (!page) continue;
     const { width: pageWidth, height: pageHeight } = page.getSize();
-    const fontSize = Math.max(4.5, Math.min(5.5, label.anchor.height * 0.42));
+    const fontSize = Math.max(4, Math.min(5, label.anchor.height * 0.36));
     const cacheKey = `${fontSize.toFixed(2)}:${label.meaning}`;
     const imagePromise = imageCache.get(cacheKey) ?? createDictionaryLabelImage(pdf, label.meaning, fontSize);
     imageCache.set(cacheKey, imagePromise);
@@ -181,15 +181,16 @@ export function placeDictionaryPdfLabel(
   occupied: PdfRect[] = [],
 ): PdfRect {
   const margin = 2;
-  const gap = 1.5;
+  const horizontalGap = 1;
+  const verticalGap = 0.5;
   const width = Math.min(labelSize.width, Math.max(1, pageWidth - margin * 2));
   const height = Math.min(labelSize.height, Math.max(1, pageHeight - margin * 2));
-  const centeredY = anchor.y + (anchor.height - height) / 2;
+  const belowY = Math.max(margin, anchor.y - height - verticalGap);
+  const rightX = Math.min(pageWidth - width - margin, anchor.x + anchor.width + horizontalGap);
   const candidates = [
-    { x: anchor.x + anchor.width + gap, y: centeredY },
-    { x: anchor.x + anchor.width + gap, y: centeredY + height + gap },
-    { x: anchor.x + anchor.width + gap, y: centeredY - height - gap },
-    { x: anchor.x - width - gap, y: centeredY },
+    { x: rightX, y: belowY },
+    { x: Math.min(pageWidth - width - margin, rightX + width + horizontalGap), y: belowY },
+    { x: rightX, y: Math.max(margin, belowY - height - verticalGap) },
   ];
 
   for (const candidatePosition of candidates) {
@@ -200,8 +201,8 @@ export function placeDictionaryPdfLabel(
   }
 
   return {
-    x: Math.max(margin, Math.min(anchor.x + anchor.width + gap, pageWidth - width - margin)),
-    y: Math.max(margin, Math.min(centeredY, pageHeight - height - margin)),
+    x: Math.max(margin, rightX),
+    y: Math.max(margin, Math.min(belowY, pageHeight - height - margin)),
     width,
     height,
   };

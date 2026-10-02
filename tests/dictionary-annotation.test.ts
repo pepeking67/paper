@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { buildDictionaryRightLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
+import { buildDictionaryBelowRightLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
 import { buildDictionaryContext, buildGeminiModelCandidates, sanitizeDictionaryMeaning } from "../lib/ai/provider";
 import { buildDictionaryCsv } from "../lib/dictionary/csv";
 import { normalizeDictionaryTerm } from "../lib/dictionary/terms";
@@ -12,15 +12,15 @@ test("dictionary terms are normalized for account-first lookup", () => {
   assert.equal(normalizeDictionaryTerm("행동 정책"), "행동 정책");
 });
 
-test("dictionary meanings sit to the right of their term and avoid each other", () => {
-  const layout = buildDictionaryRightLayout([
+test("dictionary meanings sit below the underline at its right edge and avoid each other", () => {
+  const layout = buildDictionaryBelowRightLayout([
     { id: "a", meaning: "정책", anchorLeft: 100, anchorRight: 120, anchorTop: 50, anchorHeight: 12 },
     { id: "b", meaning: "상태", anchorLeft: 110, anchorRight: 130, anchorTop: 51, anchorHeight: 12 },
     { id: "c", meaning: "행동", anchorLeft: 100, anchorRight: 120, anchorTop: 80, anchorHeight: 12 },
-  ], 720);
-  assert.deepEqual(layout.get("a"), { left: 122, top: 52, width: 20, height: 8 });
-  assert.deepEqual(layout.get("b"), { left: 132, top: 44, width: 20, height: 8 });
-  assert.deepEqual(layout.get("c"), { left: 122, top: 82, width: 20, height: 8 });
+  ], 720, 900);
+  assert.deepEqual(layout.get("a"), { left: 121, top: 62.5, width: 18, height: 7 });
+  assert.deepEqual(layout.get("b"), { left: 150, top: 63.5, width: 18, height: 7 });
+  assert.deepEqual(layout.get("c"), { left: 121, top: 92.5, width: 18, height: 7 });
 });
 
 test("Gemini dictionary context stays close to the selected term and the answer stays concise", () => {
@@ -116,9 +116,9 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(drawer, /계정 전체에서 모든 논문에 공유됩니다/);
   assert.match(route, /provider\.defineTerm/);
   assert.match(page, /borderBottom: "1px solid rgba\(17, 17, 17, 0\.58\)"/);
-  assert.match(page, /fontSize = Math\.max\(6, Math\.min\(7/);
+  assert.match(page, /fontSize = Math\.max\(5, Math\.min\(6/);
   assert.match(page, /anchorRight: rect\.left \+ rect\.width/);
-  assert.match(page, /buildDictionaryRightLayout/);
+  assert.match(page, /buildDictionaryBelowRightLayout/);
   assert.match(page, /className="pointer-events-auto absolute z-\[5\] truncate bg-transparent/);
   assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
