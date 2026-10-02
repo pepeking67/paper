@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { buildDictionaryBelowLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
-import { buildDictionaryContext, sanitizeDictionaryMeaning } from "../lib/ai/provider";
+import { buildDictionaryContext, buildGeminiModelCandidates, sanitizeDictionaryMeaning } from "../lib/ai/provider";
 import { buildDictionaryCsv } from "../lib/dictionary/csv";
 import { normalizeDictionaryTerm } from "../lib/dictionary/terms";
+import { recoverCachedDictionaryEntries } from "../lib/dictionary/use-personal-dictionary";
 
 test("dictionary terms are normalized for account-first lookup", () => {
   assert.equal(normalizeDictionaryTerm(" Vision–Language—Action! "), "vision language action");
@@ -30,10 +31,60 @@ test("Gemini dictionary context stays close to the selected term and the answer 
   assert.equal(sanitizeDictionaryMeaning("**정책 최적화.**\n설명"), "정책 최적화");
 });
 
+test("dictionary lookup uses supported Gemini models without an incompatible thinking override", async () => {
+  assert.deepEqual(buildGeminiModelCandidates("gemini-3.1-flash-lite", "gemini-3.5-flash"), [
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
+  ]);
+  const provider = await readFile("lib/ai/provider.ts", "utf8");
+  assert.match(provider, /DEFAULT_GEMINI_DICTIONARY_MODEL = "gemini-3\.1-flash-lite"/);
+  assert.doesNotMatch(provider, /gemini-3\.5-flash-lite/);
+  assert.doesNotMatch(provider, /thinkingConfig/);
+  assert.match(provider, /retryInvalidModel && response\.status === 400/);
+});
+
 test("personal dictionary CSV is UTF-8 spreadsheet-safe", () => {
   const csv = buildDictionaryCsv([{ id: "1", text: "=term", page: 0, rects: [], memo: "", kind: "dictionary", dictionaryMeaning: "뜻, 설명", createdAt: "2026-01-01", dictionaryUpdatedAt: "2026-01-02" }]);
   assert.ok(csv.startsWith("\uFEFF"));
   assert.match(csv, /"'=term","뜻, 설명"/);
+});
+
+test("a one-time recovery queues valid browser-only dictionary entries for account sync", () => {
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    },
+  });
+  const cached = {
+    id: "cached-entry",
+    text: "policy",
+    page: 0,
+    rects: [],
+    memo: "",
+    kind: "dictionary" as const,
+    dictionaryMeaning: "정책",
+    createdAt: "2026-09-28T00:00:00.000Z",
+  };
+  const recovered = recoverCachedDictionaryEntries("account-a", [], {
+    version: 1,
+    entries: [cached],
+    pending: {},
+  });
+  assert.equal(recovered.didRecover, true);
+  assert.equal(recovered.pending.policy?.kind, "upsert");
+
+  values.set("paper-study-personal-dictionary-recovered:account-a:v2", "done");
+  const alreadyRecovered = recoverCachedDictionaryEntries("account-a", [], {
+    version: 1,
+    entries: [cached],
+    pending: {},
+  });
+  assert.equal(alreadyRecovered.didRecover, false);
+  assert.deepEqual(alreadyRecovered.pending, {});
+  Reflect.deleteProperty(globalThis, "localStorage");
 });
 
 test("dictionary tool creates a synced black-underlined editable gloss", async () => {
@@ -46,6 +97,7 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   const provider = await readFile("lib/ai/provider.ts", "utf8");
   const types = await readFile("lib/study-tray/types.ts", "utf8");
   const localUi = await readFile("lib/workspace-state/local-ui-state.ts", "utf8");
+  const globalStyles = await readFile("app/globals.css", "utf8");
 
   assert.match(types, /"highlight" \| "underline" \| "dictionary" \| "text"/);
   assert.match(types, /dictionaryMeaning\?: string/);
@@ -71,7 +123,10 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
-  assert.match(provider, /maxOutputTokens[\s\S]*thinkingConfig: \{ thinkingBudget: 0 \}/);
+  assert.match(page, /className="dictionary-edit-input/);
+  assert.match(drawer, /className="dictionary-edit-input/);
+  assert.match(globalStyles, /\.dictionary-edit-input[\s\S]*background: #fff !important;[\s\S]*color: #000 !important;[\s\S]*-webkit-text-fill-color: #000;/);
+  assert.match(provider, /GEMINI_DICTIONARY_MODEL\?\.trim\(\) \|\| DEFAULT_GEMINI_DICTIONARY_MODEL/);
   assert.match(workspace, /Retry old annotations sequentially/);
 });
 

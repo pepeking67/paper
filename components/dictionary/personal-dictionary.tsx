@@ -75,7 +75,7 @@ function DictionaryRow({ entry, onEdit, onRemove }: { entry: StudyHighlight; onE
   return <form className="rounded-xl border border-[var(--line)] bg-white/[.035] p-3" onSubmit={(event) => { event.preventDefault(); if (meaning.trim()) onEdit(entry.text, meaning.trim()); }}>
     <div className="flex items-start gap-2"><p className="min-w-0 flex-1 truncate text-sm font-semibold">{entry.text}</p><button type="button" onClick={onRemove} aria-label={`${entry.text} 사전에서 삭제`} className="text-lg leading-none text-[var(--muted)] hover:text-white">×</button></div>
     <label className="sr-only" htmlFor={`dictionary-meaning-${entry.id}`}>{entry.text} 뜻</label>
-    <div className="mt-2 flex gap-2"><input id={`dictionary-meaning-${entry.id}`} value={meaning} maxLength={100} onChange={(event) => setMeaning(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[#111] px-2.5 py-2 text-sm"/><button type="submit" disabled={!meaning.trim() || meaning.trim() === entry.dictionaryMeaning} className="rounded-lg bg-white px-3 text-xs font-medium text-black disabled:opacity-35">저장</button></div>
+    <div className="mt-2 flex gap-2"><input id={`dictionary-meaning-${entry.id}`} value={meaning} maxLength={100} onChange={(event) => setMeaning(event.target.value)} className="dictionary-edit-input min-w-0 flex-1 rounded-lg border border-black/20 px-2.5 py-2 text-sm"/><button type="submit" disabled={!meaning.trim() || meaning.trim() === entry.dictionaryMeaning} className="rounded-lg bg-white px-3 text-xs font-medium text-black disabled:opacity-35">저장</button></div>
   </form>;
 }
 

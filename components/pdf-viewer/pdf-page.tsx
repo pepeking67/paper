@@ -2,7 +2,7 @@
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
+import { containsMathNotation, estimateTypicalLineHeight, getUnderlinePaintRect, mergeClientRectsIntoLineRects, normalizeClientRects, projectHighlightRect, type ClientRectLike, type NormalizedHighlightRect } from "@/lib/pdf/merge-glyph-rects";
 import type { AnnotationColor, AnnotationKind, StudyArea } from "@/lib/study-tray/types";
 import { MarkdownContent } from "@/components/markdown/markdown-content";
 
@@ -96,6 +96,7 @@ export function PdfPage({
   const [rendering, setRendering] = useState(false);
   const [renderedWidth, setRenderedWidth] = useState(0);
   const [renderedZoom, setRenderedZoom] = useState(0);
+  const [typicalTextLineHeight, setTypicalTextLineHeight] = useState(0);
   const [renderError, setRenderError] = useState("");
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [basePageSize, setBasePageSize] = useState({ width: 612, height: 792 });
@@ -197,6 +198,7 @@ export function PdfPage({
 
         textDivsRef.current = [...textLayer.textDivs];
         textItemsRef.current = [...textLayer.textContentItemsStr];
+        setTypicalTextLineHeight(estimateTypicalLineHeight(textDivsRef.current.map((div) => div.getBoundingClientRect())) ?? 0);
         setRenderedWidth(width);
         setRenderedZoom(zoom);
       } catch (caught) {
@@ -226,6 +228,7 @@ export function PdfPage({
     textLayerRef.current?.replaceChildren();
     textDivsRef.current = [];
     textItemsRef.current = [];
+    setTypicalTextLineHeight(0);
     setRenderedWidth(0);
     setRenderedZoom(0);
   }, [nearViewport]);
@@ -245,7 +248,14 @@ export function PdfPage({
 
     const [start, end] = orderEndpoints(anchor, focus);
     const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
-    const mergedRects = mergeClientRectsIntoLineRects(characterRects);
+    const formulaBounds = containsMathNotation(text);
+    const mergedRects = mergeClientRectsIntoLineRects(characterRects, {
+      referenceLineHeight: typicalTextLineHeight || undefined,
+      clampTallMath: formulaBounds,
+      // Geometry detection covers formulas whose PDF text extraction loses or
+      // substitutes the actual operator character.
+      fullFormulaBounds: true,
+    });
     const rects = normalizeClientRects(mergedRects, surface.getBoundingClientRect());
     if (!text || !rects.length) return;
 
@@ -462,11 +472,16 @@ export function PdfPage({
         <div className="pointer-events-none absolute inset-0 z-[5]">
           {capturedSelections.flatMap((selection, selectionIndex) => {
             const kind = selection.kind ?? "highlight";
+            const formulaBounds = containsMathNotation(selection.text);
             const projectedRects = selection.rects.map((normalized) => {
               const projected = projectHighlightRect(normalized, surfaceSize.width, surfaceSize.height);
               return { ...projected, right: projected.left + projected.width, bottom: projected.top + projected.height };
             });
-            const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects);
+            const displayRects = kind === "text" || kind === "context" ? projectedRects : mergeClientRectsIntoLineRects(projectedRects, {
+              referenceLineHeight: typicalTextLineHeight || undefined,
+              clampTallMath: formulaBounds,
+              fullFormulaBounds: true,
+            });
             return displayRects.map((projected, rectIndex) => {
               const normalized = selection.rects[Math.min(rectIndex, selection.rects.length - 1)];
               const rect = kind === "text" && selection.annotationId && textTransform?.id === selection.annotationId
@@ -554,7 +569,7 @@ export function PdfPage({
                         }}
                       >
                         <label className="sr-only" htmlFor={`dictionary-${selection.annotationId}`}>사전 뜻 수정</label>
-                        <input id={`dictionary-${selection.annotationId}`} autoFocus maxLength={100} value={dictionaryEditor.value} onChange={(event) => setDictionaryEditor({ id: selection.annotationId!, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") setDictionaryEditor(null); }} className="min-w-0 flex-1 rounded border border-black/20 bg-white px-1.5 py-1 text-[11px] text-black"/>
+                        <input id={`dictionary-${selection.annotationId}`} autoFocus maxLength={100} value={dictionaryEditor.value} onChange={(event) => setDictionaryEditor({ id: selection.annotationId!, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") setDictionaryEditor(null); }} className="dictionary-edit-input min-w-0 flex-1 rounded border border-black/20 px-1.5 py-1 text-[11px]"/>
                         <button type="submit" className="rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
                       </form>
                     : <button
@@ -571,13 +586,15 @@ export function PdfPage({
               }
 
               if (kind === "underline") {
-                const style = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: `2px solid ${palette.stroke}`, background: "transparent", padding: 0 };
-                return commonProps
-                  ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
-                  : <span key={key} className="absolute" style={style} />;
+                const lineStyle = { ...getUnderlinePaintRect(rect), background: palette.stroke };
+                return <Fragment key={key}>
+                  <span className="pointer-events-none absolute" style={lineStyle} />
+                  {commonProps && <button {...commonProps} className="pointer-events-auto absolute cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />}
+                </Fragment>;
               }
 
-              const style = { left: rect.left, top: rect.top + rect.height * 0.08, width: rect.width, height: rect.height * 0.84, border: "none", padding: 0, background: palette.fill, mixBlendMode: "multiply" as const };
+              const paintFullFormulaBounds = formulaBounds || (typicalTextLineHeight > 0 && rect.height > typicalTextLineHeight * 1.45);
+              const style = { left: rect.left, top: paintFullFormulaBounds ? rect.top : rect.top + rect.height * 0.08, width: rect.width, height: paintFullFormulaBounds ? rect.height : rect.height * 0.84, border: "none", padding: 0, background: palette.fill, mixBlendMode: "multiply" as const };
               return commonProps
                 ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
                 : <span key={key} className="absolute rounded-[2px]" style={style} />;
@@ -798,7 +815,15 @@ function collectSelectionFromTextItems(
       for (const rect of Array.from(characterRange.getClientRects())) {
         if (rect.width < 0.25 || rect.height < 0.5) continue;
         if (rect.width > Math.max(24, rect.height * 3.5)) continue;
-        rects.push(rect);
+        rects.push({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+          character,
+        });
       }
       characterRange.detach();
     }

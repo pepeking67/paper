@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getTextFragmentRect, mergeClientRectsIntoLineRects, mergeGlyphRects, normalizeClientRects, normalizeHighlightRects, projectHighlightRect } from "../lib/pdf/merge-glyph-rects";
+import { getTextFragmentRect, getUnderlinePaintRect, mergeClientRectsIntoLineRects, mergeGlyphRects, normalizeClientRects, normalizeHighlightRects, projectHighlightRect } from "../lib/pdf/merge-glyph-rects";
 
 const clientRect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, width, height });
 
@@ -11,7 +11,171 @@ test("formula glyphs become one continuous annotation line", () => {
     clientRect(32, 10, 8, 10),
     clientRect(49, 15, 5, 6),
     clientRect(58, 10, 8, 10),
-  ]), [clientRect(10, 5, 56, 16)]);
+  ]), [clientRect(10, 10, 56, 10)]);
+});
+
+test("a formula highlight uses one full bounding block for operators and limits", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 30, 30, 10),
+    { ...clientRect(42, 10, 12, 50), character: "∑" },
+    clientRect(55, 8, 8, 8),
+    clientRect(55, 50, 8, 8),
+    clientRect(66, 30, 100, 10),
+    clientRect(210, 30, 80, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }), [
+    clientRect(10, 8, 280, 52),
+  ]);
+});
+
+test("garbled formula text still uses its full geometry when requested", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 30, 90, 10),
+    clientRect(102, 8, 18, 52),
+    clientRect(122, 30, 120, 10),
+  ], { referenceLineHeight: 10, fullFormulaBounds: true }), [
+    clientRect(10, 8, 232, 52),
+  ]);
+});
+
+test("full formula bounds still preserve separate visual equation rows", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 100, 10),
+    clientRect(42, 2, 8, 6),
+    clientRect(10, 40, 100, 10),
+    clientRect(42, 52, 8, 6),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }), [
+    clientRect(10, 2, 100, 18),
+    clientRect(10, 40, 100, 18),
+  ]);
+});
+
+test("a mismatched page reference height cannot collapse real selected text rows", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 220, 20),
+    { ...clientRect(10, 34, 220, 20), character: "=" },
+    clientRect(10, 58, 180, 20),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }), [
+    clientRect(10, 10, 220, 20),
+    clientRect(10, 34, 220, 20),
+    clientRect(10, 58, 180, 20),
+  ]);
+});
+
+test("full formula bounds do not bridge separate PDF columns", () => {
+  assert.equal(mergeClientRectsIntoLineRects([
+    clientRect(10, 20, 60, 10),
+    { ...clientRect(72, 8, 12, 34), character: "∑" },
+    clientRect(180, 20, 60, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true, fullFormulaBounds: true }).length, 2);
+});
+
+test("underline paint sits below the complete formula bounds", () => {
+  assert.deepEqual(getUnderlinePaintRect(clientRect(10, 8, 280, 52)), {
+    left: 10,
+    top: 56,
+    width: 280,
+    height: 2,
+  });
+});
+
+test("ordinary text underline hugs the lower text edge without an outside gap", () => {
+  assert.deepEqual(getUnderlinePaintRect(clientRect(10, 20, 120, 20)), {
+    left: 10,
+    top: 37.6,
+    width: 120,
+    height: 2,
+  });
+});
+
+test("a product operator uses the surrounding body-text band instead of painting into the line above", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    { ...clientRect(10, 4, 12, 22), character: "∏" },
+    clientRect(23, 11, 7, 10),
+  ], { referenceLineHeight: 10 }), [clientRect(10, 11, 20, 10)]);
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 4, 12, 22),
+  ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(10, 10, 12, 10)]);
+});
+
+test("a product operator attaches to the equation row rather than the preceding prose row", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(45, 5, 55, 10),
+    clientRect(10, 22, 18, 10),
+    { ...clientRect(30, 12, 12, 26), character: "∏" },
+    clientRect(44, 22, 56, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true }), [
+    clientRect(45, 5, 55, 10),
+    clientRect(10, 22, 90, 10),
+  ]);
+});
+
+test("a selected tall square bracket is clamped to the normal equation band", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    { ...clientRect(50, 2, 5, 28), character: "[" },
+  ], { referenceLineHeight: 10 }), [clientRect(50, 11, 5, 10)]);
+
+  // Stored annotations no longer contain per-character metadata. Their text
+  // still enables the same compatibility normalization during display.
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(50, 2, 5, 28),
+  ], { referenceLineHeight: 10, clampTallMath: true }), [clientRect(50, 11, 5, 10)]);
+});
+
+test("garbled legacy math rects use geometry instead of extracted symbols", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 20, 90, 10),
+    clientRect(102, 6, 18, 38),
+    clientRect(122, 10, 22, 30),
+    clientRect(146, 5, 16, 40),
+    clientRect(164, 20, 150, 10),
+  ]);
+
+  assert.deepEqual(rows, [clientRect(10, 20, 304, 10)]);
+});
+
+test("a geometry-detected operator stays on the equation row below prose", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(55, 4, 65, 10),
+    clientRect(10, 22, 22, 10),
+    clientRect(34, 10, 16, 34),
+    clientRect(52, 22, 68, 10),
+  ], { referenceLineHeight: 10 }), [
+    clientRect(55, 4, 65, 10),
+    clientRect(10, 22, 110, 10),
+  ]);
+});
+
+test("a large ordinary heading is not mistaken for a math operator", () => {
+  assert.deepEqual(mergeClientRectsIntoLineRects([
+    clientRect(10, 4, 120, 22),
+  ], { referenceLineHeight: 10 }), [clientRect(10, 4, 120, 22)]);
+});
+
+test("fraction bars and tall operators remain in one body-height equation band", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 20, 22, 10),
+    clientRect(34, 5, 18, 2),
+    { ...clientRect(54, 8, 12, 28), character: "∏" },
+    clientRect(68, 13, 7, 6),
+    clientRect(77, 27, 7, 6),
+    clientRect(86, 20, 32, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true });
+
+  assert.deepEqual(rows, [clientRect(10, 20, 108, 10)]);
+});
+
+test("math fragments attach to the nearest body row instead of creating thin extra rows", () => {
+  const rows = mergeClientRectsIntoLineRects([
+    clientRect(10, 10, 40, 10),
+    clientRect(55, 1, 18, 2),
+    clientRect(75, 4, 10, 24),
+    clientRect(10, 34, 40, 10),
+  ], { referenceLineHeight: 10, clampTallMath: true });
+
+  assert.deepEqual(rows, [
+    clientRect(10, 10, 75, 10),
+    clientRect(10, 34, 40, 10),
+  ]);
 });
 
 test("continuous annotation lines do not bridge PDF columns", () => {
@@ -48,8 +212,8 @@ test("adjacent formula rows are not bridged by subscripts and superscripts", () 
 
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map(({ left, top, right, bottom }) => ({ left, top, right, bottom })), [
-    { left: 10, top: 10, right: 53, bottom: 23 },
-    { left: 10, top: 20, right: 53, bottom: 35 },
+    { left: 10, top: 10, right: 53, bottom: 20 },
+    { left: 10, top: 25, right: 53, bottom: 35 },
   ]);
 });
 

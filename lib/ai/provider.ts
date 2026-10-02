@@ -54,7 +54,8 @@ export class AiProviderRequestError extends Error {
 }
 
 const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
-const FALLBACK_GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
+const DEFAULT_GEMINI_DICTIONARY_MODEL = "gemini-3.1-flash-lite";
+const FALLBACK_GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash"];
 const CHAT_STREAM_TIMEOUT_MS = 110_000;
 export const CHAT_MAX_OUTPUT_TOKENS = 2_048;
 
@@ -97,13 +98,13 @@ class GeminiProvider implements AiProvider {
       0,
       256,
       10_000,
-      process.env.GEMINI_DICTIONARY_MODEL?.trim() || this.model,
+      process.env.GEMINI_DICTIONARY_MODEL?.trim() || DEFAULT_GEMINI_DICTIONARY_MODEL,
       true,
     );
     return sanitizeDictionaryMeaning(result);
   }
 
-  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192, timeoutMs = 55_000, primaryModel = this.model, disableThinking = false): Promise<string> {
+  private async generate(parts: GeminiPart[], systemInstruction: string, temperature: number, maxOutputTokens = 8_192, timeoutMs = 55_000, primaryModel = this.model, retryInvalidModel = false): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const models = buildGeminiModelCandidates(primaryModel);
@@ -125,7 +126,6 @@ class GeminiProvider implements AiProvider {
               generationConfig: {
                 temperature,
                 maxOutputTokens,
-                ...(disableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
               },
             }),
           });
@@ -152,7 +152,10 @@ class GeminiProvider implements AiProvider {
           }
 
           const canTryAnotherModel = modelIndex + 1 < models.length
-            && (RETRYABLE_GEMINI_STATUSES.has(response.status) || response.status === 403 || response.status === 404);
+            && (RETRYABLE_GEMINI_STATUSES.has(response.status)
+              || response.status === 403
+              || response.status === 404
+              || (retryInvalidModel && response.status === 400));
           if (canTryAnotherModel) {
             console.warn("[gemini] switching model after provider failure", { model, status: response.status });
             break;

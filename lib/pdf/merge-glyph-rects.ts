@@ -1,6 +1,15 @@
 export type GlyphRect = { left: number; top: number; width: number; height: number };
 export type NormalizedHighlightRect = { x: number; y: number; width: number; height: number };
-export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+export type ClientRectLike = { left: number; top: number; right: number; bottom: number; width: number; height: number; character?: string };
+export type MergeLineRectOptions = {
+  referenceLineHeight?: number;
+  clampTallMath?: boolean;
+  fullFormulaBounds?: boolean;
+};
+
+const LARGE_MATH_OPERATOR = /[∏∐∑∫∬∭∮⋂⋃Π]/u;
+const TALL_MATH_DELIMITER = /[()[\]{}|‖⌈⌉⌊⌋]/u;
+const MATH_NOTATION = /[=≈≃≤≥∏∐∑∫∬∭∮⋂⋃Π∇_^\[\]{}]/u;
 
 /**
  * Collapse per-character browser ranges into one visual band per selected line.
@@ -10,32 +19,68 @@ export type ClientRectLike = { left: number; top: number; right: number; bottom:
  * rectangles even though the user selected one equation line. We join nearby
  * horizontal fragments and allow vertically shifted math glyphs to belong to
  * the same line, while retaining a conservative gap limit so separate columns
- * are never bridged.
+ * are never bridged. Formula annotations can opt into one full bounding box per
+ * visual equation row so operators, limits and fractions are painted together.
  */
-export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]): ClientRectLike[] {
+export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[], options: MergeLineRectOptions = {}): ClientRectLike[] {
   if (!rects.length) return [];
-  const heights = rects.map((rect) => rect.height).sort((a, b) => a - b);
-  const typicalHeight = percentile(heights, 0.75);
-  const anchorThreshold = Math.max(0.5, typicalHeight * 0.72);
-  const anchors = rects.filter((rect) => rect.height >= anchorThreshold);
-  const satellites = rects.filter((rect) => rect.height < anchorThreshold);
-  const lines: ClientRectLike[][] = [];
+  // Count-based percentiles are unstable for equations: one sum can produce
+  // several tall PDF spans (operator, upper limit, lower limit) while ordinary
+  // body text is stored as one wide span. Weight by horizontal coverage so the
+  // long body band, rather than the number of PDF fragments, sets the baseline.
+  const selectedTypicalHeight = weightedMedianHeight(rects);
+  const referenceHeight = options.referenceLineHeight && options.referenceLineHeight > 0
+    ? options.referenceLineHeight
+    : undefined;
+  const selectionHeight = selectedTypicalHeight || referenceHeight || 0;
+  const isTallMathGlyph = (rect: ClientRectLike) => Boolean(rect.character && (
+    LARGE_MATH_OPERATOR.test(rect.character)
+    || (TALL_MATH_DELIMITER.test(rect.character) && (
+      rect.height > selectionHeight * 1.45
+      || (rects.length === 1 && referenceHeight && rect.height > referenceHeight * 1.45)
+    ))
+  ));
+  const matchesBodyHeight = (rect: ClientRectLike, height: number | undefined) => Boolean(height
+    && rect.height >= height * 0.68
+    && rect.height <= height * 1.45);
+  const isBodyAnchor = (rect: ClientRectLike) => !isTallMathGlyph(rect)
+    && (matchesBodyHeight(rect, selectedTypicalHeight) || matchesBodyHeight(rect, referenceHeight));
+  const anchors = rects.filter(isBodyAnchor);
+  const satellites = rects.filter((rect) => !isBodyAnchor(rect));
+  // The page-level reference can differ from the selected DOM ranges because
+  // PDF.js spans use different transforms. Row separation must follow the
+  // selected body glyphs or genuine adjacent lines can collapse into one.
+  const typicalHeight = anchors.length
+    ? weightedMedianHeight(anchors)
+    : (referenceHeight || selectedTypicalHeight);
+  const hasGeometryMath = satellites.some((rect) => {
+    const tall = rect.height > typicalHeight * 1.45;
+    const thin = rect.height < typicalHeight * 0.55;
+    if (!tall && !thin) return false;
 
-  // Establish rows from full-height glyphs first. Comparing with a stable row
-  // center prevents a subscript on one row and a superscript on the next row
-  // from forming a transitive bridge that collapses both rows into one band.
+    // A tall/narrow span next to a normal-height span is the characteristic
+    // geometry of sums, products, integrals, fractions and stretched brackets.
+    // This works even when PDF text extraction maps the glyph to the wrong
+    // character or omits it entirely.
+    const narrowMathShape = thin || rect.width <= Math.max(typicalHeight * 5, rect.height * 1.5);
+    if (!narrowMathShape) return false;
+    if (!anchors.length) {
+      return Boolean(options.referenceLineHeight) && rects.length === 1;
+    }
+    return anchors.some((anchor) => Math.abs(verticalCenter(anchor) - verticalCenter(rect)) <= Math.max(typicalHeight * 2.4, rect.height * 0.6));
+  });
+  const normalizeMathBand = options.clampTallMath || rects.some(isTallMathGlyph) || hasGeometryMath;
+  let lines: ClientRectLike[][] = [];
+
+  // Establish rows only from body-height glyphs. Tall operators, fraction bars,
+  // superscripts and subscripts must not seed their own visual rows.
   for (const rect of [...anchors].sort(compareByCenterThenLeft)) {
     const rectCenter = verticalCenter(rect);
     let bestLine: ClientRectLike[] | undefined;
     let bestDistance = Number.POSITIVE_INFINITY;
     for (const line of lines) {
-      const lineCenter = median(line.map(verticalCenter));
-      const lineHeight = median(line.map((member) => member.height));
-      const bothAreLineBands = line.some((member) => member.width > member.height * 2.5)
-        && rect.width > rect.height * 2.5;
-      const tolerance = bothAreLineBands
-        ? Math.max(1.5, Math.min(lineHeight, rect.height) * 0.45)
-        : Math.max(2, Math.min(lineHeight, rect.height) * 0.55);
+      const lineCenter = median(line.filter(isBodyAnchor).map(verticalCenter));
+      const tolerance = Math.max(2, typicalHeight * 0.62);
       const distance = Math.abs(lineCenter - rectCenter);
       if (distance <= tolerance && distance < bestDistance) {
         bestLine = line;
@@ -46,23 +91,31 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
     else lines.push([rect]);
   }
 
-  // Small superscript/subscript glyphs follow the nearest established row.
-  // They may expand that row's visual band, but never redefine its center and
-  // therefore cannot merge two neighboring selected rows.
+  // Math fragments follow the nearest body row without changing its center.
+  // This handles a single equation whose PDF spans sit at many vertical offsets,
+  // while still preventing those offsets from bridging adjacent selected rows.
   for (const rect of [...satellites].sort(compareByCenterThenLeft)) {
     const rectCenter = verticalCenter(rect);
     let bestLine: ClientRectLike[] | undefined;
     let bestDistance = Number.POSITIVE_INFINITY;
     for (const line of lines) {
-      const anchorCenter = median(line.filter((member) => member.height >= anchorThreshold).map(verticalCenter));
+      const bodyMembers = line.filter(isBodyAnchor);
+      const anchorCenter = median((bodyMembers.length ? bodyMembers : line).map(verticalCenter));
       const distance = Math.abs(anchorCenter - rectCenter);
       if (distance < bestDistance) {
         bestLine = line;
         bestDistance = distance;
       }
     }
-    if (bestLine && bestDistance <= Math.max(typicalHeight * 1.1, rect.height * 1.5)) bestLine.push(rect);
+    const attachmentDistance = normalizeMathBand
+      ? Math.max(typicalHeight * 2.4, rect.height * 0.6)
+      : Math.max(typicalHeight * 1.1, rect.height * 0.6);
+    if (bestLine && bestDistance <= attachmentDistance) bestLine.push(rect);
     else lines.push([rect]);
+  }
+
+  if (options.fullFormulaBounds && normalizeMathBand && lines.length > 1) {
+    lines = collapseFormulaFragmentRows(lines, typicalHeight);
   }
 
   const merged: ClientRectLike[] = [];
@@ -74,8 +127,10 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
       if (!run.length) return;
       const left = Math.min(...run.map((rect) => rect.left));
       const right = Math.max(...run.map((rect) => rect.right));
-      const top = Math.min(...run.map((rect) => rect.top));
-      const bottom = Math.max(...run.map((rect) => rect.bottom));
+      const { top, bottom } = representativeVerticalBand(run, typicalHeight, {
+        ...options,
+        clampTallMath: normalizeMathBand,
+      });
       merged.push({ left, top, right, bottom, width: right - left, height: bottom - top });
       run = [];
     };
@@ -86,8 +141,9 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
         run.push(rect);
         continue;
       }
-      const lineHeight = Math.max(...run.map((item) => item.height), rect.height);
-      const allowedGap = Math.max(6, lineHeight * 2.25);
+      const allowedGap = options.fullFormulaBounds && normalizeMathBand
+        ? Math.max(10, typicalHeight * 6)
+        : Math.max(6, typicalHeight * 2.25);
       if (rect.left - previous.right <= allowedGap) run.push(rect);
       else {
         flush();
@@ -98,6 +154,125 @@ export function mergeClientRectsIntoLineRects(rects: readonly ClientRectLike[]):
   }
 
   return merged.sort((a, b) => a.top - b.top || a.left - b.left);
+}
+
+export function estimateTypicalLineHeight(rects: readonly Pick<ClientRectLike, "height">[]): number | undefined {
+  const heights = rects.map((rect) => rect.height).filter((height) => Number.isFinite(height) && height >= 2 && height <= 96).sort((a, b) => a - b);
+  return heights.length ? percentile(heights, 0.5) : undefined;
+}
+
+export function containsLargeMathOperator(text: string) {
+  return LARGE_MATH_OPERATOR.test(text);
+}
+
+export function containsMathNotation(text: string) {
+  return MATH_NOTATION.test(text);
+}
+
+function representativeVerticalBand(run: readonly ClientRectLike[], typicalHeight: number, options: MergeLineRectOptions) {
+  if (options.fullFormulaBounds && options.clampTallMath) {
+    return {
+      top: Math.min(...run.map((rect) => rect.top)),
+      bottom: Math.max(...run.map((rect) => rect.bottom)),
+    };
+  }
+
+  const reference = options.referenceLineHeight && Number.isFinite(options.referenceLineHeight) && options.referenceLineHeight > 0
+    ? options.referenceLineHeight
+    : typicalHeight;
+  const containsOperator = options.clampTallMath || run.some((rect) => rect.character && LARGE_MATH_OPERATOR.test(rect.character));
+  const candidates = run.filter((rect) => {
+    if (rect.character && (
+      LARGE_MATH_OPERATOR.test(rect.character)
+      || (TALL_MATH_DELIMITER.test(rect.character) && rect.height > reference * 1.45)
+    )) return false;
+    return rect.height >= reference * 0.68 && rect.height <= reference * 1.45;
+  });
+
+  if (candidates.length) {
+    const height = median(candidates.map((rect) => rect.height));
+    const center = median(candidates.map(verticalCenter));
+    return { top: center - height / 2, bottom: center + height / 2 };
+  }
+
+  // Preserve genuinely large ordinary text such as headings. For a math run,
+  // however, use the page's normal line height so a tall product/sum/integral
+  // glyph cannot paint into the line above or below.
+  if (!containsOperator) {
+    const height = median(run.map((rect) => rect.height));
+    const center = median(run.map(verticalCenter));
+    return { top: center - height / 2, bottom: center + height / 2 };
+  }
+
+  const center = median(run.map(verticalCenter));
+  return { top: center - reference / 2, bottom: center + reference / 2 };
+}
+
+function collapseFormulaFragmentRows(lines: ClientRectLike[][], typicalHeight: number) {
+  const summaries = lines.map((line) => ({
+    line,
+    coverage: line.reduce((sum, rect) => sum + rect.width, 0),
+    center: median(line.map(verticalCenter)),
+  }));
+  const widestCoverage = Math.max(...summaries.map(({ coverage }) => coverage));
+  const substantialCoverage = Math.max(typicalHeight * 2.25, widestCoverage * 0.35);
+  let rows = summaries.filter(({ coverage }) => coverage >= substantialCoverage);
+
+  // Very short formulas (for example x^2) may have no row above the absolute
+  // threshold. The widest fragment is still the most reliable baseline.
+  if (!rows.length) {
+    rows = [summaries.reduce((widest, current) => current.coverage > widest.coverage ? current : widest)];
+  }
+
+  for (const fragment of summaries) {
+    if (rows.includes(fragment)) continue;
+    let nearest = rows[0];
+    let nearestDistance = Math.abs(nearest.center - fragment.center);
+    for (const row of rows.slice(1)) {
+      const distance = Math.abs(row.center - fragment.center);
+      if (distance < nearestDistance) {
+        nearest = row;
+        nearestDistance = distance;
+      }
+    }
+
+    const horizontalGap = intervalGap(horizontalBounds(nearest.line), horizontalBounds(fragment.line));
+    if (nearestDistance <= typicalHeight * 2.8 && horizontalGap <= typicalHeight * 6) {
+      nearest.line.push(...fragment.line);
+      nearest.coverage += fragment.coverage;
+      nearest.center = median(nearest.line.map(verticalCenter));
+    } else {
+      rows.push(fragment);
+    }
+  }
+
+  return rows.map(({ line }) => line);
+}
+
+function horizontalBounds(rects: readonly ClientRectLike[]) {
+  return {
+    left: Math.min(...rects.map((rect) => rect.left)),
+    right: Math.max(...rects.map((rect) => rect.right)),
+  };
+}
+
+function intervalGap(left: { left: number; right: number }, right: { left: number; right: number }) {
+  if (left.right < right.left) return right.left - left.right;
+  if (right.right < left.left) return left.left - right.right;
+  return 0;
+}
+
+export function getUnderlinePaintRect(rect: Pick<ClientRectLike, "left" | "top" | "width" | "height">, thickness = 2) {
+  // Keep the stroke inside the lower edge of the text range. Drawing below the
+  // range leaves a conspicuous gap because PDF.js range boxes already include
+  // the font's descent space.
+  const bottomInset = Math.max(thickness, Math.min(4, rect.height * 0.12));
+  return {
+    left: rect.left,
+    top: rect.top + rect.height - bottomInset,
+    width: rect.width,
+    height: thickness,
+  };
 }
 
 function verticalCenter(rect: ClientRectLike) {
@@ -118,6 +293,21 @@ function median(values: readonly number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function weightedMedianHeight(rects: readonly ClientRectLike[]) {
+  const weighted = rects
+    .filter((rect) => Number.isFinite(rect.height) && rect.height > 0)
+    .map((rect) => ({ height: rect.height, weight: Math.max(1, Number.isFinite(rect.width) ? rect.width : 1) }))
+    .sort((left, right) => left.height - right.height);
+  if (!weighted.length) return 0;
+  const middle = weighted.reduce((sum, item) => sum + item.weight, 0) / 2;
+  let cumulative = 0;
+  for (const item of weighted) {
+    cumulative += item.weight;
+    if (cumulative >= middle) return item.height;
+  }
+  return weighted.at(-1)!.height;
 }
 
 /**

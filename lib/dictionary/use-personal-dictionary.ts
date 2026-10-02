@@ -132,12 +132,14 @@ export function usePersonalDictionary() {
     void fetchDictionaryRows(userId).then((remote) => {
       if (cancelled || identityRef.current !== identity) return;
       const current = cacheRef.current;
+      const recovered = recoverCachedDictionaryEntries(userId, remote.map(rowToEntry), current);
       replaceCache(userId, {
         version: 1,
-        entries: mergeRemoteWithPending(remote.map(rowToEntry), current.pending),
-        pending: current.pending,
+        entries: mergeRemoteWithPending(remote.map(rowToEntry), recovered.pending),
+        pending: recovered.pending,
       });
-      if (Object.keys(current.pending).length) scheduleSync();
+      if (recovered.didRecover) markCachedDictionaryRecovery(userId);
+      if (Object.keys(recovered.pending).length) scheduleSync();
       else setStatus("synced");
     }).catch(() => {
       if (!cancelled && identityRef.current === identity) setStatus(navigator.onLine ? "error" : "offline");
@@ -256,6 +258,37 @@ function mergeRemoteWithPending(remote: StudyHighlight[], pending: Record<string
     else byTerm.set(normalizeDictionaryTerm(mutation.entry.text), mutation.entry);
   }
   return sortEntries([...byTerm.values()]);
+}
+
+function cachedDictionaryRecoveryKey(userId: string) {
+  return `paper-study-personal-dictionary-recovered:${userId}:v2`;
+}
+
+export function recoverCachedDictionaryEntries(
+  userId: string,
+  remote: StudyHighlight[],
+  cache: DictionaryCache,
+): { pending: Record<string, DictionaryMutation>; didRecover: boolean } {
+  if (localStorage.getItem(cachedDictionaryRecoveryKey(userId))) {
+    return { pending: cache.pending, didRecover: false };
+  }
+
+  const remoteTerms = new Set(remote.map((entry) => normalizeDictionaryTerm(entry.text)));
+  const pending = { ...cache.pending };
+  let didRecover = false;
+  const now = new Date().toISOString();
+  for (const entry of cache.entries) {
+    const normalizedTerm = normalizeDictionaryTerm(entry.text);
+    if (!normalizedTerm || remoteTerms.has(normalizedTerm) || pending[normalizedTerm]?.kind === "delete") continue;
+    pending[normalizedTerm] = { kind: "upsert", entry, queuedAt: now };
+    didRecover = true;
+  }
+  return { pending, didRecover };
+}
+
+function markCachedDictionaryRecovery(userId: string) {
+  try { localStorage.setItem(cachedDictionaryRecoveryKey(userId), new Date().toISOString()); }
+  catch { /* Pending mutations remain cached and will be retried. */ }
 }
 
 function dictionaryCacheKey(userId: string) {
