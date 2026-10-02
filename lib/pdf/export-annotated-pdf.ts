@@ -100,9 +100,9 @@ export async function downloadAnnotatedPdf(
         page.drawLine({
           start: { x: rect.x, y },
           end: { x: rect.x + rect.width, y },
-          thickness: Math.max(0.9, Math.min(2.2, rect.height * 0.12)),
+          thickness: Math.max(0.45, Math.min(1, rect.height * 0.06)),
           color,
-          opacity: 0.95,
+          opacity: 0.58,
         });
       } else {
         page.drawRectangle({
@@ -129,7 +129,7 @@ export async function downloadAnnotatedPdf(
     const page = pages[label.pageIndex];
     if (!page) continue;
     const { width: pageWidth, height: pageHeight } = page.getSize();
-    const fontSize = Math.max(5.5, Math.min(7, label.anchor.height * 0.58));
+    const fontSize = Math.max(4.5, Math.min(5.5, label.anchor.height * 0.42));
     const cacheKey = `${fontSize.toFixed(2)}:${label.meaning}`;
     const imagePromise = imageCache.get(cacheKey) ?? createDictionaryLabelImage(pdf, label.meaning, fontSize);
     imageCache.set(cacheKey, imagePromise);
@@ -181,25 +181,27 @@ export function placeDictionaryPdfLabel(
   occupied: PdfRect[] = [],
 ): PdfRect {
   const margin = 2;
-  const gap = 0.75;
+  const gap = 1.5;
   const width = Math.min(labelSize.width, Math.max(1, pageWidth - margin * 2));
   const height = Math.min(labelSize.height, Math.max(1, pageHeight - margin * 2));
-  const x = Math.max(margin, Math.min(anchor.x, pageWidth - width - margin));
-  const rowStep = height + gap;
-  const candidates: number[] = [];
+  const centeredY = anchor.y + (anchor.height - height) / 2;
+  const candidates = [
+    { x: anchor.x + anchor.width + gap, y: centeredY },
+    { x: anchor.x + anchor.width + gap, y: centeredY + height + gap },
+    { x: anchor.x + anchor.width + gap, y: centeredY - height - gap },
+    { x: anchor.x - width - gap, y: centeredY },
+  ];
 
-  for (let row = 0; row < 6; row += 1) candidates.push(anchor.y - height - gap - row * rowStep);
-  for (let row = 0; row < 6; row += 1) candidates.push(anchor.y + anchor.height + gap + row * rowStep);
-
-  for (const y of candidates) {
-    if (y < margin || y + height > pageHeight - margin) continue;
-    const candidate = { x, y, width, height };
+  for (const candidatePosition of candidates) {
+    const candidate = { ...candidatePosition, width, height };
+    if (candidate.x < margin || candidate.x + width > pageWidth - margin) continue;
+    if (candidate.y < margin || candidate.y + height > pageHeight - margin) continue;
     if (!occupied.some((rect) => pdfRectsOverlap(candidate, rect, 0.4))) return candidate;
   }
 
   return {
-    x,
-    y: Math.max(margin, Math.min(anchor.y - height - gap, pageHeight - height - margin)),
+    x: Math.max(margin, Math.min(anchor.x + anchor.width + gap, pageWidth - width - margin)),
+    y: Math.max(margin, Math.min(centeredY, pageHeight - height - margin)),
     width,
     height,
   };
@@ -208,15 +210,15 @@ export function placeDictionaryPdfLabel(
 async function createDictionaryLabelImage(pdf: PdfLibDocument, meaning: string, fontSize: number): Promise<RasterizedAnnotationImage> {
   if (typeof document === "undefined") throw new Error("사전 뜻 이미지는 브라우저에서만 생성할 수 있습니다.");
   const scale = 3;
-  const maxWidth = 150;
+  const maxWidth = 100;
   const paddingX = 1;
   const paddingY = 0.5;
-  const lineHeight = fontSize * 1.18;
+  const lineHeight = fontSize * 1.08;
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (!context) throw new Error("사전 뜻 이미지를 만들지 못했습니다.");
 
-  const font = `600 ${fontSize * scale}px system-ui, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
+  const font = `500 ${fontSize * scale}px system-ui, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
   context.font = font;
   const lines = wrapCanvasText(context, meaning, (maxWidth - paddingX * 2) * scale);
   const measuredWidth = Math.max(...lines.map((line) => context.measureText(line).width), 1) / scale;

@@ -262,7 +262,7 @@ function intervalGap(left: { left: number; right: number }, right: { left: numbe
   return 0;
 }
 
-export function getUnderlinePaintRect(rect: Pick<ClientRectLike, "left" | "top" | "width" | "height">, thickness = 2) {
+export function getUnderlinePaintRect(rect: Pick<ClientRectLike, "left" | "top" | "width" | "height">, thickness = 1) {
   // Keep the stroke inside the lower edge of the text range. Drawing below the
   // range leaves a conspicuous gap because PDF.js range boxes already include
   // the font's descent space.
