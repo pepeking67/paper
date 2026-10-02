@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasTextMemoMath, placeDictionaryPdfLabel, preferWoff2FontSource, projectNormalizedRectToPdf, renderTextMemoMarkup, textMemoToPlainText } from "../lib/pdf/export-annotated-pdf";
+import { hasTextMemoMath, placeDictionaryPdfLabel, preferWoff2FontSource, projectNormalizedRectToPdf, renderTextMemoMarkup, textMemoSvgDataUrl, textMemoToPlainText } from "../lib/pdf/export-annotated-pdf";
 
 test("projects top-left normalized PDF marks into bottom-left PDF coordinates", () => {
   const rect = projectNormalizedRectToPdf({ x: 0.1, y: 0.2, width: 0.3, height: 0.1 }, 600, 800);
@@ -54,4 +54,11 @@ test("keeps only the compact WOFF2 source before embedding KaTeX fonts into a PD
     preferWoff2FontSource(css),
     "@font-face { font-family: KaTeX_Main; src: url(fonts/KaTeX_Main-Regular.woff2) format(\"woff2\"); }",
   );
+});
+
+test("uses a self-contained data URL instead of a blob URL for browser-compatible PDF memo rasterization", () => {
+  const url = textMemoSvgDataUrl('<svg xmlns="http://www.w3.org/2000/svg"><foreignObject /></svg>');
+  assert.match(url, /^data:image\/svg\+xml;charset=utf-8,/u);
+  assert.match(url, /%3CforeignObject/u);
+  assert.doesNotMatch(url, /^blob:/u);
 });

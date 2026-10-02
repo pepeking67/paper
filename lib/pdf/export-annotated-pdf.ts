@@ -426,17 +426,14 @@ function escapeHtml(value: string) {
 function loadSvgImage(svg: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    const objectUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-    image.onload = () => {
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-      resolve(image);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("텍스트 메모 SVG를 불러오지 못했습니다."));
-    };
-    image.src = objectUrl;
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("텍스트 메모 SVG를 불러오지 못했습니다."));
+    image.src = textMemoSvgDataUrl(svg);
   });
+}
+
+export function textMemoSvgDataUrl(svg: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 async function createPlainTextMemoImage(
