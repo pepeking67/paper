@@ -27,5 +27,10 @@ test("buildStudyPacket uses saved insights and paper-section ordering instructio
   assert.match(packet, /내용 선택의 1순위는 사용자가 표시한 원문/);
   assert.match(packet, /Saved Insight Q&A는 보충 자료다/);
   assert.match(packet, /Q&A는 의문이 생긴 부분의 보충 설명으로만 사용하라/);
+  assert.match(packet, /A4로 바로 인쇄할 수 있는 PDF 파일/);
+  assert.match(packet, /Markdown heading, 목록, 표, bold 등의 문법 기호를 원문 그대로 노출하지 말고 실제 서식으로 렌더링/);
+  assert.match(packet, /LaTeX의 백슬래시·중괄호·첨자·위첨자·행렬·정렬 환경을 임의로 변형하거나 이스케이프해 깨뜨리지 않는다/);
+  assert.match(packet, /수식, 표, 코드, 이미지 marker 주변 내용이 잘리거나 겹치지 않는지/);
+  assert.match(packet, /Markdown과 LaTeX가 올바르게 렌더링된 인쇄용 파일을 반드시 제공하라/);
   assert.doesNotMatch(packet, /이 논문을 공부하면서 나눈 전체 질문과 답변/);
 });
