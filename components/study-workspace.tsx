@@ -554,8 +554,6 @@ function WorkspaceShell({ activePaper, papers, userId }: { activePaper: Paper; p
       onAddMemo={(text) => updateTray((current) => ({ ...current, memos: [...current.memos, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }] }))}
       onRemove={removeTrayItem}
       onUseArea={useAreaForQuestion}
-      noteMarkdown={studyState.noteMarkdown}
-      onNoteChange={studyState.updateNote}
     />
     <PersonalDictionary
       entries={dictionaryState.entries}

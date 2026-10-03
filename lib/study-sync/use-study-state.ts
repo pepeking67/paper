@@ -186,11 +186,6 @@ export function useStudyState(paperId: string) {
     });
   }
 
-  function updateNote(next: string) {
-    setNoteState(next);
-    persistLocal(tray, next);
-  }
-
   async function chooseServerVersion() {
     if (!userId || !conflict) return;
     const next: AccountStudyCache = { tray: conflict.server.tray, noteMarkdown: conflict.server.noteMarkdown, baseRevision: conflict.server.revision, dirty: false, updatedAt: conflict.server.updatedAt };
@@ -215,7 +210,7 @@ export function useStudyState(paperId: string) {
     if (userId && !conflict && status === "saved-local" && cacheRef.current?.dirty) scheduleSync();
   }, [conflict, scheduleSync, status, userId]);
 
-  return { tray, noteMarkdown, status, conflict, updateTray, updateNote, chooseServerVersion, chooseDeviceVersion, syncNow };
+  return { tray, status, conflict, updateTray, chooseServerVersion, chooseDeviceVersion, syncNow };
 }
 
 async function fetchServerRow(userId: string, paperId: string): Promise<ServerRow | null> {

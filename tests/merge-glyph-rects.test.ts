@@ -74,7 +74,7 @@ test("underline paint sits below the complete formula bounds", () => {
     left: 10,
     top: 56,
     width: 280,
-    height: 1,
+    height: 2,
   });
 });
 
@@ -83,7 +83,7 @@ test("ordinary text underline hugs the lower text edge without an outside gap", 
     left: 10,
     top: 37.6,
     width: 120,
-    height: 1,
+    height: 2,
   });
 });
 

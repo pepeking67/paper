@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The checked-in catalog and Vercel Blob PDF path remain the read-only **Legacy / Shared library**. Signing in adds a separate, RLS-protected personal library backed by `paper_categories`, `user_papers`, `paper_assets`, `paper_study_states`, and `paper_area_assets`.
+The application is an account-only personal library backed by `paper_categories`, `user_papers`, `paper_assets`, `paper_study_states`, and `paper_area_assets`. The former GitHub catalog and Vercel Blob PDF delivery path are not used.
 
 Study edits are local-first: every action writes the account-scoped browser cache before a debounced Supabase update. A dirty cache survives an offline session and retries on `online`. The update matches the last known `revision`; a mismatch opens a choice between the server copy and the device copy instead of overwriting either silently. Legacy `paper-study-tray:<paperId>` and `paper-study-note:<paperId>` data is imported only when the account has no server row, and a per-account marker prevents repeated imports. The legacy keys remain untouched as a backup.
 
@@ -15,7 +15,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://cuanlnknxbwsuchgbjhr.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<active Supabase publishable key>
 ```
 
-Existing server-only variables such as `GEMINI_API_KEY` and `BLOB_READ_WRITE_TOKEN` stay server-only. No paid Supabase feature, database branch, image transformation, extra compute, or PITR is required.
+Existing server-only variables such as `GEMINI_API_KEY` stay server-only. No paid Supabase feature, database branch, image transformation, extra compute, or PITR is required.
 
 ## Storage and quota rules
 
@@ -49,6 +49,6 @@ It creates temporary rows and objects for both owners, tests cross-account SELEC
 
 ## Rollback
 
-1. Roll back the Preview deployment or close the Draft PR. The Legacy / Shared catalog and guest localStorage flow remain available.
+1. Roll back the Preview deployment or close the Draft PR.
 2. If the RPC must be removed, run `drop function if exists public.delete_user_paper(uuid);`. Do not drop account tables or buckets: they may contain user data.
 3. Existing account rows, PDFs, crops, and legacy localStorage backups are preserved by a code rollback.

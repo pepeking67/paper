@@ -130,7 +130,7 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(workspace, /Retry old annotations sequentially/);
 });
 
-test("PDF text memo tool defaults to 6pt while keeping its editor readable at 11pt", async () => {
+test("PDF text memo tool defaults to 7pt while keeping its editor readable at 11pt", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
@@ -140,7 +140,7 @@ test("PDF text memo tool defaults to 6pt while keeping its editor readable at 11
   assert.match(viewer, /ToolButton tool="text"/);
   assert.doesNotMatch(viewer, /textColor=\{annotationColor\}/);
   assert.match(viewer, /드래그해 검은 글자 메모 작성/);
-  assert.match(page, /DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 6/);
+  assert.match(page, /DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 7/);
   assert.match(page, /TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11/);
   assert.match(page, /fontSizePt: DEFAULT_TEXT_MEMO_FONT_SIZE_PT/);
   assert.equal(page.match(/fontSize: `\$\{TEXT_MEMO_EDITOR_FONT_SIZE_PT\}pt`/g)?.length, 2);
@@ -163,7 +163,7 @@ test("personal dictionary and Study Tray header buttons keep their own spacing",
   assert.match(viewer, /id="study-tray-actions" className="flex items-center gap-2"/);
 });
 
-test("dictionary annotations stay out of Study Tray and study-note material", async () => {
+test("dictionary annotations stay out of Study Tray and external GPT prompt material", async () => {
   const packet = await readFile("lib/study-tray/build-packet.ts", "utf8");
   const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
   const exporter = await readFile("lib/pdf/export-annotated-pdf.ts", "utf8");

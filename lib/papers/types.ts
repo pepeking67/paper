@@ -6,9 +6,3 @@ export type Paper = {
   readingStatus?: "unread" | "reading" | "read" | "archived";
   asset?: { id: string; bucketId: string; objectPath: string; checksum: string | null };
 };
-export type PdfManifestEntry = {
-  id: string; title: string; sourceUrl: string | null; pdfSourceUrl: string | null;
-  blobPathname: string | null; sha256: string | null; sizeBytes: number | null;
-  version: string | null; uploadStatus: "pending" | "excluded" | "ready" | "failed";
-  processingStatus: "pending" | "ready" | "failed" | "not-applicable"; reason: string;
-};

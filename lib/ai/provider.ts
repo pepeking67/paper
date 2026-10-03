@@ -29,7 +29,6 @@ export type QuestionContextSnapshot = {
 
 export interface AiProvider {
   answerStream(message: string, context: StudyContext, history?: ChatTurn[]): Promise<ReadableStream<Uint8Array>>;
-  composeStudyNote(material: string, areas?: StudyAreaContext[]): Promise<string>;
   defineTerm(term: string, pageContext?: string): Promise<string>;
 }
 
@@ -75,18 +74,6 @@ class GeminiProvider implements AiProvider {
       parts,
       "You are a careful paper-study assistant. Use only the supplied paper context and attached PDF-area images for paper-specific claims. When an image contains an equation, figure, table, or diagram, inspect the image directly rather than guessing from nearby text. Clearly label uncertainty and do not invent quotations. Answer naturally in the user's language. Lead with the direct answer, then give only the essential explanation and evidence. Be concise. Avoid generic introductions, repetition, excessive headings, and exhaustive lists unless the user explicitly asks for depth. Format answers as clean GitHub-flavored Markdown. Use headings only when useful, bullet or numbered lists for structure, Markdown tables when comparison helps, fenced code blocks for code, blockquotes for key quotations, and LaTeX math using $...$ for inline equations or $$...$$ for display equations. Never wrap the entire answer in a Markdown code fence.",
       0.2,
-    );
-  }
-
-  async composeStudyNote(material: string, areas: StudyAreaContext[] = []): Promise<string> {
-    const parts: GeminiPart[] = [{
-      text: `Create a polished paper study note from the following deliberately saved study material. Use the paper's natural section order only as the document skeleton. The actual content must be selected primarily from the learner's underlines, highlights, selected PDF areas, and attached memos. Do not turn this into a generic full-paper summary just because a section exists in the paper. Reorganize the learner-marked evidence into the most appropriate paper sections and preserve the paper's conceptual/mechanism flow. Saved Insights are deliberate Q&A about places where the learner had questions; use them only as supplemental clarification inside the relevant section, not as a separate Q&A section and not as a new primary topic disconnected from marked evidence. Prefer paper annotations and inspected PDF-area images over Q&A answers when they conflict. Preserve useful page references, uncertainty, equations, and the learner's priorities. PDF area images have stable markers in the form [[PDF_AREA:<id>]]. When an area image is useful in the note, place its exact marker on its own line near the explanation. Never invent a URL and never use normal Markdown image syntax for an attached PDF area.\n\n${material.slice(0, 60_000)}`,
-    }];
-    appendAreaImages(parts, areas);
-    return this.generate(
-      parts,
-      "You turn paper-reading records into a durable personal paper note that resembles a concise Notion research page. Return only the note itself in clean GitHub-flavored Markdown, with no preamble. The paper's natural section order is the skeleton; the learner's annotations are the content-selection signal. Build sections in paper order, but fill them primarily with underlines, highlights, selected PDF areas, and learner memos. Do not produce a generic full-paper summary or fill unmarked sections merely for completeness. Start with # Introduction when supported, then use the paper's own natural top-level heading such as # Model, # Architecture, or # Method, with ## / ### headings in actual processing or conceptual order. Follow with # Training / # Data only if relevant, then # Experiments with paper-order subsections such as setup, main results, generalization, robustness, analysis, or ablation. Add # Limitations and # Conclusion only when supplied evidence supports them. Treat Saved Insights as supplemental clarification for places where the learner had questions: integrate the useful answer into the relevant concept after the marked-paper explanation, never as a general Q&A section, and do not let Q&A introduce a new main topic that is disconnected from annotations. If a Saved Insight conflicts with marked source text or an inspected PDF area, prefer the paper evidence and mark uncertainty briefly. Keep prose concise and direct like research notes, emphasize key concepts with bold, keep useful page references, and place equations close to their explanations using $...$ and $$...$$. Use tables or lists only when they improve clarity. When an attached PDF area contains an equation, figure, or table, inspect it directly and, when it belongs in the final note, put the exact supplied [[PDF_AREA:<id>]] marker on a standalone line immediately beside the relevant explanation. Do not output ![...](...) for attached PDF areas and do not invent image URLs. If evidence is insufficient, omit the section or clearly mark uncertainty rather than guessing. Never wrap the entire document in a code fence.",
-      0.15,
     );
   }
 
