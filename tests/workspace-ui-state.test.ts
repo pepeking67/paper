@@ -22,7 +22,6 @@ test("paper UI state persists independently for each account and paper", () => {
     zoom: 225,
     chatDraft: "unfinished question",
     studyTrayOpen: true,
-    studyNoteOpen: true,
     studyTrayMemoDraft: "unfinished memo",
   }, storage);
   updatePaperUiState("account-a", "paper-1", { annotationTool: "underline", annotationColor: "blue" }, storage);
@@ -33,7 +32,6 @@ test("paper UI state persists independently for each account and paper", () => {
   assert.equal(restored.zoom, 225);
   assert.equal(restored.chatDraft, "unfinished question");
   assert.equal(restored.studyTrayOpen, true);
-  assert.equal(restored.studyNoteOpen, true);
   assert.equal(restored.studyTrayMemoDraft, "unfinished memo");
   assert.equal(restored.annotationTool, "underline");
   assert.equal(restored.annotationColor, "blue");

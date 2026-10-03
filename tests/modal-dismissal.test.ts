@@ -3,7 +3,6 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 
 for (const [name, path] of [
-  ["PDF sync", "components/pdf-sync/pdf-sync-panel.tsx"],
   ["Study Tray", "components/study-tray/study-tray.tsx"],
 ] as const) {
   test(`${name} dialog dismisses from backdrop and Escape`, async () => {

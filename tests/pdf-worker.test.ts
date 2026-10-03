@@ -38,8 +38,8 @@ test("PDF viewer keeps normal PDF.js fonts and uses a Chromium 138-139 PDFium vi
 test("continuous viewer fetches one PDF document and lazy-renders individual pages", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
-  const route = await readFile("app/api/pdf/[paperId]/route.ts", "utf8");
-  assert.equal((viewer.match(/fetch\(`/g) ?? []).length, 1);
+  assert.doesNotMatch(viewer, /fetch\(`\/api\/pdf/);
+  assert.match(viewer, /client\.storage\.from\(paper\.asset\.bucketId\)\.download\(paper\.asset\.objectPath\)/);
   assert.doesNotMatch(viewer, /\/api\/papers\//);
   assert.match(viewer, /Array\.from\(\{ length: pdf\.numPages \}/);
   assert.match(page, /IntersectionObserver/);
@@ -66,8 +66,6 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   assert.match(viewer, /\{page\}\/\{pdf\.numPages\}/);
   assert.match(viewer, /study-tray-actions/);
   assert.match(viewer, /다음 질문 문맥으로 사용합니다/);
-  assert.doesNotMatch(route, /privateBlobExists/);
-  assert.match(route, /"Accept-Ranges":"none"/);
 });
 
 test("workspace exposes a persistent keyboard-accessible Study Chat resizer", async () => {

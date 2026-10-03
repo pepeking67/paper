@@ -42,7 +42,7 @@ ${annotations}
 ## 내가 선택해서 저장한 수식/그림/표 영역 — 페이지 순서
 ${areas}
 
-주의: 위 Area의 실제 이미지 픽셀은 앱 안의 학습 노트 생성 시 멀티모달 입력으로 전달된다. 각 Area의 [[PDF_AREA:<id>]] 표시는 앱이 실제 저장된 crop 이미지로 렌더링하기 위한 안정적인 marker다. 최종 노트에서 해당 이미지를 보여줄 때는 URL을 만들거나 일반 Markdown 이미지 문법을 쓰지 말고 이 marker를 그대로 독립된 줄에 배치한다.
+주의: 클립보드 프롬프트에는 Area 이미지 픽셀이 자동 첨부되지 않는다. [[PDF_AREA:<id>]] 표시는 선택 위치를 식별하기 위한 marker다. 이미지가 별도로 첨부되지 않았다면 메모와 주변 자료만 사용하고, 이미지를 직접 확인한 것처럼 추측하지 않는다.
 
 ## 내 자유 메모
 ${memos}
@@ -59,7 +59,7 @@ ${savedInsights}
 1. 최상위 heading과 큰 흐름은 논문의 자연스러운 section 순서를 따른다. 보통 Introduction에서 시작하고, 이후 논문에 맞는 Model / Architecture / Method, Training / Data, Experiments, Ablations / Analysis, Limitations, Conclusion 등의 순서를 사용한다. 단, 사용자가 표시한 근거가 없는 section을 완성형 논문 요약처럼 억지로 채우지 않는다.
 2. **내용 선택의 1순위는 사용자가 표시한 원문이다.** Underline, Highlight, 선택한 Area, 그리고 여기에 붙인 메모를 중심으로 설명한다. 특히 밑줄, 메모가 붙은 Annotation, 선택한 수식·그림·표 영역은 높은 우선순위로 다룬다.
 3. 표시된 내용을 단순히 페이지 순서로 복사하지 말고, 각각이 속하는 논문 section과 component를 판단해 재배치한다. Model / Architecture / Method 안에서는 실제 처리·개념 순서대로, Experiments 안에서는 setup → baseline → result → analysis / ablation처럼 논문의 전개를 따른다.
-4. 선택한 Area가 수식·그림·표라면 실제 이미지를 직접 읽고, 관련된 밑줄·형광펜 설명과 함께 같은 section 안에서 정리한다. 최종 노트에 이미지를 포함할 때는 해당 Area의 정확한 [[PDF_AREA:<id>]] marker를 독립된 줄에 넣고 일반 Markdown 이미지 URL은 만들지 않는다.
+4. 선택한 Area가 수식·그림·표라면 함께 제공된 메모와 주변 Annotation을 같은 section에 정리한다. 이미지가 별도로 첨부된 경우에만 실제 이미지를 읽고, 첨부되지 않았다면 보이지 않는 세부 내용을 추측하지 않는다.
 5. **Saved Insight Q&A는 보충 자료다.** 사용자가 질문한 것은 그 지점에서 의문이 생겼다는 신호이므로, 질문/답변을 별도 Q&A 목록으로 복사하지 말고 해당 개념을 설명하는 section에 추가 이해로 자연스럽게 녹인다.
 6. Q&A 답변이 Annotation에 이미 있는 개념을 더 잘 이해하게 해 준다면 그 설명을 조금 더 자세히 보완한다. 반대로 Q&A에만 있고 사용자가 표시한 원문이나 선택 영역과 연결되지 않는 내용은 노트의 중심 주제로 확장하지 않는다.
 7. Q&A 답변과 논문 원문이 충돌하거나 Q&A 설명의 근거가 불확실하면 논문 원문 Annotation과 선택 영역을 우선한다. 필요한 경우 '보충 설명' 또는 '확인 필요' 정도로 짧게 구분한다.

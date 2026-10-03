@@ -11,7 +11,6 @@ export type PaperUiState = {
   annotationColor: AnnotationColor;
   chatDraft: string;
   studyTrayOpen: boolean;
-  studyNoteOpen: boolean;
   studyTrayMemoDraft: string;
   questionHighlightIds: string[];
   questionAreaIds: string[];
@@ -37,7 +36,6 @@ export function defaultPaperUiState(): PaperUiState {
     annotationColor: "pink",
     chatDraft: "",
     studyTrayOpen: false,
-    studyNoteOpen: false,
     studyTrayMemoDraft: "",
     questionHighlightIds: [],
     questionAreaIds: [],
@@ -60,7 +58,6 @@ export function readPaperUiState(userId: string, paperId: string, storage = getB
       annotationColor: parsed.version < 3 ? "pink" : annotationColors.has(parsed.annotationColor as AnnotationColor) ? parsed.annotationColor as AnnotationColor : fallback.annotationColor,
       chatDraft: typeof parsed.chatDraft === "string" ? parsed.chatDraft.slice(0, 4_000) : fallback.chatDraft,
       studyTrayOpen: typeof parsed.studyTrayOpen === "boolean" ? parsed.studyTrayOpen : fallback.studyTrayOpen,
-      studyNoteOpen: typeof parsed.studyNoteOpen === "boolean" ? parsed.studyNoteOpen : fallback.studyNoteOpen,
       studyTrayMemoDraft: typeof parsed.studyTrayMemoDraft === "string" ? parsed.studyTrayMemoDraft.slice(0, 4_000) : fallback.studyTrayMemoDraft,
       questionHighlightIds: sanitizeIds(parsed.questionHighlightIds),
       questionAreaIds: sanitizeIds(parsed.questionAreaIds).slice(-4),

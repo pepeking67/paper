@@ -12,18 +12,18 @@ test("clamps exported annotation rectangles to the PDF page", () => {
   assert.deepEqual(rect, { x: 90, y: 0, width: 10, height: 10 });
 });
 
-test("places dictionary meanings to the right of their underlined term and avoids collisions", () => {
+test("places dictionary meanings below the underline at its right edge and avoids collisions", () => {
   const anchor = { x: 100, y: 500, width: 40, height: 10 };
   const first = placeDictionaryPdfLabel(anchor, { width: 60, height: 7 }, 600, 800);
-  assert.deepEqual(first, { x: 141.5, y: 501.5, width: 60, height: 7 });
+  assert.deepEqual(first, { x: 141, y: 492.5, width: 60, height: 7 });
 
   const second = placeDictionaryPdfLabel(anchor, { width: 60, height: 7 }, 600, 800, [first]);
-  assert.deepEqual(second, { x: 141.5, y: 510, width: 60, height: 7 });
+  assert.deepEqual(second, { x: 202, y: 492.5, width: 60, height: 7 });
 });
 
-test("moves a dictionary meaning left when the page right edge has no room", () => {
+test("keeps a below-right dictionary meaning inside the page near its right edge", () => {
   const placement = placeDictionaryPdfLabel({ x: 590, y: 3, width: 20, height: 10 }, { width: 60, height: 7 }, 600, 800);
-  assert.deepEqual(placement, { x: 528.5, y: 4.5, width: 60, height: 7 });
+  assert.deepEqual(placement, { x: 538, y: 2, width: 60, height: 7 });
 });
 
 test("keeps text memo content readable when PDF export falls back from rich math rendering", () => {

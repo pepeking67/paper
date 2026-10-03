@@ -294,7 +294,7 @@ export function PdfViewer({
     const count = savedHighlights.length + savedAreas.length;
     if (!count) return;
     const confirmed = window.confirm(
-      `이 논문의 형광펜·밑줄·텍스트 메모·사전 뜻·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A, 메모, 학습 노트는 유지됩니다.`,
+      `이 논문의 형광펜·밑줄·텍스트 메모·사전 뜻·선택 영역 ${count}개를 모두 지울까요?\n저장한 Q&A와 메모는 유지됩니다.`,
     );
     if (confirmed) onClearAnnotations();
   }
@@ -590,20 +590,10 @@ async function createCachedPdfResource(paper: Paper): Promise<CachedPdfResource 
 }
 
 async function loadPaperPdfBytes(paper: Paper): Promise<Uint8Array | null> {
-  if (paper.library === "personal") {
-    if (!paper.asset) return null;
-    const client = getBrowserSupabase();
-    if (!client) throw new Error("Supabase 연결이 설정되지 않았습니다.");
-    const { data, error } = await client.storage.from(paper.asset.bucketId).download(paper.asset.objectPath);
-    if (error) throw error;
-    return new Uint8Array(await data.arrayBuffer());
-  }
-  const response = await fetch(`/api/pdf/${encodeURIComponent(paper.id)}`);
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    let message = "PDF를 불러오지 못했습니다.";
-    try { message = (await response.json()).error ?? message; } catch { /* non-JSON response */ }
-    throw new Error(message);
-  }
-  return new Uint8Array(await response.arrayBuffer());
+  if (paper.library !== "personal" || !paper.asset) return null;
+  const client = getBrowserSupabase();
+  if (!client) throw new Error("Supabase 연결이 설정되지 않았습니다.");
+  const { data, error } = await client.storage.from(paper.asset.bucketId).download(paper.asset.objectPath);
+  if (error) throw error;
+  return new Uint8Array(await data.arrayBuffer());
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { buildDictionaryRightLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
+import { buildDictionaryBelowRightLayout, textFontSizePtToPixels } from "../components/pdf-viewer/pdf-page";
 import { buildDictionaryContext, buildGeminiModelCandidates, sanitizeDictionaryMeaning } from "../lib/ai/provider";
 import { buildDictionaryCsv } from "../lib/dictionary/csv";
 import { normalizeDictionaryTerm } from "../lib/dictionary/terms";
@@ -12,15 +12,15 @@ test("dictionary terms are normalized for account-first lookup", () => {
   assert.equal(normalizeDictionaryTerm("행동 정책"), "행동 정책");
 });
 
-test("dictionary meanings sit to the right of their term and avoid each other", () => {
-  const layout = buildDictionaryRightLayout([
+test("dictionary meanings sit below the underline at its right edge and avoid each other", () => {
+  const layout = buildDictionaryBelowRightLayout([
     { id: "a", meaning: "정책", anchorLeft: 100, anchorRight: 120, anchorTop: 50, anchorHeight: 12 },
     { id: "b", meaning: "상태", anchorLeft: 110, anchorRight: 130, anchorTop: 51, anchorHeight: 12 },
     { id: "c", meaning: "행동", anchorLeft: 100, anchorRight: 120, anchorTop: 80, anchorHeight: 12 },
-  ], 720);
-  assert.deepEqual(layout.get("a"), { left: 122, top: 52, width: 20, height: 8 });
-  assert.deepEqual(layout.get("b"), { left: 132, top: 44, width: 20, height: 8 });
-  assert.deepEqual(layout.get("c"), { left: 122, top: 82, width: 20, height: 8 });
+  ], 720, 900);
+  assert.deepEqual(layout.get("a"), { left: 121, top: 62.5, width: 18, height: 7 });
+  assert.deepEqual(layout.get("b"), { left: 150, top: 63.5, width: 18, height: 7 });
+  assert.deepEqual(layout.get("c"), { left: 121, top: 92.5, width: 18, height: 7 });
 });
 
 test("Gemini dictionary context stays close to the selected term and the answer stays concise", () => {
@@ -116,9 +116,9 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(drawer, /계정 전체에서 모든 논문에 공유됩니다/);
   assert.match(route, /provider\.defineTerm/);
   assert.match(page, /borderBottom: "1px solid rgba\(17, 17, 17, 0\.58\)"/);
-  assert.match(page, /fontSize = Math\.max\(6, Math\.min\(7/);
+  assert.match(page, /fontSize = Math\.max\(5, Math\.min\(6/);
   assert.match(page, /anchorRight: rect\.left \+ rect\.width/);
-  assert.match(page, /buildDictionaryRightLayout/);
+  assert.match(page, /buildDictionaryBelowRightLayout/);
   assert.match(page, /className="pointer-events-auto absolute z-\[5\] truncate bg-transparent/);
   assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
@@ -130,7 +130,7 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(workspace, /Retry old annotations sequentially/);
 });
 
-test("PDF text memo tool defaults to 6pt while keeping its editor readable at 11pt", async () => {
+test("PDF text memo tool defaults to 7pt while keeping its editor readable at 11pt", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
   const workspace = await readFile("components/study-workspace.tsx", "utf8");
@@ -140,7 +140,7 @@ test("PDF text memo tool defaults to 6pt while keeping its editor readable at 11
   assert.match(viewer, /ToolButton tool="text"/);
   assert.doesNotMatch(viewer, /textColor=\{annotationColor\}/);
   assert.match(viewer, /드래그해 검은 글자 메모 작성/);
-  assert.match(page, /DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 6/);
+  assert.match(page, /DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 7/);
   assert.match(page, /TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11/);
   assert.match(page, /fontSizePt: DEFAULT_TEXT_MEMO_FONT_SIZE_PT/);
   assert.equal(page.match(/fontSize: `\$\{TEXT_MEMO_EDITOR_FONT_SIZE_PT\}pt`/g)?.length, 2);
@@ -163,7 +163,7 @@ test("personal dictionary and Study Tray header buttons keep their own spacing",
   assert.match(viewer, /id="study-tray-actions" className="flex items-center gap-2"/);
 });
 
-test("dictionary annotations stay out of Study Tray and study-note material", async () => {
+test("dictionary annotations stay out of Study Tray and external GPT prompt material", async () => {
   const packet = await readFile("lib/study-tray/build-packet.ts", "utf8");
   const tray = await readFile("components/study-tray/study-tray.tsx", "utf8");
   const exporter = await readFile("lib/pdf/export-annotated-pdf.ts", "utf8");

@@ -88,7 +88,8 @@ test("workspace restores per-account paper UI state after navigation", async () 
   assert.match(chat, /chatHistoryStorageKey\(storageScope, paper\.id\)/);
   assert.match(tray, /studyTrayMemoDraft/);
   assert.match(tray, /studyTrayOpen/);
-  assert.match(tray, /studyNoteOpen/);
+  assert.doesNotMatch(tray, /studyNoteOpen|generateStudyNote|NotionNoteEditor/);
+  assert.doesNotMatch(workspace, /noteMarkdown=|onNoteChange=/);
 });
 
 test("personal files use private Storage paths and transactional deletion", async () => {

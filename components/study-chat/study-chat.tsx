@@ -186,7 +186,7 @@ export function StudyChat({
           >다시 질문{message.questionContext && message.questionContext.highlightIds.length + message.questionContext.areaIds.length > 0 ? ` · 표시 ${message.questionContext.highlightIds.length + message.questionContext.areaIds.length}개 포함` : ""}</button>}
           {previousQuestion && <button
             type="button"
-            title={insightSaved ? "이미 Study Tray에 저장된 Q&A입니다" : "이 Q&A를 Study Tray와 학습 노트 재료로 저장"}
+            title={insightSaved ? "이미 Study Tray에 저장된 Q&A입니다" : "이 Q&A를 Study Tray에 저장"}
             disabled={insightSaved}
             data-saved={insightSaved ? "true" : "false"}
             onClick={() => onSaveInsight(previousQuestion, message.content)}
