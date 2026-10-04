@@ -110,6 +110,8 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
     <nav className="scrollbar grid h-0 min-h-0 flex-1 touch-pan-y content-start gap-1 overflow-y-auto overscroll-y-contain pr-1" aria-label="논문 목록">
       {visible.map((paper) => {
         const active = activeId === paper.id;
+        const status = paper.readingStatus ?? (paper.done ? "read" : "unread");
+        const statusLabel = { unread: "읽지 않음", reading: "읽는 중", read: "완료", archived: "보관" }[status];
         return <Link
           key={paper.id}
           ref={active ? activeLinkRef : undefined}
@@ -117,7 +119,7 @@ export function PaperList({ papers, activeId, onClose }: { papers: Paper[]; acti
           className={`group rounded-xl border p-3 ${active ? "border-[#0a84ff]/40 bg-[#0a84ff]/15 shadow-[inset_0_0_0_1px_rgba(10,132,255,.06)]" : "border-transparent hover:bg-white/[.055]"}`}
         >
           <div className="flex gap-2.5">
-            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${paper.done ? "bg-[#30d158]" : "border border-[#8e8e93]"}`} aria-label={paper.done ? "완료" : "진행 중"}/>
+            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${status === "read" ? "bg-[#30d158]" : status === "reading" ? "bg-[#ff9f0a]" : "border border-[#8e8e93]"}`} role="img" aria-label={statusLabel} title={statusLabel}/>
             <span className={`text-sm leading-snug tracking-[-.01em] ${active ? "font-medium text-white" : "text-[#e5e5ea]"}`}>{paper.title}</span>
           </div>
           <p className="mt-2 pl-[18px] text-[11px] text-[var(--muted)]">{paper.year ?? "연도 미상"}{paper.authors ? ` · ${paper.authors}` : ""}</p>
