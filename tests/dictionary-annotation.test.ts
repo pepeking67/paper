@@ -12,15 +12,23 @@ test("dictionary terms are normalized for account-first lookup", () => {
   assert.equal(normalizeDictionaryTerm("행동 정책"), "행동 정책");
 });
 
-test("dictionary meanings sit below the underline at its right edge and avoid each other", () => {
+test("dictionary meanings sit closer below the underline, grow with content, and avoid each other", () => {
   const layout = buildDictionaryBelowRightLayout([
     { id: "a", meaning: "정책", anchorLeft: 100, anchorRight: 120, anchorTop: 50, anchorHeight: 12 },
     { id: "b", meaning: "상태", anchorLeft: 110, anchorRight: 130, anchorTop: 51, anchorHeight: 12 },
     { id: "c", meaning: "행동", anchorLeft: 100, anchorRight: 120, anchorTop: 80, anchorHeight: 12 },
   ], 720, 900);
-  assert.deepEqual(layout.get("a"), { left: 121, top: 62.5, width: 18, height: 7 });
-  assert.deepEqual(layout.get("b"), { left: 150, top: 63.5, width: 18, height: 7 });
-  assert.deepEqual(layout.get("c"), { left: 121, top: 92.5, width: 18, height: 7 });
+  assert.deepEqual(layout.get("a"), { left: 121, top: 61, width: 24, height: 10 });
+  assert.deepEqual(layout.get("b"), { left: 156, top: 62, width: 24, height: 10 });
+  assert.deepEqual(layout.get("c"), { left: 121, top: 91, width: 24, height: 10 });
+
+  const longMeaning = buildDictionaryBelowRightLayout([
+    { id: "long", meaning: "긴 용어 설명이 여러 줄로 이어져도 끝부분이 잘리지 않아야 한다", anchorLeft: 20, anchorRight: 50, anchorTop: 30, anchorHeight: 12 },
+  ], 180, 300).get("long");
+  assert.ok(longMeaning);
+  assert.ok(longMeaning.height > 10);
+  assert.ok(longMeaning.left + longMeaning.width <= 178);
+  assert.ok(longMeaning.top + longMeaning.height <= 298);
 });
 
 test("Gemini dictionary context stays close to the selected term and the answer stays concise", () => {
@@ -116,10 +124,13 @@ test("dictionary tool creates a synced black-underlined editable gloss", async (
   assert.match(drawer, /계정 전체에서 모든 논문에 공유됩니다/);
   assert.match(route, /provider\.defineTerm/);
   assert.match(page, /borderBottom: "1px solid rgba\(17, 17, 17, 0\.58\)"/);
-  assert.match(page, /fontSize = Math\.max\(5, Math\.min\(6/);
+  assert.match(page, /DICTIONARY_GLOSS_MIN_FONT_SIZE = 7/);
+  assert.match(page, /DICTIONARY_GLOSS_MAX_FONT_SIZE = 8/);
+  assert.doesNotMatch(page, /truncate bg-transparent px-0\.5 text-left font-medium/);
+  assert.match(page, /overflowWrap: "anywhere"/);
   assert.match(page, /anchorRight: rect\.left \+ rect\.width/);
   assert.match(page, /buildDictionaryBelowRightLayout/);
-  assert.match(page, /className="pointer-events-auto absolute z-\[5\] truncate bg-transparent/);
+  assert.match(page, /className="pointer-events-auto absolute z-\[5\] whitespace-normal break-words bg-transparent/);
   assert.match(page, /color: "#111", fontSize/);
   assert.match(page, /뜻 수정/);
   assert.match(page, /onEditDictionaryMeaning\(selection\.annotationId!, value\)/);
