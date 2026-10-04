@@ -117,7 +117,7 @@ export async function downloadAnnotatedPdf(
     const page = pages[label.pageIndex];
     if (!page) continue;
     const { width: pageWidth, height: pageHeight } = page.getSize();
-    const fontSize = Math.max(4, Math.min(5, label.anchor.height * 0.36));
+    const fontSize = Math.max(6, Math.min(7, label.anchor.height * 0.36 + 2));
     const cacheKey = `${fontSize.toFixed(2)}:${label.meaning}`;
     const imagePromise = imageCache.get(cacheKey) ?? createDictionaryLabelImage(pdf, label.meaning, fontSize);
     imageCache.set(cacheKey, imagePromise);
@@ -170,15 +170,16 @@ export function placeDictionaryPdfLabel(
 ): PdfRect {
   const margin = 2;
   const horizontalGap = 1;
-  const verticalGap = 0.5;
+  const verticalOffset = -1;
+  const rowGap = 0.5;
   const width = Math.min(labelSize.width, Math.max(1, pageWidth - margin * 2));
   const height = Math.min(labelSize.height, Math.max(1, pageHeight - margin * 2));
-  const belowY = Math.max(margin, anchor.y - height - verticalGap);
+  const belowY = Math.max(margin, anchor.y - height - verticalOffset);
   const rightX = Math.min(pageWidth - width - margin, anchor.x + anchor.width + horizontalGap);
   const candidates = [
     { x: rightX, y: belowY },
     { x: Math.min(pageWidth - width - margin, rightX + width + horizontalGap), y: belowY },
-    { x: rightX, y: Math.max(margin, belowY - height - verticalGap) },
+    { x: rightX, y: Math.max(margin, belowY - height - rowGap) },
   ];
 
   for (const candidatePosition of candidates) {
@@ -199,7 +200,7 @@ export function placeDictionaryPdfLabel(
 async function createDictionaryLabelImage(pdf: PdfLibDocument, meaning: string, fontSize: number): Promise<RasterizedAnnotationImage> {
   if (typeof document === "undefined") throw new Error("사전 뜻 이미지는 브라우저에서만 생성할 수 있습니다.");
   const scale = 3;
-  const maxWidth = 100;
+  const maxWidth = 140;
   const paddingX = 1;
   const paddingY = 0.5;
   const lineHeight = fontSize * 1.08;

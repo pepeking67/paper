@@ -51,6 +51,9 @@ type RenderedTextLayer = {
 
 const DEFAULT_TEXT_MEMO_FONT_SIZE_PT = 7;
 const TEXT_MEMO_EDITOR_FONT_SIZE_PT = 11;
+const DICTIONARY_GLOSS_MIN_FONT_SIZE = 7;
+const DICTIONARY_GLOSS_MAX_FONT_SIZE = 8;
+const DICTIONARY_GLOSS_MAX_WIDTH = 140;
 
 const annotationColors: Record<AnnotationColor, { fill: string; stroke: string }> = {
   yellow: { fill: "rgba(250, 204, 21, 0.42)", stroke: "rgba(202, 138, 4, 0.58)" },
@@ -550,7 +553,7 @@ export function PdfPage({
 
               if (kind === "dictionary") {
                 const underlineStyle = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, border: "none", borderBottom: "1px solid rgba(17, 17, 17, 0.58)", background: "transparent", padding: 0 };
-                const fontSize = Math.max(5, Math.min(6, rect.height * 0.36));
+                const fontSize = dictionaryGlossFontSize(rect.height);
                 const meaning = selection.dictionaryMeaning?.trim() || "뜻 찾는 중…";
                 const labelPosition = selection.annotationId ? dictionaryLabelLayout.get(selection.annotationId) : undefined;
                 return <Fragment key={key}>
@@ -578,8 +581,8 @@ export function PdfPage({
                         type="button"
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
-                        className="pointer-events-auto absolute z-[5] truncate bg-transparent px-0.5 text-left font-medium"
-                        style={{ left: labelPosition?.left ?? rect.left + rect.width + 1, top: labelPosition?.top ?? rect.top + rect.height + 0.5, width: labelPosition?.width ?? 24, height: labelPosition?.height ?? 7, color: "#111", fontSize, lineHeight: 1 }}
+                        className="pointer-events-auto absolute z-[5] whitespace-normal break-words bg-transparent px-0.5 text-left font-medium"
+                        style={{ left: labelPosition?.left ?? rect.left + rect.width + 1, top: labelPosition?.top ?? rect.top + rect.height - 1, width: labelPosition?.width ?? 24, minHeight: labelPosition?.height ?? 10, color: "#111", fontSize, lineHeight: 1.12, overflowWrap: "anywhere" }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onPointerUp={(event) => event.stopPropagation()}
                         onClick={(event) => { event.stopPropagation(); if (!deleteMode) setDictionaryEditor({ id: selection.annotationId!, value: meaning === "뜻을 입력하세요" ? "" : meaning }); }}
@@ -685,19 +688,18 @@ export function buildDictionaryBelowRightLayout(
 ) {
   const result = new Map<string, { left: number; top: number; width: number; height: number }>();
   const occupied: Array<{ left: number; top: number; width: number; height: number }> = [];
-  const height = 7;
   const horizontalGap = 1;
-  const verticalGap = 0.5;
+  const verticalOffset = -1;
+  const rowGap = 0.5;
 
   for (const label of labels.slice().sort((left, right) => left.anchorTop - right.anchorTop || left.anchorLeft - right.anchorLeft)) {
-    const estimated = [...label.meaning].length * 5.3 + 3;
-    const width = Math.min(84, Math.max(18, estimated));
-    const belowTop = Math.max(2, Math.min(pageHeight - height - 2, label.anchorTop + label.anchorHeight + verticalGap));
+    const { width, height } = measureDictionaryGloss(label.meaning, label.anchorHeight, pageWidth);
+    const belowTop = Math.max(2, Math.min(pageHeight - height - 2, label.anchorTop + label.anchorHeight + verticalOffset));
     const rightLeft = Math.min(pageWidth - width - 2, label.anchorRight + horizontalGap);
     const candidates = [
       { left: rightLeft, top: belowTop },
       { left: Math.min(pageWidth - width - 2, rightLeft + width + horizontalGap), top: belowTop },
-      { left: rightLeft, top: Math.min(pageHeight - height - 2, belowTop + height + verticalGap) },
+      { left: rightLeft, top: Math.min(pageHeight - height - 2, belowTop + height + rowGap) },
     ];
     const candidate = candidates.find((position) => position.left >= 2
       && position.left + width <= pageWidth - 2
@@ -710,6 +712,23 @@ export function buildDictionaryBelowRightLayout(
     occupied.push(placement);
   }
   return result;
+}
+
+function dictionaryGlossFontSize(anchorHeight: number) {
+  return Math.max(DICTIONARY_GLOSS_MIN_FONT_SIZE, Math.min(DICTIONARY_GLOSS_MAX_FONT_SIZE, anchorHeight * 0.36 + 2));
+}
+
+function measureDictionaryGloss(meaning: string, anchorHeight: number, pageWidth: number) {
+  const fontSize = dictionaryGlossFontSize(anchorHeight);
+  const paddingX = 2;
+  const paddingY = 1;
+  const naturalTextWidth = [...meaning].reduce((width, character) => width + (character.codePointAt(0)! <= 0x7f ? fontSize * 0.56 : fontSize), 0);
+  const maxWidth = Math.max(24, Math.min(DICTIONARY_GLOSS_MAX_WIDTH, pageWidth - 4));
+  const width = Math.min(maxWidth, Math.max(24, naturalTextWidth + paddingX * 2));
+  const availableTextWidth = Math.max(1, width - paddingX * 2);
+  const lineCount = Math.max(1, Math.ceil(naturalTextWidth / availableTextWidth));
+  const height = Math.ceil(lineCount * fontSize * 1.12 + paddingY * 2);
+  return { width, height };
 }
 
 function clientRectsOverlap(
