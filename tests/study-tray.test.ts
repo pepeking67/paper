@@ -3,13 +3,21 @@ import test from "node:test";
 import { buildStudyPacket } from "../lib/study-tray/build-packet";
 
 test("buildStudyPacket uses saved insights and paper-section ordering instructions", () => {
-  const packet = buildStudyPacket({ id: "P_1", title: "Test Paper", authors: "A", year: 2024, tag: "Test", done: true, keys: [], sourceUrl: "", notionUrl: "" }, {
+  const packet = buildStudyPacket({ id: "P_1", title: "Test Paper", authors: "A", year: 2024, tag: "Test", done: true, keys: [], sourceUrl: "https://example.org/paper.pdf", notionUrl: "" }, {
     highlights: [{ id: "h", text: "original passage", page: 3, rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }], memo: "remember this", kind: "underline", color: "blue", createdAt: "now" }],
     insights: [{ id: "i", question: "Why does this component matter?", answer: "Because it changes the representation.", page: 4, sourceText: "source", createdAt: "now" }],
     memos: [{ id: "m", text: "my free note", createdAt: "now" }],
   });
 
   assert.match(packet, /# Paper Study Material/);
+  assert.match(packet, /Authors: A/);
+  assert.match(packet, /Year: 2024/);
+  assert.match(packet, /Paper source URL: https:\/\/example.org\/paper.pdf/);
+  assert.match(packet, /Markdown 논문 리뷰/);
+  assert.match(packet, /논문 전체 PDF는 자동 첨부되지 않는다/);
+  assert.match(packet, /발췌 자료 기반 리뷰/);
+  assert.match(packet, /UTF-8 .md 파일/);
+  assert.match(packet, /존재하지 않는 다운로드 링크나 검증 결과를 만들지 않는다/);
   assert.match(packet, /### Page 3 · Underline · blue · 중요도 높음/);
   assert.match(packet, /original passage/);
   assert.match(packet, /remember this/);
