@@ -111,7 +111,7 @@ export function StudyTray({
         <TraySection title={`Memos (${tray.memos.length})`}>{tray.memos.map((item) => <TrayItem key={item.id} onRemove={() => onRemove("memos", item.id)}><p className="whitespace-pre-wrap text-sm">{item.text}</p></TrayItem>)}</TraySection>
 
         <div className="sticky bottom-0 mt-6 border-t border-[var(--line)] bg-[rgba(28,28,30,.94)] py-4 backdrop-blur-xl">
-          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">외부 ChatGPT용 프롬프트에는 Annotation, 메모, 영역 정보와 직접 Save Insight 한 Q&A만 포함됩니다.</p>
+          <p className="mb-2 text-xs leading-relaxed text-[var(--muted)]">표시한 부분·메모·저장한 Q&A를 바탕으로 Markdown 논문 리뷰를 작성하는 프롬프트입니다. 복사한 뒤 ChatGPT에 원문 PDF도 함께 첨부해 주세요. 선택 영역 이미지는 자동 첨부되지 않습니다.</p>
           <button disabled={!total} onClick={() => void copyPacket()} className="w-full rounded-xl border border-[var(--line)] px-4 py-3 text-sm font-semibold hover:bg-white/5 disabled:opacity-40">{copied ? "복사됨" : "ChatGPT용 학습 정리 프롬프트 복사"}</button>
           {packet && <details className="mt-3"><summary className="cursor-pointer text-xs text-[var(--muted)]">생성된 프롬프트 미리보기</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[#111] p-3 text-xs">{packet}</pre></details>}
         </div>
