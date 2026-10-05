@@ -33,9 +33,14 @@ test("buildStudyPacket keeps review structure, print style, and Korean spacing i
   assert.match(packet, /Model \/ Architecture \/ Method/);
   assert.match(packet, /Experiments/);
   assert.match(packet, /Limitations/);
-  assert.match(packet, /논문의 전체 구조와 핵심 논리를 노트의 \*\*뼈대\*\*/);
-  assert.match(packet, /논문의 핵심 주장과 구조를 먼저 보존하는 것/);
+  assert.match(packet, /사용자가 표시한 범위를 정리의 \*\*뼈대\*\*/);
+  assert.match(packet, /사용자가 표시한 영역으로 정리 범위를 제한하는 것/);
   assert.match(packet, /Saved Insight Q&A는 보충 자료다/);
+  assert.match(packet, /표시된 영역이 하나도 없으면 전체 요약을 대신 생성하지 말고/);
+  assert.match(packet, /같은 페이지나 section에 표시가 하나 있다는 이유로 나머지 내용까지 요약하지 않는다/);
+  assert.match(packet, /모든 본문 소제목과 이미지가 어느 Annotation 또는 Area에 근거하는지/);
+  assert.doesNotMatch(packet, /사용자 표시 여부와 관계없이 검토/);
+  assert.doesNotMatch(packet, /논문 전체의 핵심 문제 설정, 방법, 실험 논리를 먼저/);
   assert.match(packet, /질문과 답변을 별도 Q&A나 독립 문단으로 복사하지 말고/);
 
   assert.match(packet, /## 한국어 문장과 띄어쓰기/);
