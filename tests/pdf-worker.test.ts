@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("PDF viewer keeps normal PDF.js fonts and uses a Chromium 138-139 PDFium visual fallback", async () => {
+test("PDF viewer keeps PDF.js interaction layers and uses PDFium visuals on modern Chromium", async () => {
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const fallback = await readFile("lib/pdf/pdfium-visual-renderer.ts", "utf8");
   const layout = await readFile("app/layout.tsx", "utf8");
@@ -21,7 +21,9 @@ test("PDF viewer keeps normal PDF.js fonts and uses a Chromium 138-139 PDFium vi
   assert.match(viewer, /needsChromiumFontMatrixFallback\(\)/);
   assert.match(viewer, /createPdfiumVisualRenderer/);
   assert.match(viewer, /installPdfiumPageRendering/);
-  assert.match(fallback, /major >= 138 && major < 140/);
+  assert.match(fallback, /major >= 138/);
+  assert.doesNotMatch(fallback, /major < 140/);
+  assert.match(fallback, /opened directly in Chrome/);
   assert.match(fallback, /FPDF_RenderPageBitmap/);
   assert.match(fallback, /fetch\("\/pdfium\.wasm"\)/);
   assert.equal(packageJson.dependencies["@embedpdf/pdfium"], "2.15.0");
