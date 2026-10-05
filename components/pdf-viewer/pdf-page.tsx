@@ -22,6 +22,8 @@ type Props = {
   pageNumber: number;
   zoom: number;
   selectionOnly?: boolean;
+  referenceMode?: boolean;
+  onReferenceSelection?: (text: string, page: number) => void;
   areaMode: boolean;
   textMode: boolean;
   deleteMode: boolean;
@@ -69,6 +71,8 @@ export function PdfPage({
   pageNumber,
   zoom,
   selectionOnly = false,
+  referenceMode = false,
+  onReferenceSelection,
   areaMode,
   textMode,
   deleteMode,
@@ -253,6 +257,11 @@ export function PdfPage({
 
     const [start, end] = orderEndpoints(anchor, focus);
     const { text, rects: characterRects } = collectSelectionFromTextItems(start, end, textDivs, textItems);
+    if (referenceMode) {
+      if (text.trim()) onReferenceSelection?.(text, pageNumber);
+      selection.removeAllRanges();
+      return;
+    }
     const formulaBounds = containsMathNotation(text);
     const mergedRects = mergeClientRectsIntoLineRects(characterRects, {
       referenceLineHeight: typicalTextLineHeight || undefined,
