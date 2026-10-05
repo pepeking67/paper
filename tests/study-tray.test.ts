@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildStudyPacket } from "../lib/study-tray/build-packet";
 
-test("buildStudyPacket keeps review structure, print style, and Korean spacing instructions", () => {
+test("buildStudyPacket keeps review structure, print style, centered images, and Korean spacing instructions", () => {
   const packet = buildStudyPacket({ id: "P_1", title: "Test Paper", authors: "A", year: 2024, tag: "Test", done: true, keys: [], sourceUrl: "https://example.org/paper.pdf", notionUrl: "" }, {
     highlights: [{ id: "h", text: "original passage", page: 3, rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }], memo: "remember this", kind: "underline", color: "blue", createdAt: "now" }],
     insights: [{ id: "i", question: "Why does this component matter?", answer: "Because it changes the representation.", page: 4, sourceText: "source", createdAt: "now" }],
@@ -49,16 +49,18 @@ test("buildStudyPacket keeps review structure, print style, and Korean spacing i
   assert.match(packet, /영문·숫자 사이의 이중 공백/);
   assert.match(packet, /내용은 바꾸지 말고 표기와 띄어쓰기만 바로잡는다/);
 
-  assert.match(packet, /## 인쇄 타이포그래피와 이미지 레이아웃/);
+  assert.match(packet, /## 인쇄 타이포그래피와 이미지 정렬/);
   assert.match(packet, /A4 기준 여백은 약 20mm/);
   assert.match(packet, /본문은 약 10~10\.5pt/);
   assert.match(packet, /줄간격은 약 1\.35~1\.45배/);
   assert.match(packet, /Noto Serif CJK KR/);
   assert.match(packet, /Latin Modern 계열/);
-  assert.match(packet, /이미지 크기는 본문 폭의 90~100%로 고정하지 않는다/);
-  assert.match(packet, /본문 폭의 약 65~85%/);
-  assert.match(packet, /페이지 헤더, 관련 없는 본문 조각, 과도한 바깥 흰 여백은 제거/);
-  assert.match(packet, /글꼴이 의도한 serif 계열로 적용됐는지/);
+  assert.match(packet, /모든 이미지는 가로 가운데 정렬한다/);
+  assert.match(packet, /이미지가 가운데 정렬됐는지 확인한다/);
+  assert.doesNotMatch(packet, /본문 폭의 약 65~85%/);
+  assert.doesNotMatch(packet, /이미지 크기는 본문 폭의 90~100%로 고정하지 않는다/);
+  assert.doesNotMatch(packet, /keepaspectratio/);
+  assert.doesNotMatch(packet, /이미지와 캡션을 같은 페이지에 유지/);
 
   assert.match(packet, /A4로 바로 인쇄할 수 있는 PDF 파일/);
   assert.match(packet, /Markdown heading, 목록, 표, bold 등의 문법 기호를 원문 그대로 노출하지 말고 실제 서식으로 렌더링/);
