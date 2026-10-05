@@ -12,6 +12,7 @@ import {
   needsChromiumFontMatrixFallback,
   type PdfiumVisualRenderer,
 } from "@/lib/pdf/pdfium-visual-renderer";
+import { ReferenceCard } from "@/components/references/reference-card";
 import { PdfPage } from "./pdf-page";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 import { paperUiStorageKey, readPaperUiState, updatePaperUiState, type AnnotationTool } from "@/lib/workspace-state/local-ui-state";
@@ -106,8 +107,9 @@ export function PdfViewer({
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(() => initialCachedResource?.document ?? null);
   const [loadState, setLoadState] = useState<LoadState>(() => initialCachedResource === null ? "missing" : initialCachedResource ? "ready" : "loading");
   const [error, setError] = useState("");
-  const [tool, setTool] = useState<AnnotationTool>("highlight");
+  const [tool, setTool] = useState<AnnotationTool>("select");
   const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("pink");
+  const [referenceSelection, setReferenceSelection] = useState<{ paperId: string; text: string; page: number } | null>(null);
   const [colorMenuTool, setColorMenuTool] = useState<AnnotationKind | null>(null);
   const [zoom, setZoom] = useState(100);
   const [downloadState, setDownloadState] = useState<"idle" | "loading">("idle");
@@ -264,6 +266,8 @@ export function PdfViewer({
   }, [onPageTextChange]);
 
   function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
+    if (tool === "select") return;
+    if (tool === "reference") { setReferenceSelection({ paperId: paper.id, text, page: selectedPage }); return; }
     if (tool === "erase" || tool === "area" || tool === "text") return;
     onPageChange(selectedPage);
     if (tool === "dictionary") {
@@ -362,6 +366,8 @@ export function PdfViewer({
             <ToolButton tool="underline" active={tool === "underline"} color={annotationColor} onClick={() => handleToolClick("underline")} label="밑줄" title={tool === "underline" ? "다시 눌러 색상 변경" : "밑줄 선택"}/>
             {colorMenuTool === "underline" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
+          <ToolButton tool="select" active={tool === "select"} onClick={() => handleToolClick("select")} label="텍스트 선택 및 복사" title="주석 없이 드래그하여 선택하고 Ctrl+C로 복사"/>
+          <ToolButton tool="reference" active={tool === "reference"} onClick={() => { handleToolClick("reference"); setReferenceSelection({ paperId: paper.id, text: "", page }); }} label="참고문헌 확인" title="인용 번호·저자명·참고문헌을 드래그해 제목과 한 줄 설명 확인"/>
           <ToolButton tool="text" active={tool === "text"} onClick={() => handleToolClick("text")} label="텍스트 메모" title="페이지에서 원하는 크기로 드래그해 검은 글자 메모 작성"/>
           <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
           <ToolButton tool="area" active={tool === "area"} onClick={() => handleToolClick("area")} label="영역 선택" title="수식·그림·표 영역 선택"/>
@@ -403,6 +409,8 @@ export function PdfViewer({
       {pdf && <div className="mt-1 h-px overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
     </div>
 
+    {pdf && referenceSelection?.paperId === paper.id && <ReferenceCard key={paper.id} paperId={paper.id} pdf={pdf} selection={referenceSelection} pageText={pageTexts.current.get(referenceSelection.page) ?? ""} onClose={() => setReferenceSelection(null)}/> }
+
     {contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-2.5">
       <div className="flex flex-wrap gap-2">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
@@ -432,6 +440,7 @@ export function PdfViewer({
           pdf={pdf}
           pageNumber={index + 1}
           zoom={zoom}
+          selectionOnly={tool === "select"}
           areaMode={tool === "area"}
           textMode={tool === "text"}
           deleteMode={tool === "erase"}
@@ -520,6 +529,8 @@ function ToolButton({ tool, active, color, onClick, label, title }: { tool: Anno
 
 function ToolIcon({ tool }: { tool: AnnotationTool }) {
   const iconClass = "h-4 w-4 fill-none stroke-current";
+  if (tool === "select") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="m5 3 14 10-7 1-3 7Z"/></svg>;
+  if (tool === "reference") return <span aria-hidden="true" className="text-xs font-semibold">[1]</span>;
   if (tool === "highlight") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="m14.5 4.5 5 5L10 19H5v-5Z"/><path d="m12 7 5 5M4 21h16"/></svg>;
   if (tool === "underline") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M7 4v7a5 5 0 0 0 10 0V4M5 21h14"/></svg>;
   if (tool === "dictionary") return <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} strokeWidth="1.8"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 20.5Z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H14v18a3 3 0 0 1 3-3h.5a2.5 2.5 0 0 1 2.5 2.5Z"/></svg>;

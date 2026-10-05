@@ -21,6 +21,7 @@ type Props = {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   zoom: number;
+  selectionOnly?: boolean;
   areaMode: boolean;
   textMode: boolean;
   deleteMode: boolean;
@@ -67,6 +68,7 @@ export function PdfPage({
   pdf,
   pageNumber,
   zoom,
+  selectionOnly = false,
   areaMode,
   textMode,
   deleteMode,
@@ -237,7 +239,7 @@ export function PdfPage({
   }, [nearViewport]);
 
   function captureSelection() {
-    if (deleteMode || areaMode || textMode) return;
+    if (selectionOnly || deleteMode || areaMode || textMode) return;
     const selection = window.getSelection();
     const layer = textLayerRef.current;
     const surface = surfaceRef.current;
