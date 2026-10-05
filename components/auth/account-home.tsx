@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { entryPaperId } from "@/lib/papers/entry-paper";
 import { useRouter } from "next/navigation";
 import { usePersonalLibrary } from "@/components/library/personal-library-provider";
 import { LibraryManager } from "@/components/library/library-manager";
@@ -12,7 +13,7 @@ export function AccountHome() {
   const library = usePersonalLibrary();
   const router = useRouter();
   const [managerOpen, setManagerOpen] = useState(false);
-  const firstPaperId = library.papers[0]?.id;
+  const firstPaperId = entryPaperId(library.papers);
 
   useEffect(() => {
     if (user && !authLoading && !library.loading && firstPaperId) router.replace(`/papers/${firstPaperId}`);
