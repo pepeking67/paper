@@ -16,16 +16,17 @@ type PdfiumHeapRuntime = WrappedPdfiumModule["pdfium"] & {
 let pdfiumModulePromise: Promise<WrappedPdfiumModule> | null = null;
 
 /**
- * Chromium 138/139 regressed CFF FontMatrix transforms produced by PDF.js for
- * embedded Type1 fonts (Chromium issue 428482739 / PDF.js issue 20143).
- * Chromium 140 contains the upstream Fontations fix, so do not pay the WASM
- * rendering cost outside the affected browser window.
+ * Keep PDF.js for text extraction, selection, and annotations, but use PDFium
+ * for the visible page bitmap on modern Chromium. Chrome's built-in PDF viewer
+ * also uses PDFium, and this avoids browser/PDF.js font-rendering differences
+ * that can corrupt equations even when the same original PDF renders correctly
+ * when opened directly in Chrome.
  */
 export function needsChromiumFontMatrixFallback(userAgent = globalThis.navigator?.userAgent ?? "") {
   const edge = /Edg\/(\d+)/u.exec(userAgent);
   const chrome = /(?:Chrome|Chromium)\/(\d+)/u.exec(userAgent);
   const major = Number((edge ?? chrome)?.[1] ?? Number.NaN);
-  return Number.isFinite(major) && major >= 138 && major < 140;
+  return Number.isFinite(major) && major >= 138;
 }
 
 export async function createPdfiumVisualRenderer(pdfBytes: Uint8Array): Promise<PdfiumVisualRenderer> {
