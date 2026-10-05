@@ -57,7 +57,7 @@ test("paper UI state validates browser data and keeps question context compact",
   assert.equal(restored.page, 1);
   assert.equal(restored.scrollOffsetRatio, 1);
   assert.equal(restored.zoom, 250);
-  assert.equal(restored.annotationTool, "highlight");
+  assert.equal(restored.annotationTool, "select");
   assert.equal(restored.annotationColor, "pink");
   assert.equal(restored.chatDraft.length, 4_000);
   assert.equal(restored.studyTrayOpen, false);

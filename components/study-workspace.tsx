@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { entryPaperId } from "@/lib/papers/entry-paper";
 import { useRouter } from "next/navigation";
 import { PaperList } from "./paper-list/paper-list";
 import { PdfViewer } from "./pdf-viewer/pdf-viewer";
@@ -27,7 +28,7 @@ export function StudyWorkspace({ initialPaper }: { initialPaper: Paper }) {
   const router = useRouter();
   const [managerOpen, setManagerOpen] = useState(false);
   const personalPaper = user ? personalLibrary.papers.find((paper) => paper.id === initialPaper.id) : null;
-  const firstPersonalId = personalLibrary.papers[0]?.id;
+  const firstPersonalId = entryPaperId(personalLibrary.papers);
 
   useEffect(() => {
     if (authLoading || personalLibrary.loading) return;

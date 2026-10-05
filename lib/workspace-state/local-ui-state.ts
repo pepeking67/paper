@@ -1,6 +1,6 @@
 import type { AnnotationColor, AnnotationKind } from "@/lib/study-tray/types";
 
-export type AnnotationTool = AnnotationKind | "area" | "erase";
+export type AnnotationTool = AnnotationKind | "area" | "erase" | "select" | "reference";
 
 export type PaperUiState = {
   version: 3;
@@ -19,7 +19,7 @@ export type PaperUiState = {
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-const annotationTools = new Set<AnnotationTool>(["highlight", "underline", "dictionary", "text", "area", "erase"]);
+const annotationTools = new Set<AnnotationTool>(["select", "reference", "highlight", "underline", "dictionary", "text", "area", "erase"]);
 const annotationColors = new Set<AnnotationColor>(["yellow", "green", "blue", "pink", "purple"]);
 
 export function paperUiStorageKey(userId: string, paperId: string) {
@@ -32,7 +32,7 @@ export function defaultPaperUiState(): PaperUiState {
     page: 1,
     scrollOffsetRatio: 0,
     zoom: 100,
-    annotationTool: "highlight",
+    annotationTool: "select",
     annotationColor: "pink",
     chatDraft: "",
     studyTrayOpen: false,
