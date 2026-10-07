@@ -266,8 +266,7 @@ export function PdfViewer({
   }, [onPageTextChange]);
 
   function captureSelection(text: string, selectedPage: number, rects: NormalizedHighlightRect[]) {
-    if (tool === "select") return;
-    if (tool === "reference") { setReferenceSelection({ paperId: paper.id, text, page: selectedPage }); return; }
+    if (tool === "select" || tool === "reference") return;
     if (tool === "erase" || tool === "area" || tool === "text") return;
     onPageChange(selectedPage);
     if (tool === "dictionary") {
@@ -367,7 +366,7 @@ export function PdfViewer({
             {colorMenuTool === "underline" && <ColorPalette value={annotationColor} onSelect={handleColorSelect}/>}
           </div>
           <ToolButton tool="select" active={tool === "select"} onClick={() => handleToolClick("select")} label="텍스트 선택 및 복사" title="주석 없이 드래그하여 선택하고 Ctrl+C로 복사"/>
-          <ToolButton tool="reference" active={tool === "reference"} onClick={() => { handleToolClick("reference"); setReferenceSelection({ paperId: paper.id, text: "", page }); }} label="참고문헌 확인" title="인용 번호·저자명·참고문헌을 드래그해 제목과 한 줄 설명 확인"/>
+          <ToolButton tool="reference" active={tool === "reference"} onClick={() => { handleToolClick("reference"); setReferenceSelection({ paperId: paper.id, text: "", page }); }} label="참고문헌 확인" title="인용 번호·저자명·참고문헌을 드래그해 제목 확인"/>
           <ToolButton tool="text" active={tool === "text"} onClick={() => handleToolClick("text")} label="텍스트 메모" title="페이지에서 원하는 크기로 드래그해 검은 글자 메모 작성"/>
           <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
           <ToolButton tool="area" active={tool === "area"} onClick={() => handleToolClick("area")} label="영역 선택" title="수식·그림·표 영역 선택"/>
@@ -409,9 +408,9 @@ export function PdfViewer({
       {pdf && <div className="mt-1 h-px overflow-hidden bg-[#333]"><div className="h-full bg-white transition-[width]" style={{ width: `${page / pdf.numPages * 100}%` }}/></div>}
     </div>
 
-    {pdf && referenceSelection?.paperId === paper.id && <ReferenceCard key={paper.id} paperId={paper.id} pdf={pdf} selection={referenceSelection} pageText={pageTexts.current.get(referenceSelection.page) ?? ""} onClose={() => setReferenceSelection(null)}/> }
+    {tool === "reference" && pdf && referenceSelection?.paperId === paper.id && <ReferenceCard key={paper.id} pdf={pdf} selection={referenceSelection} onClose={() => { setReferenceSelection(null); setTool("select"); }}/> }
 
-    {contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-2.5">
+    {tool !== "reference" && contextCount > 0 && <div className="border-b border-[var(--line)] bg-black p-2.5">
       <div className="flex flex-wrap gap-2">
         {questionHighlights.map((highlight) => <span key={highlight.id} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--line)] bg-[#111] py-1 pl-2.5 pr-1 text-xs">
           <span className="max-w-72 truncate">p.{highlight.page} · {highlight.kind === "dictionary" ? "사전" : (highlight.kind ?? "highlight") === "underline" ? "밑줄" : "형광펜"} · {highlight.text}</span>
@@ -441,6 +440,8 @@ export function PdfViewer({
           pageNumber={index + 1}
           zoom={zoom}
           selectionOnly={tool === "select"}
+          referenceMode={tool === "reference"}
+          onReferenceSelection={(text, selectedPage) => setReferenceSelection({ paperId: paper.id, text, page: selectedPage })}
           areaMode={tool === "area"}
           textMode={tool === "text"}
           deleteMode={tool === "erase"}

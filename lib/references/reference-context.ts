@@ -1,7 +1,7 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 const cache = new WeakMap<PDFDocumentProxy, Promise<string>>();
-/** Extract only the bibliography for remote lookup, not the entire paper. */
+/** Extract the bibliography locally for deterministic citation lookup, not the entire paper. */
 export function referenceContext(pdf: PDFDocumentProxy): Promise<string> {
   const cached = cache.get(pdf);
   if (cached) return cached;
@@ -31,16 +31,3 @@ export function referenceContext(pdf: PDFDocumentProxy): Promise<string> {
   return pending;
 }
 
-export type ReferenceInfo = { title: string; summary: string; evidence: string };
-export function parseReferenceResult(raw: string, references: string): ReferenceInfo | null {
-  const value = JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")) as Partial<ReferenceInfo> & { found?: boolean };
-  if (value.found === false) return null;
-  if (typeof value.title !== "string" || typeof value.summary !== "string" || typeof value.evidence !== "string") return null;
-  const normalize = (text: string) => text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-  const title = normalize(value.title);
-  const evidence = normalize(value.evidence);
-  if (title.length < 8 || value.title.length > 600 || value.summary.length > 350 || !value.summary.trim()
-    || evidence.length < title.length || value.evidence.length > 3000
-    || !normalize(references).includes(evidence) || !evidence.includes(title)) return null;
-  return { title: value.title.trim(), summary: value.summary.trim(), evidence: value.evidence.trim() };
-}
