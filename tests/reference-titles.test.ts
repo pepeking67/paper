@@ -33,3 +33,17 @@ test("reference selection is separate from annotation/chat callbacks and has no 
   assert.doesNotMatch(card, /fetch\(|useAuth|<form|<input|summary/);
   assert.match(card, /matchReferenceTitles/);
 });
+
+test("boundary selection errors tolerate two characters without changing IDs or years", () => {
+  const refs = "[1] D. Kingma. Auto-Encoding Variational Bayes. 2014.\n[12] A. Vaswani. Attention is all you need. 2017.";
+  assert.equal(matchReferenceTitles("([12]).", refs)[0]?.label, "[12]");
+  assert.equal(matchReferenceTitles("x[12]y", refs)[0]?.label, "[12]");
+  assert.equal(matchReferenceTitles("[2]", refs).length, 0);
+  assert.equal(matchReferenceTitles("ingma (2014)", refs)[0]?.label, "[1]");
+  assert.equal(matchReferenceTitles("xxKingmax (2014)", refs)[0]?.label, "[1]");
+  assert.equal(matchReferenceTitles("Kingma (2015)", refs).length, 0);
+  assert.equal(matchReferenceTitles("to-Encoding Variational Bay", refs)[0]?.label, "[1]");
+  assert.equal(matchReferenceTitles("xxAuto-Encoding Variational Bayesyy", refs)[0]?.label, "[1]");
+  assert.equal(matchReferenceTitles("Kinxma (2014)", refs).length, 0);
+  assert.equal(matchReferenceTitles("ingma (2014)", refs + "\n[3] X. Xingma. Another paper title. 2014.").length, 0);
+});
