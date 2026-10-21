@@ -12,6 +12,7 @@ import {
   needsChromiumFontMatrixFallback,
   type PdfiumVisualRenderer,
 } from "@/lib/pdf/pdfium-visual-renderer";
+import { annotationShortcut, isEditingTarget, toolShortcutKeys } from "@/lib/pdf/annotation-shortcuts";
 import { ReferenceCard } from "@/components/references/reference-card";
 import { PdfPage } from "./pdf-page";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
@@ -111,6 +112,20 @@ export function PdfViewer({
   const [annotationColor, setAnnotationColor] = useState<AnnotationColor>("pink");
   const [referenceSelection, setReferenceSelection] = useState<{ paperId: string; text: string; page: number } | null>(null);
   const [colorMenuTool, setColorMenuTool] = useState<AnnotationKind | null>(null);
+  useEffect(() => {
+    if (!pdf) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditingTarget(event.target) || isEditingTarget(document.activeElement)
+        || document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')) return;
+      const next = annotationShortcut(event);
+      if (!next) return;
+      event.preventDefault();
+      setTool(next);
+      setColorMenuTool(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pdf]);
   const [zoom, setZoom] = useState(100);
   const [downloadState, setDownloadState] = useState<"idle" | "loading">("idle");
   const [downloadError, setDownloadError] = useState("");
@@ -370,7 +385,7 @@ export function PdfViewer({
           <ToolButton tool="text" active={tool === "text"} onClick={() => handleToolClick("text")} label="텍스트 메모" title="페이지에서 원하는 크기로 드래그해 검은 글자 메모 작성"/>
           <ToolButton tool="dictionary" active={tool === "dictionary"} onClick={() => handleToolClick("dictionary")} label="사전" title="단어를 선택해 뜻을 검은 밑줄 위에 표시"/>
           <ToolButton tool="area" active={tool === "area"} onClick={() => handleToolClick("area")} label="영역 선택" title="수식·그림·표 영역 선택"/>
-          <ToolButton tool="erase" active={tool === "erase"} onClick={() => handleToolClick("erase")} label="지우개" title="저장된 표시를 눌러 삭제"/>
+          <ToolButton tool="erase" active={tool === "erase"} onClick={() => handleToolClick("erase")} label="지우개" title="저장된 표시를 눌러 삭제 · 모든 도구에서 주석 우클릭으로 바로 삭제"/>
         </div>
 
         <span className="shrink-0 text-[10px] tabular-nums text-[var(--muted)]">{page}/{pdf.numPages}</span>
@@ -520,7 +535,7 @@ function createRenderingCancelledError() {
 
 function ToolButton({ tool, active, color, onClick, label, title }: { tool: AnnotationTool; active: boolean; color?: AnnotationColor; onClick: () => void; label: string; title: string }) {
   const swatch = colorOptions.find((option) => option.value === color)?.swatch;
-  return <button type="button" onClick={onClick} title={title} aria-label={label} aria-pressed={active} className={`relative grid h-7 w-7 place-items-center rounded ${active ? "bg-white text-black" : "text-[#bbb] hover:bg-[#222]"}`}>
+  return <button type="button" onClick={onClick} title={`${title}${toolShortcutKeys[tool] ? ` (Ctrl+${toolShortcutKeys[tool]} / Alt+${toolShortcutKeys[tool]}; 브라우저 예약 키는 Alt 사용)` : ""}`} aria-keyshortcuts={toolShortcutKeys[tool] ? `Control+${toolShortcutKeys[tool]} Alt+${toolShortcutKeys[tool]}` : undefined} aria-label={label} aria-pressed={active} className={`relative grid h-7 w-7 place-items-center rounded ${active ? "bg-white text-black" : "text-[#bbb] hover:bg-[#222]"}`}>
     <ToolIcon tool={tool}/>
     {swatch && (
       <span aria-hidden="true" className="absolute inset-x-1 bottom-0.5 h-0.5 rounded-full" style={{ backgroundColor: swatch }}/>
@@ -609,3 +624,4 @@ async function loadPaperPdfBytes(paper: Paper): Promise<Uint8Array | null> {
   if (error) throw error;
   return new Uint8Array(await data.arrayBuffer());
 }
+
