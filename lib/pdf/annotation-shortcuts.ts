@@ -1,13 +1,13 @@
 import type { AnnotationTool } from "@/lib/workspace-state/local-ui-state";
 
 export const toolShortcutKeys: Partial<Record<AnnotationTool, string>> = {
-  highlight: "Q", underline: "W", select: "E", text: "R",
+  highlight: "A", underline: "S", select: "D", text: "F",
 };
 
 export function annotationShortcut(event: Pick<KeyboardEvent, "code" | "key" | "ctrlKey" | "altKey" | "metaKey" | "shiftKey" | "isComposing">): AnnotationTool | null {
   if (event.isComposing || event.metaKey || event.shiftKey || event.ctrlKey === event.altKey) return null;
   const code = event.code || `Key${event.key.toUpperCase()}`;
-  return ({ KeyQ: "highlight", KeyW: "underline", KeyE: "select", KeyR: "text" } as const)[code as "KeyQ"] ?? null;
+  return ({ KeyA: "highlight", KeyS: "underline", KeyD: "select", KeyF: "text" } as const)[code as "KeyA"] ?? null;
 }
 
 export function isEditingTarget(target: EventTarget | null): boolean {
