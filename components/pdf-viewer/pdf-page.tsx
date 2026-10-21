@@ -1,4 +1,5 @@
 "use client";
+import { annotationAtPoint, isEditingTarget } from "@/lib/pdf/annotation-shortcuts";
 
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -473,13 +474,22 @@ export function PdfPage({
       data-page={pageNumber}
       className="relative w-full max-w-[720px] bg-white shadow-2xl"
       style={{ aspectRatio: `1 / ${(ratio * zoom) / 100}` }}
-      onPointerUp={captureSelection}
+      onPointerUp={(event) => { if (event.button === 0) captureSelection(); }}
     >
       {(rendering || !renderedWidth) && !renderError && (
         <div className="absolute inset-0 z-10 animate-pulse bg-[#ddd]" aria-label={`${pageNumber}페이지 불러오는 중`} />
       )}
       <div
         ref={surfaceRef}
+        onContextMenuCapture={(event) => {
+          if (event.button !== 2 || isEditingTarget(event.target)) return;
+          const hit = annotationAtPoint(event.currentTarget, event.clientX, event.clientY);
+          if (!hit) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (hit.area) onDeleteArea(hit.id);
+          else onDeleteAnnotation(hit.id);
+        }}
         className={`absolute left-1/2 top-0 -translate-x-1/2 ${renderedWidth ? "opacity-100" : "opacity-0"}`}
         style={{ width: surfaceSize.width || "100%", height: surfaceSize.height || "100%" }}
       >
@@ -513,6 +523,7 @@ export function PdfPage({
               }
 
               const commonProps = canDelete ? {
+                "data-pdf-annotation-id": selection.annotationId,
                 type: "button" as const,
                 title: "이 주석 삭제",
                 "aria-label": `${kind === "dictionary" ? "사전" : kind === "text" ? "텍스트 메모" : kind === "underline" ? "밑줄" : "형광펜"} 주석 삭제: ${selection.text.slice(0, 80)}`,
@@ -544,7 +555,7 @@ export function PdfPage({
                   <TextFontSizeControl value={textEditor.fontSizePt} onChange={(value) => setTextEditor((current) => current ? { ...current, fontSizePt: value } : current)}/>
                   <button type="submit" className="self-end rounded bg-black px-2 py-1 text-[10px] text-white">저장</button>
                 </form>;
-                return <div key={key} className="pointer-events-auto absolute z-[5] overflow-hidden" style={textStyle}>
+                return <div key={key} data-pdf-annotation-id={selection.annotationId} className="pointer-events-auto absolute z-[5] overflow-hidden" style={textStyle}>
                   <div className="pointer-events-none h-full w-full overflow-hidden px-1 py-0.5 font-medium"><MarkdownContent content={selection.text} variant="pdfMemo" /></div>
                   <button
                     type="button"
@@ -570,7 +581,7 @@ export function PdfPage({
                 return <Fragment key={key}>
                   {commonProps
                     ? <button {...commonProps} className="pointer-events-auto absolute cursor-pointer hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={underlineStyle} />
-                    : <span className="absolute" style={underlineStyle} />}
+                    : <span data-pdf-annotation-id={selection.annotationId} className="absolute" style={underlineStyle} />}
                   {rectIndex === 0 && selection.annotationId && (dictionaryEditor?.id === selection.annotationId
                     ? <form
                         className="pointer-events-auto absolute z-[6] flex w-44 items-center gap-1 rounded border border-black/30 bg-white p-1 shadow-lg"
@@ -590,6 +601,7 @@ export function PdfPage({
                       </form>
                     : <button
                         type="button"
+                        data-pdf-annotation-id={selection.annotationId}
                         title="뜻 수정"
                         aria-label={`${selection.text} 뜻 수정: ${meaning}`}
                         className="pointer-events-auto absolute z-[5] whitespace-normal break-words bg-transparent px-0.5 text-left font-medium"
@@ -605,6 +617,7 @@ export function PdfPage({
                 const lineStyle = { ...getUnderlinePaintRect(rect), background: palette.stroke };
                 return <Fragment key={key}>
                   <span className="pointer-events-none absolute" style={lineStyle} />
+                  <span data-pdf-annotation-id={selection.annotationId} className="pointer-events-none absolute" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />
                   {commonProps && <button {...commonProps} className="pointer-events-auto absolute cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />}
                 </Fragment>;
               }
@@ -613,7 +626,7 @@ export function PdfPage({
               const style = { left: rect.left, top: paintFullFormulaBounds ? rect.top : rect.top + rect.height * 0.08, width: rect.width, height: paintFullFormulaBounds ? rect.height : rect.height * 0.84, border: "none", padding: 0, background: palette.fill, mixBlendMode: "multiply" as const };
               return commonProps
                 ? <button key={key} {...commonProps} className="pointer-events-auto absolute cursor-pointer rounded-[2px] hover:outline hover:outline-1 hover:outline-red-500 focus-visible:outline-red-500" style={style} />
-                : <span key={key} className="absolute rounded-[2px]" style={style} />;
+                : <span key={key} data-pdf-annotation-id={selection.annotationId} className="absolute rounded-[2px]" style={style} />;
             });
           })}
         </div>
@@ -625,6 +638,7 @@ export function PdfPage({
             if (deleteMode) {
               return <button
                 key={area.id}
+              data-pdf-area-id={area.id}
                 type="button"
                 title="이 영역 삭제"
                 aria-label={`Page ${area.page} 영역 삭제`}
@@ -637,6 +651,7 @@ export function PdfPage({
             }
             return <span
               key={area.id}
+              data-pdf-area-id={area.id}
               className="absolute border-2 border-dashed border-sky-500/75 bg-sky-400/[.045]"
               style={style}
             />;
@@ -882,3 +897,4 @@ function getDirectTextNode(div: HTMLElement): Text | null {
   const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
   return walker.nextNode() as Text | null;
 }
+
