@@ -79,3 +79,39 @@ test("HTML error responses and checksum mismatches remain download errors", asyn
   await assert.rejects(() => downloadPersonalPdf(c, { ...asset, byteSize: null }, async () => new Response("<html>error</html>")), /PDF 형식이 아닌/);
   await assert.rejects(() => downloadPersonalPdf(c, { ...asset, checksum: "0".repeat(64) }, async () => new Response(original)), /원본과 일치하지/);
 });
+
+test("recovery reads a large response without calling the browser Blob conversion", async () => {
+  const bytes = new Uint8Array(13 * 1024 * 1024);
+  bytes.set(new TextEncoder().encode("%PDF-1.7\n"));
+  const c = client(async () => { throw new TypeError("Blob allocation failed"); });
+  const response = new Response(bytes);
+  response.blob = async () => { throw new Error("browser Blob path must not be used"); };
+  assert.deepEqual(await downloadPersonalPdf(c, { ...asset, byteSize: bytes.length }, async () => response), bytes);
+});
+
+test("interrupted response reports byte progress without exposing the signed URL", async () => {
+  const c = client(async () => { throw new TypeError("network"); });
+  let reads = 0;
+  const response = new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (reads++ === 0) controller.enqueue(original.slice(0, 8));
+      else controller.error(new Error("https://storage.example/?token=private"));
+    },
+  }));
+  await assert.rejects(() => downloadPersonalPdf(c, asset, async () => response), error => error instanceof PdfDownloadError && /수신 8바이트/.test(error.message) && !/token|private/.test(error.message));
+});
+
+test("signing failure and fetch failure are distinguishable", async () => {
+  const c = client(async () => { throw new TypeError("network"); }, async () => { throw new TypeError("network"); });
+  await assert.rejects(() => downloadPersonalPdf(c, asset, noFetch), /주소 생성 단계/);
+  const connected = client(async () => { throw new TypeError("network"); });
+  await assert.rejects(() => downloadPersonalPdf(connected, asset, async () => { throw new TypeError("network"); }), /서버 연결 단계/);
+});
+
+test("a stream larger than the uploaded size is canceled before buffering more", async () => {
+  let canceled = false;
+  const c = client(async () => { throw new TypeError("network"); });
+  const response = new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(asset.byteSize + 1)); }, cancel() { canceled = true; } }));
+  await assert.rejects(() => downloadPersonalPdf(c, asset, async () => response), /예상 용량을 초과/);
+  assert.equal(canceled, true);
+});
