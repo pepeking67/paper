@@ -4,5 +4,6 @@ export type Paper = {
   library?: "legacy" | "personal";
   categoryId?: string | null;
   readingStatus?: "unread" | "reading" | "read" | "archived";
-  asset?: { id: string; bucketId: string; objectPath: string; checksum: string | null };
+  asset?: { id: string; bucketId: string; objectPath: string; checksum: string | null; byteSize?: number | null };
 };
+

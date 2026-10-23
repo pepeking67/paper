@@ -46,7 +46,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     const [categoryResult, paperResult, assetResult] = await Promise.all([
       client.from("paper_categories").select("id,name,display_order").order("display_order").order("created_at"),
       client.from("user_papers").select("id,category_id,legacy_paper_id,title,authors,year,source_url,notion_url,reading_status,aliases,display_order").order("display_order").order("created_at"),
-      client.from("paper_assets").select("id,paper_id,bucket_id,object_path,checksum,version,created_at").eq("kind", "pdf").eq("processing_status", "ready").order("version", { ascending: false }).order("created_at", { ascending: false }),
+      client.from("paper_assets").select("id,paper_id,bucket_id,object_path,checksum,byte_size,version,created_at").eq("kind", "pdf").eq("processing_status", "ready").order("version", { ascending: false }).order("created_at", { ascending: false }),
     ]);
     const firstError = categoryResult.error || paperResult.error || assetResult.error;
     if (firstError) { setError(firstError.message); setLoading(false); return; }
@@ -55,7 +55,7 @@ export function PersonalLibraryProvider({ children }: { children: ReactNode }) {
     const assetByPaper = new Map<string, NonNullable<Paper["asset"]>>();
     for (const row of assetResult.data ?? []) {
       const paperId = String(row.paper_id);
-      if (!assetByPaper.has(paperId)) assetByPaper.set(paperId, { id: String(row.id), bucketId: String(row.bucket_id), objectPath: String(row.object_path), checksum: row.checksum ? String(row.checksum) : null });
+      if (!assetByPaper.has(paperId)) assetByPaper.set(paperId, { id: String(row.id), bucketId: String(row.bucket_id), objectPath: String(row.object_path), checksum: row.checksum ? String(row.checksum) : null, byteSize: Number(row.byte_size) > 0 ? Number(row.byte_size) : null });
     }
     setCategories(nextCategories);
     setPapers((paperResult.data ?? []).map((row) => ({
@@ -216,3 +216,4 @@ function validatePaperInput(input: PersonalPaperInput) {
   if (input.year !== null && (!Number.isInteger(input.year) || input.year < 1800 || input.year > 2200)) throw new Error("연도 범위를 확인하세요.");
   for (const value of [input.sourceUrl, input.notionUrl]) if (value) { try { new URL(value); } catch { throw new Error("URL 형식을 확인하세요."); } }
 }
+

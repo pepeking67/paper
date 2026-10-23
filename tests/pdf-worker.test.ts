@@ -41,7 +41,7 @@ test("continuous viewer fetches one PDF document and lazy-renders individual pag
   const viewer = await readFile("components/pdf-viewer/pdf-viewer.tsx", "utf8");
   const page = await readFile("components/pdf-viewer/pdf-page.tsx", "utf8");
   assert.doesNotMatch(viewer, /fetch\(`\/api\/pdf/);
-  assert.match(viewer, /client\.storage\.from\(paper\.asset\.bucketId\)\.download\(paper\.asset\.objectPath\)/);
+  assert.match(viewer, /downloadPersonalPdf\(client, paper\.asset\)/);
   assert.doesNotMatch(viewer, /\/api\/papers\//);
   assert.match(viewer, /Array\.from\(\{ length: pdf\.numPages \}/);
   assert.match(page, /IntersectionObserver/);
