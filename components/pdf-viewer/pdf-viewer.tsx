@@ -13,6 +13,7 @@ import {
   type PdfiumVisualRenderer,
 } from "@/lib/pdf/pdfium-visual-renderer";
 import { annotationShortcut, isEditingTarget, toolShortcutKeys } from "@/lib/pdf/annotation-shortcuts";
+import { downloadPersonalPdf, PdfDownloadError } from "@/lib/pdf/download-personal-pdf";
 import { ReferenceCard } from "@/components/references/reference-card";
 import { PdfPage } from "./pdf-page";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
@@ -49,7 +50,7 @@ type PdfViewerProps = {
   onToggleChat: () => void;
 };
 
-type LoadState = "loading" | "ready" | "missing" | "blob-error" | "parse-error";
+type LoadState = "loading" | "ready" | "missing" | "download-error" | "parse-error";
 const colorOptions: { value: AnnotationColor; label: string; swatch: string }[] = [
   { value: "yellow", label: "노랑", swatch: "#facc15" },
   { value: "green", label: "초록", swatch: "#4ade80" },
@@ -127,6 +128,7 @@ export function PdfViewer({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pdf]);
   const [zoom, setZoom] = useState(100);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [downloadState, setDownloadState] = useState<"idle" | "loading">("idle");
   const [downloadError, setDownloadError] = useState("");
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
@@ -179,7 +181,7 @@ export function PdfViewer({
         setLoadState("ready");
       } catch (caught) {
         if (cancelled) return;
-        setLoadState("parse-error");
+        setLoadState(caught instanceof PdfDownloadError ? "download-error" : "parse-error");
         setError(caught instanceof Error ? caught.message : "PDF 파일을 해석할 수 없습니다.");
       }
     }
@@ -190,7 +192,7 @@ export function PdfViewer({
       sourceBytesRef.current = null;
       cacheHandle?.release();
     };
-  }, [pdfCacheKey, onPageTextChange]);
+  }, [pdfCacheKey, onPageTextChange, loadAttempt]);
 
   useEffect(() => { onPageTextChange(pageTexts.current.get(page) ?? ""); }, [page, onPageTextChange]);
 
@@ -446,8 +448,8 @@ export function PdfViewer({
     <div ref={setScrollRoot} className="scrollbar min-h-0 flex-1 overflow-auto overscroll-contain p-2 touch-pan-y sm:p-3">
       {loadState === "loading" && <DocumentLoading />}
       {loadState === "missing" && <EmptyPdf />}
-      {loadState === "blob-error" && <LoadError title="Blob에서 PDF를 가져오지 못했습니다" detail={error} />}
-      {loadState === "parse-error" && <LoadError title="PDF 파일을 해석하지 못했습니다" detail={error} />}
+      {loadState === "download-error" && <LoadError title="PDF를 다운로드하지 못했습니다" detail={error} onRetry={() => setLoadAttempt((value) => value + 1)} />}
+      {loadState === "parse-error" && <LoadError title="PDF 파일을 해석하지 못했습니다" detail={error} onRetry={() => setLoadAttempt((value) => value + 1)} />}
       {pdf && <div className="mx-auto flex w-full max-w-[780px] flex-col items-center gap-5">
         {Array.from({ length: pdf.numPages }, (_, index) => <PdfPage
           key={index + 1}
@@ -571,7 +573,7 @@ function ColorPalette({ value, onSelect }: { value: AnnotationColor; onSelect: (
 
 function DocumentLoading() { return <div className="m-auto flex min-h-80 flex-col items-center justify-center gap-4" role="status"><span className="h-8 w-8 animate-spin rounded-full border-2 border-[#555] border-t-white"/><p className="text-sm text-[var(--muted)]">PDF 불러오는 중…</p></div>; }
 function EmptyPdf() { return <div className="m-auto max-w-sm rounded-xl border border-dashed border-[#555] p-8 text-center"><div className="text-3xl">▱</div><h3 className="mt-3 font-medium">PDF가 아직 등록되지 않았습니다</h3><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">PDF 관리에서 private Blob 동기화를 먼저 실행하세요.</p></div>; }
-function LoadError({ title, detail }: { title: string; detail: string }) { return <div role="alert" className="m-auto max-w-md rounded-xl border border-[#555] p-8 text-center"><h3 className="font-medium">{title}</h3><p className="mt-2 text-sm text-[var(--muted)]">{detail}</p></div>; }
+function LoadError({ title, detail, onRetry }: { title: string; detail: string; onRetry?: () => void }) { return <div role="alert" className="m-auto max-w-md rounded-xl border border-[#555] p-8 text-center"><h3 className="font-medium">{title}</h3><p className="mt-2 text-sm text-[var(--muted)]">{detail}</p>{onRetry && <button type="button" onClick={onRetry} className="mt-4 rounded border border-[#777] px-3 py-1.5 text-sm hover:bg-white/10">PDF 다시 불러오기</button>}</div>; }
 
 function getPdfCacheKey(storageScope: string, paper: Paper) {
   const sourceIdentity = paper.library === "personal"
@@ -619,9 +621,7 @@ async function createCachedPdfResource(paper: Paper): Promise<CachedPdfResource 
 async function loadPaperPdfBytes(paper: Paper): Promise<Uint8Array | null> {
   if (paper.library !== "personal" || !paper.asset) return null;
   const client = getBrowserSupabase();
-  if (!client) throw new Error("Supabase 연결이 설정되지 않았습니다.");
-  const { data, error } = await client.storage.from(paper.asset.bucketId).download(paper.asset.objectPath);
-  if (error) throw error;
-  return new Uint8Array(await data.arrayBuffer());
+  if (!client) throw new PdfDownloadError("Supabase 연결이 설정되지 않았습니다.");
+  return downloadPersonalPdf(client, paper.asset);
 }
 
